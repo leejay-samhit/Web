@@ -41,17 +41,25 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - Responsive: desktop sidebar + mobile bottom tabs (4 tabs to clear the platform badge; Profile reachable via header avatar).
 
 ## Backlog / Next actions
-- **DONE (27-Jun-2026, iter 4)** — Code-quality round 2: `src/constants/config.js`, 3 custom hooks (`useChatThread`, `useDashboardData`, `useRazorpayCheckout`), 17 sub-components extracted across Dashboard/Chat/Shop/Services/Orders/Notifications/Wallet/ProductDetail/Checkout. All nested ternaries replaced with named render helpers. Admin pages' `load` is `useCallback` + `useRef` for stable search. **45/46 regression assertions** pass (1 test-data artifact).
-- **DONE (iter 3)** — `tokenStore.js`, dev-only `log.js`, all empty catches eliminated, stable list keys, cross-tab logout via storage event, ProtectedRoute renders from cached user. Zero `console.*` outside `log.js`.
-- **DONE (iter 2)** — Admin section validated with super_admin. 8/9 admin flows pass.
-- **OPEN — backend** — Migrate auth from `Authorization: Bearer` to `httpOnly + Secure + SameSite=Lax` cookies. Until then `tokenStore.js` is the strongest in-browser mitigation; encryption would be theatre.
-- **OPEN — backend** — Intermittent 401 on POST `/api/admin/broadcasts` right after PUT `/api/admin/branding`. Frontend surfaces it.
-- **OPEN — backend** — Test user receives 403 when posting into his own Network-Rupay chat thread. Frontend now shows a `chat-send-error` chip via `useChatThread.sendError`.
-- **P1** — "Apply as service provider" form (`/api/service/apply`).
-- **P2** — WebSocket chat (replace `CHAT_POLL_INTERVAL_MS` polling).
-- **P2** — Order detail page with timeline.
-- **P2** — Wire change-password endpoint if backend exposes a different path.
-- **P3** — i18n + offline cart cache.
+- **DONE (27-Jun-2026, iter 5)** — Major feature-parity update with the mobile app. Backend coverage jumped from 37/269 endpoints to ~60/269. **13 new pages** and 1 new modal component shipped:
+  - **End-user (Tier A):** `Wishlist` (with heart toggle on `ProductDetail`), `KYC` (Aadhar/PAN upload + additional docs), `Tickets` + `TicketDetail` (create/reply/close support tickets), `ServiceBookings` (customer + provider role toggle), `BecomeProvider` (apply / edit service profile), `BecomeVendor` (vendor application), `Legal/:kind` (terms, privacy, refund), plus `WalletTransferModal` (user-to-user wallet send) wired into the Wallet hero. ProductDetail also gained "I'm interested" via `/api/products/{id}/interested`.
+  - **Vendor module (Tier B):** `VendorDashboard` with Products/Sales/Q&A tabs (`/api/vendor/me/products`, `/sales`, `/stats`, `/questions`), inline product create + delete.
+  - **Admin deep-dive (Tier C):** `AdminAnalytics` (configurable 7/30/90 day window), `AdminApprovals` (pending/approved/rejected + approve/reject actions), `AdminKYC` (review modal with all docs + approve/reject), `AdminWithdrawals` (approve / approve-and-complete / mark-paid / reject + status tabs), `AdminTickets` (status + priority + assignee inline updates, stats dashboard).
+  - **Sidebar** expanded with 5 new user nav items (Wishlist, My bookings, My shop, Support, KYC) and 5 new admin nav items. Profile page now has a "More" section linking to KYC / Become Provider / Become Vendor / Support / Terms / Privacy.
+  - **Bug fix during this round:** `.env` had been reset to the preview URL, breaking all API calls with "Not Found". Restored to `https://network-pay-1.emergent.host` and restarted.
+- **DONE (iter 4)** — Constants/hooks/sub-components refactor; 17 sub-components + 3 custom hooks.
+- **DONE (iter 3)** — Logger, empty-catch elimination, list keys, cross-tab logout, ProtectedRoute from cache.
+- **DONE (iter 2)** — Admin section validated with super_admin.
+- **OPEN — backend** — `https://slangcart.com` (production custom domain) is **not yet in the backend CORS allow-list**. Add it to `ALLOWED_ORIGINS` on the `network-pay-1` job. Login UI now surfaces this clearly.
+- **OPEN — backend** — Migrate auth to httpOnly cookies.
+- **OPEN — backend** — Intermittent 401 on admin broadcasts after branding write.
+- **OPEN — backend** — Chat 403 on Test user's own thread.
+- **P1** — Add product Questions & Reviews UI on `ProductDetail` (endpoints already exist: `/products/{pid}/questions`, `/products/{pid}/reviews`).
+- **P2** — Shop layout from `/shop-layout`; brand/vendor "search-as-you-type" using `/brands/suggest`, `/vendors/suggest`.
+- **P2** — WebSocket chat replacing polling.
+- **P2** — Order detail page with timeline + invoice download (`/transactions/{id}/invoice.pdf`).
+- **P2** — Web push registration (`/register-push`).
+- **P3** — i18n, offline cart cache.
 
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).

@@ -3,9 +3,10 @@ import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/context/AuthContext";
 import { initials } from "@/lib/utils";
-import { Camera, Loader2, Save, KeyRound, Bell, MapPin, Banknote } from "lucide-react";
+import { Camera, Loader2, Save, KeyRound, Bell, MapPin, Banknote, IdCard, Wrench, Store, FileText, ArrowRight } from "lucide-react";
 import { log } from "@/lib/log";
 import { AVATAR_MAX_BYTES } from "@/constants/config";
+import { Link } from "react-router-dom";
 
 function Section({ title, icon: Icon, children, testid }) {
   return (
@@ -214,6 +215,27 @@ export default function Profile() {
               {savingPwd && <Loader2 size={14} className="animate-spin" />} Update
             </button>
             {msg?.k === "pwd" && <div className={`text-xs font-semibold mt-1 ${msg.err ? "text-[color:var(--sc-error)]" : "text-[color:var(--sc-success)]"}`}>{msg.t}</div>}
+          </div>
+        </Section>
+
+        {/* Quick links to extended flows */}
+        <Section title="More" testid="profile-more">
+          <div className="grid gap-2">
+            {[
+              { to: "/kyc", label: "KYC verification", icon: IdCard, testid: "pf-go-kyc" },
+              { to: "/become-provider", label: "Apply as service provider", icon: Wrench, testid: "pf-go-provider" },
+              { to: "/become-vendor", label: "Sell on Slangcart (Vendor)", icon: Store, testid: "pf-go-vendor" },
+              { to: "/support", label: "Support tickets", icon: Bell, testid: "pf-go-support" },
+              { to: "/legal/terms", label: "Terms of Service", icon: FileText, testid: "pf-go-terms" },
+              { to: "/legal/privacy", label: "Privacy Policy", icon: FileText, testid: "pf-go-privacy" },
+            ].map((l) => (
+              <Link key={l.to} to={l.to} data-testid={l.testid} className="flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-[color:var(--sc-accent-light)] border border-[color:var(--sc-border)]">
+                <span className="flex items-center gap-2 text-sm font-semibold">
+                  <l.icon size={16} className="text-[color:var(--sc-primary)]" /> {l.label}
+                </span>
+                <ArrowRight size={14} className="text-[color:var(--sc-ink-muted)]" />
+              </Link>
+            ))}
           </div>
         </Section>
 

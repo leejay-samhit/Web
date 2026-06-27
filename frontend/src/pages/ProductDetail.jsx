@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { formatINR } from "@/lib/utils";
-import { ArrowLeft, Check, Plus, ShoppingBag, Tag, Truck, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Check, Heart, HeartOff, Hand, Plus, ShoppingBag, Tag, Truck, ShieldCheck } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { log } from "@/lib/log";
 
@@ -19,7 +19,7 @@ function ProductErrorCard({ error }) {
   );
 }
 
-function ProductInfo({ product, busy, inCart, onAdd, onBuyNow }) {
+function ProductInfo({ product, busy, inCart, saved, interested, onAdd, onBuyNow, onToggleSave, onToggleInterested }) {
   return (
     <div className="grid lg:grid-cols-2 gap-6 sc-fade-in">
       <div className="sc-card overflow-hidden aspect-square bg-[color:var(--sc-accent-light)]">
@@ -54,6 +54,21 @@ function ProductInfo({ product, busy, inCart, onAdd, onBuyNow }) {
           <button data-testid="pd-buy-now" onClick={onBuyNow} disabled={busy} className="sc-btn-primary">
             Buy now
           </button>
+          <button
+            data-testid="pd-save"
+            onClick={onToggleSave}
+            className={`px-3 py-2.5 rounded-xl border inline-flex items-center gap-1.5 text-sm font-semibold ${saved ? "bg-rose-50 border-rose-200 text-rose-600" : "border-[color:var(--sc-border)] text-[color:var(--sc-ink)]"}`}
+            title={saved ? "Remove from wishlist" : "Save to wishlist"}
+          >
+            <Heart size={16} fill={saved ? "currentColor" : "none"} /> {saved ? "Saved" : "Save"}
+          </button>
+          <button
+            data-testid="pd-interested"
+            onClick={onToggleInterested}
+            className={`px-3 py-2.5 rounded-xl border inline-flex items-center gap-1.5 text-sm font-semibold ${interested ? "bg-amber-50 border-amber-200 text-amber-700" : "border-[color:var(--sc-border)] text-[color:var(--sc-ink)]"}`}
+          >
+            <Hand size={16} /> {interested ? "Interested" : "I'm interested"}
+          </button>
         </div>
         <div className="grid grid-cols-3 gap-2 pt-3">
           <div className="sc-card p-3 text-center">
@@ -84,10 +99,10 @@ function ProductInfo({ product, busy, inCart, onAdd, onBuyNow }) {
   );
 }
 
-function renderPd({ loading, error, product, busy, inCart, onAdd, onBuyNow }) {
+function renderPd({ loading, error, product, busy, inCart, saved, interested, onAdd, onBuyNow, onToggleSave, onToggleInterested }) {
   if (loading) return <Spinner />;
   if (error || !product) return <ProductErrorCard error={error} />;
-  return <ProductInfo product={product} busy={busy} inCart={inCart} onAdd={onAdd} onBuyNow={onBuyNow} />;
+  return <ProductInfo product={product} busy={busy} inCart={inCart} saved={saved} interested={interested} onAdd={onAdd} onBuyNow={onBuyNow} onToggleSave={onToggleSave} onToggleInterested={onToggleInterested} />;
 }
 
 export default function ProductDetail() {
@@ -98,13 +113,19 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [interested, setInterested] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const { data } = await api.get(`/products/${id}`);
-        if (alive) setProduct(data);
+        if (alive) {
+          setProduct(data);
+          setSaved(!!data?.is_saved);
+          setInterested(!!data?.is_interested);
+        }
       } catch (e) {
         log.error("ProductDetail.fetch failed", e);
         if (alive) setError("Product not found");
@@ -131,13 +152,33 @@ export default function ProductDetail() {
     await handleAdd();
     nav("/cart");
   };
+  const toggleSave = async () => {
+    const next = !saved;
+    setSaved(next);
+    try {
+      await api.post(`/products/${id}/save`, { save: next });
+    } catch (e) {
+      log.error("ProductDetail.toggleSave failed", e);
+      setSaved(!next);
+    }
+  };
+  const toggleInterested = async () => {
+    const next = !interested;
+    setInterested(next);
+    try {
+      await api.post(`/products/${id}/interested`, { interested: next });
+    } catch (e) {
+      log.error("ProductDetail.toggleInterested failed", e);
+      setInterested(!next);
+    }
+  };
 
   return (
     <Layout title="Product">
       <button onClick={() => nav(-1)} data-testid="pd-back" className="inline-flex items-center gap-1 text-sm font-semibold text-[color:var(--sc-ink-muted)] mb-4">
         <ArrowLeft size={16} /> Back
       </button>
-      {renderPd({ loading, error, product, busy, inCart, onAdd: handleAdd, onBuyNow: buyNow })}
+      {renderPd({ loading, error, product, busy, inCart, saved, interested, onAdd: handleAdd, onBuyNow: buyNow, onToggleSave: toggleSave, onToggleInterested: toggleInterested })}
     </Layout>
   );
 }

@@ -5,8 +5,9 @@ import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDateTime } from "@/lib/utils";
-import { ArrowDownToLine, Wallet as WalletIcon, X, Loader2 } from "lucide-react";
+import { ArrowDownToLine, Wallet as WalletIcon, X, Loader2, Send } from "lucide-react";
 import { log } from "@/lib/log";
+import WalletTransferModal from "@/components/WalletTransferModal";
 
 function TxnRow({ t }) {
   const positive = (t.type || "").includes("commission") || (t.type || "").includes("credit") || (t.amount > 0 && t.type !== "withdraw");
@@ -42,6 +43,7 @@ export default function Wallet() {
   const [withdrawals, setWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -105,6 +107,13 @@ export default function Wallet() {
             >
               <ArrowDownToLine size={16} /> Request withdrawal
             </button>
+            <button
+              data-testid="wallet-transfer"
+              onClick={() => setTransferOpen(true)}
+              className="mt-4 ml-2 bg-white/10 text-white border border-white/30 font-bold rounded-xl px-4 py-2.5 inline-flex items-center gap-2 hover:bg-white/20"
+            >
+              <Send size={16} /> Send money
+            </button>
           </div>
         </div>
 
@@ -165,6 +174,14 @@ export default function Wallet() {
           </div>
         </div>
       )}
+      <WalletTransferModal
+        open={transferOpen}
+        onClose={() => setTransferOpen(false)}
+        balance={user?.wallet_balance}
+        onSuccess={async () => {
+          await Promise.all([load(), refreshMe()]);
+        }}
+      />
     </Layout>
   );
 }

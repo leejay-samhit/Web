@@ -11,6 +11,14 @@ import {
   ShoppingCart,
   ShieldCheck,
   Bell,
+  Heart,
+  LifeBuoy,
+  Calendar,
+  Store,
+  IdCard,
+  BarChart3,
+  CheckSquare,
+  ArrowDownToLine,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
@@ -22,11 +30,29 @@ import { log } from "@/lib/log";
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", testid: "nav-dashboard" },
   { to: "/shop", icon: ShoppingBag, label: "Shop", testid: "nav-shop" },
+  { to: "/wishlist", icon: Heart, label: "Wishlist", testid: "nav-wishlist" },
   { to: "/services", icon: Wrench, label: "Services", testid: "nav-services" },
+  { to: "/bookings", icon: Calendar, label: "My bookings", testid: "nav-bookings" },
   { to: "/chat", icon: MessageCircle, label: "Slang-Connect", testid: "nav-chat" },
   { to: "/wallet", icon: Wallet, label: "Wallet", testid: "nav-wallet" },
   { to: "/network", icon: Users, label: "Network", testid: "nav-network" },
+  { to: "/vendor", icon: Store, label: "My shop", testid: "nav-vendor" },
+  { to: "/support", icon: LifeBuoy, label: "Support", testid: "nav-support" },
+  { to: "/kyc", icon: IdCard, label: "KYC", testid: "nav-kyc" },
   { to: "/profile", icon: User, label: "Profile", testid: "nav-profile" },
+];
+
+const adminNavItems = [
+  { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/approvals", label: "Approvals", icon: CheckSquare },
+  { to: "/admin/kyc", label: "KYC review", icon: IdCard },
+  { to: "/admin/withdrawals", label: "Withdrawals", icon: ArrowDownToLine },
+  { to: "/admin/tickets", label: "Tickets", icon: LifeBuoy },
+  { to: "/admin/products", label: "Products", icon: ShoppingBag },
+  { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { to: "/admin/broadcast", label: "Broadcast", icon: Bell },
+  { to: "/admin/branding", label: "Branding", icon: ShieldCheck },
 ];
 
 const mobileNav = [
@@ -120,17 +146,11 @@ export default function Layout({ children, title }) {
               <div className="pt-4 pb-1 px-3 text-[11px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] font-bold">
                 Admin
               </div>
-              {[
-                { to: "/admin/users", label: "Users" },
-                { to: "/admin/products", label: "Products" },
-                { to: "/admin/orders", label: "Orders" },
-                { to: "/admin/broadcast", label: "Broadcast" },
-                { to: "/admin/branding", label: "Branding" },
-              ].map((a) => (
+              {adminNavItems.map((a) => (
                 <NavLink
                   key={a.to}
                   to={a.to}
-                  data-testid={`admin-nav-${a.label.toLowerCase()}`}
+                  data-testid={`admin-nav-${a.label.toLowerCase().replace(/\s/g, "-")}`}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition ${
                       isActive
@@ -139,7 +159,7 @@ export default function Layout({ children, title }) {
                     }`
                   }
                 >
-                  <ShieldCheck size={16} />
+                  <a.icon size={16} />
                   {a.label}
                 </NavLink>
               ))}
