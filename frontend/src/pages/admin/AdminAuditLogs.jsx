@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, safeStr } from "@/lib/utils";
 import { Search } from "lucide-react";
 import { log } from "@/lib/log";
 
@@ -37,15 +37,15 @@ export default function AdminAuditLogs() {
             </thead>
             <tbody>
               {items.map((a) => (
-                <tr key={a.id} className="border-t border-[color:var(--sc-border)]" data-testid={`al-${a.id}`}>
+                <tr key={safeStr(a.id) || Math.random()} className="border-t border-[color:var(--sc-border)]" data-testid={`al-${safeStr(a.id)}`}>
                   <td className="px-4 py-2 text-xs text-[color:var(--sc-ink-muted)] whitespace-nowrap">{formatDateTime(a.created_at || a.timestamp)}</td>
                   <td className="px-4 py-2 text-xs">
-                    <div className="font-semibold">{a.admin_email || a.actor_email || a.actor_name || "—"}</div>
-                    <div className="text-[10px] text-[color:var(--sc-ink-muted)]">{a.admin_role || a.actor_role || ""}</div>
+                    <div className="font-semibold">{safeStr(a.admin_email) || safeStr(a.actor_email) || safeStr(a.actor_name) || "—"}</div>
+                    <div className="text-[10px] text-[color:var(--sc-ink-muted)]">{safeStr(a.admin_role || a.actor_role)}</div>
                   </td>
-                  <td className="px-4 py-2"><span className="sc-chip">{a.action}</span></td>
-                  <td className="px-4 py-2 text-xs">{a.target_type ? `${a.target_type}:${(a.target_id || "").slice(0, 12)}` : (a.target || "—")}</td>
-                  <td className="px-4 py-2 text-xs text-[color:var(--sc-ink-muted)] max-w-md truncate">{a.details && typeof a.details === "object" ? JSON.stringify(a.details) : (a.details || a.note || "—")}</td>
+                  <td className="px-4 py-2"><span className="sc-chip">{safeStr(a.action)}</span></td>
+                  <td className="px-4 py-2 text-xs">{a.target_type ? `${safeStr(a.target_type)}:${safeStr(a.target_id).slice(0, 12)}` : (safeStr(a.target) || "—")}</td>
+                  <td className="px-4 py-2 text-xs text-[color:var(--sc-ink-muted)] max-w-md truncate">{a.details && typeof a.details === "object" ? JSON.stringify(a.details) : safeStr(a.details || a.note || "—")}</td>
                 </tr>
               ))}
               {items.length === 0 && <tr><td colSpan={5} className="px-4 py-10 text-center text-[color:var(--sc-ink-muted)]">No entries.</td></tr>}

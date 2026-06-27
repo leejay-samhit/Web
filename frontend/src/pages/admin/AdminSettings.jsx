@@ -32,9 +32,15 @@ export default function AdminSettings() {
 
   if (loading) return <Layout title="Admin · Payout structure"><Spinner /></Layout>;
 
-  // Render every key dynamically (numbers/strings/booleans) so the page works
-  // even if backend adds new fields.
-  const entries = Object.entries(data || {});
+  // Hide internal/sensitive keys from the editable settings UI.
+  const HIDDEN_PREFIXES = ["danger_pin", "_id"];
+  const HIDDEN_SUFFIXES = ["_hash", "_at"];
+  const HIDDEN_EXACT = new Set(["id", "_id"]);
+  const isHidden = (k) =>
+    HIDDEN_EXACT.has(k) ||
+    HIDDEN_PREFIXES.some((p) => k.startsWith(p)) ||
+    HIDDEN_SUFFIXES.some((s) => k.endsWith(s));
+  const entries = Object.entries(data || {}).filter(([k]) => !isHidden(k));
 
   return (
     <Layout title="Admin · Payout structure & settings">

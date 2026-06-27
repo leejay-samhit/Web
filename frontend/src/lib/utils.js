@@ -40,3 +40,13 @@ export const initials = (name = "") =>
 
 export const isAdmin = (user) =>
   !!user && (user.role === "admin" || user.role === "superadmin" || !!user.admin_role);
+
+
+// Defensive coercion: backend sometimes returns {id, name} or {id, email} objects
+// where a string is expected (admin actor, target id, role, etc.). Use this when
+// rendering arbitrary fields as React children.
+export const safeStr = (v) => {
+  if (v == null) return "";
+  if (typeof v === "object") return v.name || v.email || v.id || JSON.stringify(v);
+  return String(v);
+};
