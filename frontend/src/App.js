@@ -36,6 +36,28 @@ import AdminApprovals from "@/pages/admin/AdminApprovals";
 import AdminKYC from "@/pages/admin/AdminKYC";
 import AdminWithdrawals from "@/pages/admin/AdminWithdrawals";
 import AdminTickets from "@/pages/admin/AdminTickets";
+import AdminShopLayout from "@/pages/admin/AdminShopLayout";
+import AdminShopCategories from "@/pages/admin/AdminShopCategories";
+import AdminPromoBanners from "@/pages/admin/AdminPromoBanners";
+import AdminAdmins from "@/pages/admin/AdminAdmins";
+import AdminApprovedRegistrations from "@/pages/admin/AdminApprovedRegistrations";
+import AdminRejectedRegistrations from "@/pages/admin/AdminRejectedRegistrations";
+import AdminPaymentGateway from "@/pages/admin/AdminPaymentGateway";
+import AdminVendorApplications from "@/pages/admin/AdminVendorApplications";
+import AdminServiceApplications from "@/pages/admin/AdminServiceApplications";
+import AdminServiceCategories from "@/pages/admin/AdminServiceCategories";
+import AdminServiceAnalytics from "@/pages/admin/AdminServiceAnalytics";
+import AdminDistributors from "@/pages/admin/AdminDistributors";
+import AdminSystemWallet from "@/pages/admin/AdminSystemWallet";
+import AdminVendors from "@/pages/admin/AdminVendors";
+import AdminBackups from "@/pages/admin/AdminBackups";
+import AdminChanges from "@/pages/admin/AdminChanges";
+import AdminTransactions from "@/pages/admin/AdminTransactions";
+import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
+import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminUPIPayments from "@/pages/admin/AdminUPIPayments";
+import AdminLegalPages from "@/pages/admin/AdminLegalPages";
+import AdminExports from "@/pages/admin/AdminExports";
 
 function App() {
   return (
@@ -85,6 +107,35 @@ function App() {
               <Route path="/admin/orders" element={<ProtectedRoute adminOnly><AdminOrders /></ProtectedRoute>} />
               <Route path="/admin/broadcast" element={<ProtectedRoute adminOnly><AdminBroadcast /></ProtectedRoute>} />
               <Route path="/admin/branding" element={<ProtectedRoute adminOnly><AdminBranding /></ProtectedRoute>} />
+
+              {/* Store admin pages */}
+              <Route path="/admin/shop-layout" element={<ProtectedRoute adminOnly><AdminShopLayout /></ProtectedRoute>} />
+              <Route path="/admin/shop-categories" element={<ProtectedRoute adminOnly><AdminShopCategories /></ProtectedRoute>} />
+              <Route path="/admin/promo-banners" element={<ProtectedRoute adminOnly><AdminPromoBanners /></ProtectedRoute>} />
+
+              {/* Operations admin pages */}
+              <Route path="/admin/chat" element={<ProtectedRoute adminOnly><Navigate to="/chat" replace /></ProtectedRoute>} />
+              <Route path="/admin/admins" element={<ProtectedRoute adminOnly><AdminAdmins /></ProtectedRoute>} />
+              <Route path="/admin/approved-registrations" element={<ProtectedRoute adminOnly><AdminApprovedRegistrations /></ProtectedRoute>} />
+              <Route path="/admin/rejected-registrations" element={<ProtectedRoute adminOnly><AdminRejectedRegistrations /></ProtectedRoute>} />
+              <Route path="/admin/payment-gateway" element={<ProtectedRoute adminOnly><AdminPaymentGateway /></ProtectedRoute>} />
+              <Route path="/admin/vendor-applications" element={<ProtectedRoute adminOnly><AdminVendorApplications /></ProtectedRoute>} />
+              <Route path="/admin/service-applications" element={<ProtectedRoute adminOnly><AdminServiceApplications /></ProtectedRoute>} />
+              <Route path="/admin/service-categories" element={<ProtectedRoute adminOnly><AdminServiceCategories /></ProtectedRoute>} />
+              <Route path="/admin/service-analytics" element={<ProtectedRoute adminOnly><AdminServiceAnalytics /></ProtectedRoute>} />
+              <Route path="/admin/distributors" element={<ProtectedRoute adminOnly><AdminDistributors /></ProtectedRoute>} />
+              <Route path="/admin/system-wallet" element={<ProtectedRoute adminOnly><AdminSystemWallet /></ProtectedRoute>} />
+              <Route path="/admin/vendors" element={<ProtectedRoute adminOnly><AdminVendors /></ProtectedRoute>} />
+              <Route path="/admin/backups" element={<ProtectedRoute adminOnly><AdminBackups /></ProtectedRoute>} />
+              <Route path="/admin/changes" element={<ProtectedRoute adminOnly><AdminChanges /></ProtectedRoute>} />
+              <Route path="/admin/transactions" element={<ProtectedRoute adminOnly><AdminTransactions /></ProtectedRoute>} />
+              <Route path="/admin/audit-logs" element={<ProtectedRoute adminOnly><AdminAuditLogs /></ProtectedRoute>} />
+              <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSettings /></ProtectedRoute>} />
+              <Route path="/admin/upi-payments" element={<ProtectedRoute adminOnly><AdminUPIPayments /></ProtectedRoute>} />
+              <Route path="/admin/legal-pages" element={<ProtectedRoute adminOnly><AdminLegalPages /></ProtectedRoute>} />
+
+              {/* Export data */}
+              <Route path="/admin/exports" element={<ProtectedRoute adminOnly><AdminExports /></ProtectedRoute>} />
 
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>

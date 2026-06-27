@@ -19,6 +19,26 @@ import {
   BarChart3,
   CheckSquare,
   ArrowDownToLine,
+  Layout as LayoutIcon,
+  Tag,
+  Image as ImageIcon,
+  UserCog,
+  UserCheck,
+  UserX,
+  CreditCard,
+  Briefcase,
+  Wrench as ServiceIcon,
+  PieChart,
+  MapPin,
+  Landmark,
+  Database,
+  ListChecks,
+  Receipt,
+  ScrollText,
+  IndianRupee,
+  QrCode,
+  FileText,
+  Download,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
@@ -42,17 +62,55 @@ const navItems = [
   { to: "/profile", icon: User, label: "Profile", testid: "nav-profile" },
 ];
 
-const adminNavItems = [
-  { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/admin/users", label: "Users", icon: Users },
-  { to: "/admin/approvals", label: "Approvals", icon: CheckSquare },
-  { to: "/admin/kyc", label: "KYC review", icon: IdCard },
-  { to: "/admin/withdrawals", label: "Withdrawals", icon: ArrowDownToLine },
-  { to: "/admin/tickets", label: "Tickets", icon: LifeBuoy },
-  { to: "/admin/products", label: "Products", icon: ShoppingBag },
-  { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
-  { to: "/admin/broadcast", label: "Broadcast", icon: Bell },
-  { to: "/admin/branding", label: "Branding", icon: ShieldCheck },
+const adminGroups = [
+  {
+    title: "Store",
+    items: [
+      { to: "/admin/products", label: "Products", icon: ShoppingBag },
+      { to: "/admin/shop-layout", label: "Shop layout", icon: LayoutIcon },
+      { to: "/admin/shop-categories", label: "Shop categories", icon: Tag },
+      { to: "/admin/promo-banners", label: "Promo banners", icon: ImageIcon },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+      { to: "/admin/chat", label: "Chat (team + users)", icon: MessageCircle },
+      { to: "/admin/broadcast", label: "Broadcast", icon: Bell },
+      { to: "/admin/admins", label: "Admin access", icon: UserCog },
+      { to: "/admin/users", label: "Users", icon: Users },
+      { to: "/admin/approvals", label: "User approvals", icon: CheckSquare },
+      { to: "/admin/approved-registrations", label: "Approved registrations", icon: UserCheck },
+      { to: "/admin/rejected-registrations", label: "Rejected registrations", icon: UserX },
+      { to: "/admin/tickets", label: "Support tickets", icon: LifeBuoy },
+      { to: "/admin/payment-gateway", label: "Payment gateway", icon: CreditCard },
+      { to: "/admin/vendor-applications", label: "Vendor applications", icon: Briefcase },
+      { to: "/admin/service-applications", label: "Service applications", icon: ServiceIcon },
+      { to: "/admin/service-categories", label: "Service categories", icon: ListChecks },
+      { to: "/admin/service-analytics", label: "Service analytics", icon: PieChart },
+      { to: "/admin/distributors", label: "Distributor areas", icon: MapPin },
+      { to: "/admin/system-wallet", label: "System wallet · Treasury", icon: Landmark },
+      { to: "/admin/vendors", label: "All vendors", icon: Store },
+      { to: "/admin/branding", label: "Branding & theme", icon: ShieldCheck },
+      { to: "/admin/backups", label: "Data backups", icon: Database },
+      { to: "/admin/changes", label: "Product roadmap", icon: ListChecks },
+      { to: "/admin/kyc", label: "KYC review", icon: IdCard },
+      { to: "/admin/orders", label: "Orders management", icon: ShoppingCart },
+      { to: "/admin/transactions", label: "Transactions", icon: Receipt },
+      { to: "/admin/audit-logs", label: "Admin audit log", icon: ScrollText },
+      { to: "/admin/settings", label: "Payout structure", icon: IndianRupee },
+      { to: "/admin/withdrawals", label: "Withdrawals", icon: ArrowDownToLine },
+      { to: "/admin/upi-payments", label: "UPI payments (pending)", icon: QrCode },
+      { to: "/admin/legal-pages", label: "Legal pages", icon: FileText },
+    ],
+  },
+  {
+    title: "Export data",
+    items: [
+      { to: "/admin/exports", label: "All CSV exports", icon: Download },
+    ],
+  },
 ];
 
 const mobileNav = [
@@ -143,25 +201,29 @@ export default function Layout({ children, title }) {
           ))}
           {admin && (
             <>
-              <div className="pt-4 pb-1 px-3 text-[11px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] font-bold">
-                Admin
-              </div>
-              {adminNavItems.map((a) => (
-                <NavLink
-                  key={a.to}
-                  to={a.to}
-                  data-testid={`admin-nav-${a.label.toLowerCase().replace(/\s/g, "-")}`}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition ${
-                      isActive
-                        ? "bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]"
-                        : "text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)]/60"
-                    }`
-                  }
-                >
-                  <a.icon size={16} />
-                  {a.label}
-                </NavLink>
+              {adminGroups.map((group) => (
+                <div key={group.title}>
+                  <div className="pt-4 pb-1 px-3 text-[11px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] font-bold">
+                    {group.title}
+                  </div>
+                  {group.items.map((a) => (
+                    <NavLink
+                      key={a.to}
+                      to={a.to}
+                      data-testid={`admin-nav-${a.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition ${
+                          isActive
+                            ? "bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]"
+                            : "text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)]/60"
+                        }`
+                      }
+                    >
+                      <a.icon size={16} />
+                      {a.label}
+                    </NavLink>
+                  ))}
+                </div>
               ))}
             </>
           )}

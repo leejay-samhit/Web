@@ -38,7 +38,7 @@ export default function AdminAnalytics() {
 
   if (loading) return <Layout title="Admin · Analytics"><Spinner /></Layout>;
 
-  const s = data?.summary || data || {};
+  const k = data?.kpis || data?.summary || data || {};
   return (
     <Layout title="Admin · Analytics">
       <div className="flex gap-2 mb-4">
@@ -54,15 +54,18 @@ export default function AdminAnalytics() {
         ))}
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4" data-testid="aa-stats">
-        <Stat testid="aa-users" icon={Users} label="Total users" value={s.total_users ?? s.users ?? 0} />
-        <Stat testid="aa-new-users" icon={Users} label={`New users (${days}d)`} value={s.new_users ?? 0} />
-        <Stat testid="aa-orders" icon={ShoppingBag} label={`Orders (${days}d)`} value={s.orders ?? s.order_count ?? 0} />
-        <Stat testid="aa-revenue" icon={TrendingUp} label={`Revenue (${days}d)`} value={formatINR(s.revenue ?? s.gmv ?? 0)} />
-        <Stat testid="aa-services" icon={Wrench} label="Active providers" value={s.active_providers ?? 0} />
-        <Stat testid="aa-wallet" icon={Wallet} label="Wallet liability" value={formatINR(s.wallet_liability ?? s.total_wallet ?? 0)} />
-        <Stat testid="aa-payouts" icon={Wallet} label={`Withdrawals (${days}d)`} value={formatINR(s.withdrawals ?? 0)} />
-        <Stat testid="aa-tickets" icon={LifeBuoy} label="Open tickets" value={s.open_tickets ?? 0} />
-        <Stat testid="aa-pending-kyc" icon={LifeBuoy} label="Pending KYC" value={s.pending_kyc ?? 0} />
+        <Stat testid="aa-new-today" icon={Users} label="New users today" value={k.new_users_today ?? 0} />
+        <Stat testid="aa-new-month" icon={Users} label={`New users (month)`} value={k.new_users_month ?? 0} />
+        <Stat testid="aa-paid-today" icon={Users} label="Paid users today" value={k.paid_users_today ?? 0} />
+        <Stat testid="aa-revenue" icon={TrendingUp} label="Total revenue" value={formatINR(k.total_revenue ?? 0)} />
+        <Stat testid="aa-system-wallet" icon={Wallet} label="System wallet" value={formatINR(k.system_wallet ?? 0)} />
+        <Stat testid="aa-payouts" icon={Wallet} label="Total payouts" value={formatINR(k.total_payouts ?? 0)} />
+        <Stat testid="aa-orders" icon={ShoppingBag} label="Orders" value={k.orders_count ?? 0} />
+        <Stat testid="aa-orders-revenue" icon={TrendingUp} label="Orders revenue" value={formatINR(k.orders_revenue ?? 0)} />
+        <Stat testid="aa-txns" icon={LifeBuoy} label="Success txns" value={k.success_txns ?? 0} />
+        <Stat testid="aa-pending-txns" icon={LifeBuoy} label="Pending txns" value={k.pending_txns ?? 0} />
+        <Stat testid="aa-failed-txns" icon={LifeBuoy} label="Failed txns" value={k.failed_txns ?? 0} />
+        <Stat testid="aa-services" icon={Wrench} label="Refunded txns" value={k.refunded_txns ?? 0} />
       </div>
     </Layout>
   );
