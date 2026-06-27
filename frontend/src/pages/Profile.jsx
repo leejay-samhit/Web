@@ -4,6 +4,7 @@ import Layout from "@/components/Layout";
 import { useAuth } from "@/context/AuthContext";
 import { initials } from "@/lib/utils";
 import { Camera, Loader2, Save, KeyRound, Bell, MapPin, Banknote } from "lucide-react";
+import { log } from "@/lib/log";
 
 function Section({ title, icon: Icon, children, testid }) {
   return (
@@ -49,7 +50,10 @@ export default function Profile() {
   }, [user]);
 
   useEffect(() => {
-    api.get("/notifications/me").then((r) => setNotif(Array.isArray(r.data) ? r.data : r.data?.items || [])).catch(() => {});
+    api
+      .get("/notifications/me")
+      .then((r) => setNotif(Array.isArray(r.data) ? r.data : r.data?.items || []))
+      .catch((error) => log.error("Profile.loadNotifications failed", error));
   }, []);
 
   const onAvatar = async (e) => {
@@ -127,7 +131,9 @@ export default function Profile() {
       await api.post("/notifications/me/read-all");
       const { data } = await api.get("/notifications/me");
       setNotif(Array.isArray(data) ? data : data?.items || []);
-    } catch (_) {}
+    } catch (error) {
+      log.error("Profile.markAllRead failed", error);
+    }
   };
 
   return (

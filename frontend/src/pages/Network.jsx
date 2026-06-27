@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { initials, formatINR } from "@/lib/utils";
 import { ChevronDown, ChevronRight, Users } from "lucide-react";
+import { log } from "@/lib/log";
 
 function flatten(node, depth, parentKey, rows) {
   if (!node) return;
@@ -57,6 +58,8 @@ export default function Network() {
       try {
         const { data } = await api.get("/users/me/network");
         if (alive) setTree(data);
+      } catch (error) {
+        log.error("Network.fetch failed", error);
       } finally {
         if (alive) setLoading(false);
       }
@@ -76,7 +79,7 @@ export default function Network() {
     return out;
   }, [root]);
 
-  // Initialize: expand first level
+  // Initialize: expand first level (depends on the row identity, not just count)
   useEffect(() => {
     if (allRows.length > 0) {
       const init = {};
@@ -84,9 +87,9 @@ export default function Network() {
       if (firstKey) init[firstKey] = true;
       setExpanded(init);
     }
-  }, [allRows.length]);
+  }, [allRows]);
 
-  const toggle = (key) => setExpanded((e) => ({ ...e, [key]: !e[key] }));
+  const toggle = useCallback((key) => setExpanded((e) => ({ ...e, [key]: !e[key] })), []);
 
   // Filter visible rows: a row is visible if all its ancestor keys are expanded
   const visibleRows = useMemo(() => {

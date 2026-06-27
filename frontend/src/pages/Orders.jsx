@@ -58,7 +58,10 @@ export default function Orders() {
               {Array.isArray(o.items) && o.items.length > 0 && (
                 <div className="mt-3 grid sm:grid-cols-2 gap-2">
                   {o.items.slice(0, 4).map((it, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-[color:var(--sc-ink-muted)]">
+                    <div
+                      key={it.product_id || it.id || `${it.name || it.product_name}-${i}`}
+                      className="flex items-center gap-2 text-xs text-[color:var(--sc-ink-muted)]"
+                    >
                       <div className="w-2 h-2 rounded-full bg-[color:var(--sc-primary)]" />
                       <div className="truncate">{it.name || it.product_name} × {it.qty || 1}</div>
                     </div>

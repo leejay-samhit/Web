@@ -6,6 +6,7 @@ import Spinner from "@/components/Spinner";
 import { formatINR } from "@/lib/utils";
 import { ArrowLeft, Check, Plus, ShoppingBag, Tag, Truck, ShieldCheck } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { log } from "@/lib/log";
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -23,6 +24,7 @@ export default function ProductDetail() {
         const { data } = await api.get(`/products/${id}`);
         if (alive) setProduct(data);
       } catch (e) {
+        log.error("ProductDetail.fetch failed", e);
         if (alive) setError("Product not found");
       } finally {
         if (alive) setLoading(false);
@@ -116,7 +118,7 @@ export default function ProductDetail() {
                 <div className="font-extrabold text-sm">What's in the box</div>
                 <ul className="mt-2 text-sm text-[color:var(--sc-ink-muted)] list-disc pl-5 space-y-1">
                   {product.whats_in_box.map((x, i) => (
-                    <li key={i}>{x}</li>
+                    <li key={`${x}-${i}`}>{x}</li>
                   ))}
                 </ul>
               </div>

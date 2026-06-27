@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { useCart } from "@/context/CartContext";
@@ -7,6 +7,7 @@ import api from "@/lib/api";
 import { loadRazorpay } from "@/lib/razorpay";
 import { formatINR } from "@/lib/utils";
 import { CreditCard, Loader2, ShieldCheck, AlertCircle } from "lucide-react";
+import { log } from "@/lib/log";
 
 export default function Checkout() {
   const { cart, refresh } = useCart();
@@ -30,7 +31,7 @@ export default function Checkout() {
 
   const set = (k) => (e) => setAddr((s) => ({ ...s, [k]: e.target.value }));
 
-  const placeOrder = async () => {
+  const placeOrder = useCallback(async () => {
     setError("");
     if (!cart.items || cart.items.length === 0) {
       setError("Your cart is empty.");
@@ -80,7 +81,8 @@ export default function Checkout() {
             });
             await refresh();
             nav("/orders?success=1", { replace: true });
-          } catch (e) {
+          } catch (verifyError) {
+            log.error("Checkout: payment verification failed", verifyError);
             setError("Payment verification failed. Please contact support.");
           } finally {
             setPaying(false);
@@ -95,17 +97,19 @@ export default function Checkout() {
       rzp.on("payment.failed", async (response) => {
         try {
           await api.post("/payment/failure", { error: response.error });
-        } catch (_) {}
+        } catch (failureError) {
+          log.error("Checkout: failed to report payment failure", failureError);
+        }
         setError(response?.error?.description || "Payment failed.");
         setPaying(false);
       });
       rzp.open();
     } catch (e) {
-      console.error(e);
+      log.error("Checkout.placeOrder failed", e);
       setError(e?.response?.data?.detail || "Could not start checkout.");
       setPaying(false);
     }
-  };
+  }, [addr, cart.items, cart.total, nav, refresh, user]);
 
   return (
     <Layout title="Checkout">

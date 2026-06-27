@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
@@ -6,6 +6,70 @@ import { useAuth } from "@/context/AuthContext";
 import { formatDateTime, initials } from "@/lib/utils";
 import { Send, ArrowLeft, ImagePlus, MessageCircle } from "lucide-react";
 import EmptyState from "@/components/EmptyState";
+import { log } from "@/lib/log";
+
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+const POLL_INTERVAL_MS = 8000;
+
+function MessageBubble({ message, mine }) {
+  return (
+    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[80%] rounded-2xl px-3 py-2 ${
+          mine
+            ? "bg-[color:var(--sc-primary)] text-white rounded-br-sm"
+            : "bg-white border border-[color:var(--sc-border)] rounded-bl-sm"
+        }`}
+        data-testid={`msg-${message.id}`}
+      >
+        {message.image_data_url && (
+          <img alt="" src={message.image_data_url} className="rounded-lg mb-1 max-h-64" />
+        )}
+        {message.deleted_for_everyone || message.deleted ? (
+          <div className="text-xs italic opacity-70">message deleted</div>
+        ) : (
+          <div className="text-sm whitespace-pre-wrap break-words">{message.text}</div>
+        )}
+        <div className={`text-[10px] mt-1 ${mine ? "text-white/70" : "text-[color:var(--sc-ink-muted)]"}`}>
+          {formatDateTime(message.created_at)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThreadListItem({ thread, active, onSelect }) {
+  const other = thread.other || {};
+  const last = thread.last_message;
+  return (
+    <button
+      onClick={() => onSelect(thread)}
+      data-testid={`thread-${thread.id}`}
+      className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 border-b border-[color:var(--sc-border)]/60 ${
+        active ? "bg-[color:var(--sc-accent-light)]" : "hover:bg-[color:var(--sc-accent-light)]/60"
+      }`}
+    >
+      <div className="w-10 h-10 rounded-full sc-avatar text-white text-xs font-bold grid place-items-center overflow-hidden">
+        {other.profile_image ? (
+          <img alt="" src={other.profile_image} className="w-full h-full object-cover" />
+        ) : (
+          initials(other.name)
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold truncate">{other.name || "User"}</div>
+        <div className="text-xs text-[color:var(--sc-ink-muted)] truncate">
+          {last?.deleted ? "Message deleted" : last?.text || (last?.image_data_url ? "📷 Image" : "—")}
+        </div>
+      </div>
+      {last?.created_at && (
+        <div className="text-[10px] text-[color:var(--sc-ink-muted)] whitespace-nowrap">
+          {formatDateTime(last.created_at)}
+        </div>
+      )}
+    </button>
+  );
+}
 
 export default function Chat() {
   const { user } = useAuth();
@@ -20,45 +84,47 @@ export default function Chat() {
   const scrollerRef = useRef(null);
   const fileRef = useRef(null);
 
-  const loadThreads = async () => {
+  const loadThreads = useCallback(async () => {
     setLoadingThreads(true);
     try {
       const { data } = await api.get("/chat/threads");
       setThreads(data?.threads || []);
+    } catch (error) {
+      log.error("Chat.loadThreads failed", error);
     } finally {
       setLoadingThreads(false);
     }
-  };
+  }, []);
 
-  const loadMessages = async (threadId) => {
+  const loadMessages = useCallback(async (threadId) => {
     setLoadingMsgs(true);
     try {
       const { data } = await api.get(`/chat/${threadId}/messages`, { params: { limit: 100 } });
       const arr = Array.isArray(data) ? data : data?.messages || data?.items || [];
-      setMessages(arr.slice().reverse ? arr : arr);
-      // ensure chronological order
-      setMessages(arr.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+      const sorted = arr.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      setMessages(sorted);
       setTimeout(() => {
         scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight });
       }, 50);
+    } catch (error) {
+      log.error("Chat.loadMessages failed", error);
     } finally {
       setLoadingMsgs(false);
     }
-  };
-
-  useEffect(() => {
-    loadThreads();
   }, []);
 
   useEffect(() => {
-    if (!active) return;
-    loadMessages(active.id);
-    const t = setInterval(() => loadMessages(active.id), 8000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line
-  }, [active?.id]);
+    loadThreads();
+  }, [loadThreads]);
 
-  const send = async () => {
+  useEffect(() => {
+    if (!active?.id) return undefined;
+    loadMessages(active.id);
+    const t = setInterval(() => loadMessages(active.id), POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [active?.id, loadMessages]);
+
+  const send = useCallback(async () => {
     if (!active) return;
     const t = text.trim();
     if (!t && !imageData) return;
@@ -72,24 +138,34 @@ export default function Chat() {
       setText("");
       setImageData("");
       await loadMessages(active.id);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      log.error("Chat.send failed", error);
     } finally {
       setSending(false);
     }
-  };
+  }, [active, text, imageData, loadMessages]);
 
-  const onFile = (e) => {
+  const onFile = useCallback((e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 3 * 1024 * 1024) {
+    if (f.size > MAX_IMAGE_BYTES) {
       alert("Image must be under 3MB");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => setImageData(reader.result?.toString() || "");
     reader.readAsDataURL(f);
-  };
+  }, []);
+
+  const onKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    },
+    [send]
+  );
 
   return (
     <Layout title="Slang-Connect">
@@ -103,40 +179,14 @@ export default function Chat() {
             ) : threads.length === 0 ? (
               <EmptyState icon={MessageCircle} title="No chats yet" hint="Your conversations will appear here." />
             ) : (
-              threads.map((t) => {
-                const other = t.other || {};
-                const last = t.last_message;
-                const isActive = active?.id === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setActive(t)}
-                    data-testid={`thread-${t.id}`}
-                    className={`w-full text-left px-3 py-2.5 flex items-center gap-2.5 border-b border-[color:var(--sc-border)]/60 ${
-                      isActive ? "bg-[color:var(--sc-accent-light)]" : "hover:bg-[color:var(--sc-accent-light)]/60"
-                    }`}
-                  >
-                    <div className="w-10 h-10 rounded-full sc-avatar text-white text-xs font-bold grid place-items-center overflow-hidden">
-                      {other.profile_image ? (
-                        <img alt="" src={other.profile_image} className="w-full h-full object-cover" />
-                      ) : (
-                        initials(other.name)
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold truncate">{other.name || "User"}</div>
-                      <div className="text-xs text-[color:var(--sc-ink-muted)] truncate">
-                        {last?.deleted ? "Message deleted" : last?.text || (last?.image_data_url ? "📷 Image" : "—")}
-                      </div>
-                    </div>
-                    {last?.created_at && (
-                      <div className="text-[10px] text-[color:var(--sc-ink-muted)] whitespace-nowrap">
-                        {formatDateTime(last.created_at)}
-                      </div>
-                    )}
-                  </button>
-                );
-              })
+              threads.map((t) => (
+                <ThreadListItem
+                  key={t.id}
+                  thread={t}
+                  active={active?.id === t.id}
+                  onSelect={setActive}
+                />
+              ))
             )}
           </div>
         </aside>
@@ -170,31 +220,9 @@ export default function Chat() {
                 {loadingMsgs && messages.length === 0 ? (
                   <Spinner />
                 ) : (
-                  messages.map((m) => {
-                    const mine = m.sender_id === user?.id;
-                    return (
-                      <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                        <div
-                          className={`max-w-[80%] rounded-2xl px-3 py-2 ${
-                            mine ? "bg-[color:var(--sc-primary)] text-white rounded-br-sm" : "bg-white border border-[color:var(--sc-border)] rounded-bl-sm"
-                          }`}
-                          data-testid={`msg-${m.id}`}
-                        >
-                          {m.image_data_url && (
-                            <img alt="" src={m.image_data_url} className="rounded-lg mb-1 max-h-64" />
-                          )}
-                          {m.deleted_for_everyone || m.deleted ? (
-                            <div className="text-xs italic opacity-70">message deleted</div>
-                          ) : (
-                            <div className="text-sm whitespace-pre-wrap break-words">{m.text}</div>
-                          )}
-                          <div className={`text-[10px] mt-1 ${mine ? "text-white/70" : "text-[color:var(--sc-ink-muted)]"}`}>
-                            {formatDateTime(m.created_at)}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
+                  messages.map((m) => (
+                    <MessageBubble key={m.id} message={m} mine={m.sender_id === user?.id} />
+                  ))
                 )}
               </div>
 
@@ -219,12 +247,7 @@ export default function Chat() {
                     rows={1}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        send();
-                      }
-                    }}
+                    onKeyDown={onKeyDown}
                     placeholder="Type a message…"
                     className="sc-input flex-1 resize-none max-h-32"
                   />

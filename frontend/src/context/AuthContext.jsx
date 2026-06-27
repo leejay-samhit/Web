@@ -1,47 +1,51 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import api from "@/lib/api";
+import {
+  getCachedUser,
+  getToken,
+  setTokens as persistTokens,
+  clearTokens,
+} from "@/lib/tokenStore";
+import { log } from "@/lib/log";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const raw = localStorage.getItem("sc_user");
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [token, setToken] = useState(() => localStorage.getItem("sc_token"));
-  const [loading, setLoading] = useState(!!localStorage.getItem("sc_token"));
+  const [user, setUser] = useState(() => getCachedUser());
+  const [token, setToken] = useState(() => getToken());
+  const [loading, setLoading] = useState(() => !!getToken());
 
-  const persist = (tk, u, refresh) => {
-    if (tk) localStorage.setItem("sc_token", tk);
-    if (refresh) localStorage.setItem("sc_refresh", refresh);
-    if (u) localStorage.setItem("sc_user", JSON.stringify(u));
+  const persist = useCallback((tk, u, refresh) => {
+    persistTokens({ token: tk, refresh_token: refresh, user: u });
     setToken(tk || null);
     setUser(u || null);
-  };
-
-  const login = useCallback(async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
-    persist(data.token, data.user, data.refresh_token);
-    return data.user;
   }, []);
 
-  const register = useCallback(async (payload) => {
-    const { data } = await api.post("/auth/register", payload);
-    if (data?.token) persist(data.token, data.user, data.refresh_token);
-    return data;
-  }, []);
+  const login = useCallback(
+    async (email, password) => {
+      const { data } = await api.post("/auth/login", { email, password });
+      persist(data.token, data.user, data.refresh_token);
+      return data.user;
+    },
+    [persist]
+  );
+
+  const register = useCallback(
+    async (payload) => {
+      const { data } = await api.post("/auth/register", payload);
+      if (data?.token) persist(data.token, data.user, data.refresh_token);
+      return data;
+    },
+    [persist]
+  );
 
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
-    } catch (_) {}
-    localStorage.removeItem("sc_token");
-    localStorage.removeItem("sc_refresh");
-    localStorage.removeItem("sc_user");
+    } catch (error) {
+      log.error("AuthProvider.logout: backend rejected logout", error);
+    }
+    clearTokens();
     setToken(null);
     setUser(null);
   }, []);
@@ -51,11 +55,12 @@ export function AuthProvider({ children }) {
       const { data } = await api.get("/auth/me");
       const u = data?.user || data;
       if (u) {
-        localStorage.setItem("sc_user", JSON.stringify(u));
+        persistTokens({ user: u });
         setUser(u);
       }
       return u;
-    } catch (e) {
+    } catch (error) {
+      log.error("AuthProvider.refreshMe: /auth/me failed", error);
       return null;
     }
   }, []);
@@ -70,16 +75,27 @@ export function AuthProvider({ children }) {
       setToken(null);
       setUser(null);
     };
+    // Cross-tab logout: if another tab clears storage, this one logs out too.
+    const onStorage = (event) => {
+      if (event.key === "sc_token" && !event.newValue) {
+        setToken(null);
+        setUser(null);
+      }
+    };
     window.addEventListener("sc:unauthorized", onUnauth);
-    return () => window.removeEventListener("sc:unauthorized", onUnauth);
-    // eslint-disable-next-line
-  }, []);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("sc:unauthorized", onUnauth);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [token, refreshMe]);
 
-  return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, refreshMe, setUser }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, token, loading, login, register, logout, refreshMe, setUser }),
+    [user, token, loading, login, register, logout, refreshMe]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {

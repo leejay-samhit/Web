@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { log } from "@/lib/log";
 
 const CartContext = createContext(null);
 
@@ -15,7 +16,8 @@ export function CartProvider({ children }) {
     try {
       const { data } = await api.get("/cart");
       setCart(data || { items: [], total: 0, count: 0 });
-    } catch (e) {
+    } catch (error) {
+      log.error("CartContext.refresh failed", error);
       setCart({ items: [], total: 0, count: 0 });
     } finally {
       setLoading(false);
@@ -41,7 +43,9 @@ export function CartProvider({ children }) {
   const clear = useCallback(async () => {
     try {
       await api.post("/cart/clear");
-    } catch (_) {}
+    } catch (error) {
+      log.error("CartContext.clear failed", error);
+    }
     await refresh();
   }, [refresh]);
 
@@ -49,9 +53,12 @@ export function CartProvider({ children }) {
     if (token) refresh();
   }, [token, refresh]);
 
-  return (
-    <CartContext.Provider value={{ cart, loading, refresh, add, remove, clear }}>{children}</CartContext.Provider>
+  const value = useMemo(
+    () => ({ cart, loading, refresh, add, remove, clear }),
+    [cart, loading, refresh, add, remove, clear]
   );
+
+  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
 export const useCart = () => {

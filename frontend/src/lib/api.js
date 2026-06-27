@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getToken, getRefresh, setTokens, clearTokens } from "@/lib/tokenStore";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API_BASE = `${BACKEND_URL}/api`;
@@ -9,7 +10,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("sc_token");
+  const token = getToken();
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
@@ -24,9 +25,8 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config || {};
     if (error?.response?.status === 401 && !original._retry) {
-      const refresh = localStorage.getItem("sc_refresh");
+      const refresh = getRefresh();
 
-      // Try refresh-once when we have a refresh token
       if (refresh) {
         try {
           original._retry = true;
@@ -35,25 +35,19 @@ api.interceptors.response.use(
           }
           const { data } = await refreshing;
           refreshing = null;
-          localStorage.setItem("sc_token", data.token);
-          if (data.refresh_token) localStorage.setItem("sc_refresh", data.refresh_token);
+          setTokens({ token: data.token, refresh_token: data.refresh_token });
           original.headers = original.headers || {};
           original.headers.Authorization = `Bearer ${data.token}`;
           return api(original);
-        } catch (e) {
+        } catch (_e) {
           refreshing = null;
           // fall through to soft-logout
         }
       }
 
-      // Soft logout: clear storage and dispatch an event the AuthProvider listens to.
-      // We do NOT force window.location for /admin/* or /auth/me write endpoints; let
-      // the calling component surface the error and React Router redirect via ProtectedRoute.
       const url = original?.url || "";
       const isAdminWrite = url.includes("/admin/") || original?.method !== "get";
-      localStorage.removeItem("sc_token");
-      localStorage.removeItem("sc_refresh");
-      localStorage.removeItem("sc_user");
+      clearTokens();
       window.dispatchEvent(new CustomEvent("sc:unauthorized", { detail: { url } }));
       if (!isAdminWrite && !window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";

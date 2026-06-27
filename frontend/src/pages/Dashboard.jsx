@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDateTime } from "@/lib/utils";
 import { Wallet, Users, ShoppingBag, Wrench, ArrowRight, Copy, Check, TrendingUp, Award } from "lucide-react";
 import Spinner from "@/components/Spinner";
+import { log } from "@/lib/log";
 
 function StatCard({ icon: Icon, label, value, tint = "primary", testid }) {
   const tints = {
@@ -64,14 +65,16 @@ export default function Dashboard() {
   const payouts = Number(u.payouts_received || 0);
   const referralLink = u.referral_code ? `${window.location.origin}/register?ref=${u.referral_code}` : "";
 
-  const copyRef = async () => {
+  const copyRef = useCallback(async () => {
     if (!referralLink) return;
     try {
       await navigator.clipboard.writeText(referralLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {}
-  };
+    } catch (error) {
+      log.error("Dashboard.copyRef failed", error);
+    }
+  }, [referralLink]);
 
   return (
     <Layout title="Dashboard">

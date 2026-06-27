@@ -17,6 +17,7 @@ import { useCart } from "@/context/CartContext";
 import { initials, isAdmin } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { log } from "@/lib/log";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", testid: "nav-dashboard" },
@@ -45,7 +46,9 @@ function NotifBell() {
         const arr = Array.isArray(data) ? data : data?.items || [];
         const unread = arr.filter((n) => !n.read).length;
         if (alive) setCount(unread);
-      } catch (_) {}
+      } catch (error) {
+        log.error("NotifBell.load failed", error);
+      }
     };
     load();
     const t = setInterval(load, 30000);
