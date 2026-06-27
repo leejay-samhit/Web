@@ -66,6 +66,12 @@ export function AuthProvider({ children }) {
     } else {
       setLoading(false);
     }
+    const onUnauth = () => {
+      setToken(null);
+      setUser(null);
+    };
+    window.addEventListener("sc:unauthorized", onUnauth);
+    return () => window.removeEventListener("sc:unauthorized", onUnauth);
     // eslint-disable-next-line
   }, []);
 

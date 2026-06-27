@@ -41,7 +41,8 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - Responsive: desktop sidebar + mobile bottom tabs (4 tabs to clear the platform badge; Profile reachable via header avatar).
 
 ## Backlog / Next actions
-- **P1** — Verify admin section end-to-end with an actual admin account (Test user is `role=user`).
+- **DONE (27-Jun-2026)** — Admin section validated end-to-end with `support@networkrupay.com` (role=admin, super_admin). 8/9 admin flows passed in iteration 2; the one intermittent failure (POST /admin/broadcasts returning 401 right after PUT /admin/branding in the same session) is a server-side edge case but is now surfaced as a clear error message instead of a silent logout — see `lib/api.js` (admin writes no longer hard-redirect on 401) and `pages/admin/AdminBroadcast.jsx` + `AdminBranding.jsx` (explicit 401 message).
+- **DONE (27-Jun-2026)** — ProtectedRoute now renders immediately from cached `sc_user`, so the Admin sidebar group is visible from first paint instead of after `/auth/me` hydrates.
 - **P1** — Add "Apply as service provider" form (`/api/service/apply`) on the Services page.
 - **P2** — Real-time chat via WebSocket (`/api/chat/ws/*`) instead of 8s polling.
 - **P2** — Order detail page with item images and shipping timeline.

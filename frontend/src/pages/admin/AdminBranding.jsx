@@ -32,7 +32,12 @@ export default function AdminBranding() {
       await api.put("/admin/branding", data);
       setMsg("Branding saved.");
     } catch (e) {
-      setMsg(e?.response?.data?.detail || "Failed");
+      const status = e?.response?.status;
+      if (status === 401) {
+        setMsg("Session expired or this action was rejected. Please re-login and try again.");
+      } else {
+        setMsg(e?.response?.data?.detail || "Failed");
+      }
     } finally {
       setSaving(false);
     }

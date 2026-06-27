@@ -45,7 +45,12 @@ export default function AdminBroadcast() {
       setForm({ title: "", message: "", audience: "all", link_url: "", image_data_url: "" });
       load();
     } catch (e) {
-      setErr(e?.response?.data?.detail || "Could not send broadcast");
+      const status = e?.response?.status;
+      if (status === 401) {
+        setErr("Session expired or this action was rejected. Please re-login and try again.");
+      } else {
+        setErr(e?.response?.data?.detail || "Could not send broadcast");
+      }
     } finally {
       setSending(false);
     }
@@ -72,7 +77,7 @@ export default function AdminBroadcast() {
               {AUDIENCES.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
-          {err && <div className="text-sm font-semibold text-[color:var(--sc-error)] mt-2">{err}</div>}
+          {err && <div data-testid="bc-err" className="text-sm font-semibold text-[color:var(--sc-error)] mt-2">{err}</div>}
           <button data-testid="bc-send" disabled={sending || !form.title || !form.message} onClick={submit} className="sc-btn-primary mt-3 inline-flex items-center gap-1.5">
             {sending ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />} Send
           </button>
