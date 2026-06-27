@@ -22,7 +22,21 @@ export default function Login() {
       const to = loc.state?.from?.pathname || "/dashboard";
       nav(to, { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.detail || err?.response?.data?.message || "Login failed. Check credentials.");
+      // Distinguish: invalid credentials vs network/CORS/server outage.
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail || err?.response?.data?.message;
+      if (status === 400 || status === 401 || status === 403) {
+        setError(detail || "Incorrect email or password.");
+      } else if (status >= 500) {
+        setError("Server error. Please try again in a moment.");
+      } else if (!err?.response) {
+        // No response = CORS block, DNS fail, offline, or backend down
+        setError(
+          "Can't reach the server. If you're on slangcart.com and this just deployed, the backend may need to whitelist this domain (CORS)."
+        );
+      } else {
+        setError(detail || `Login failed (HTTP ${status}).`);
+      }
     } finally {
       setLoading(false);
     }
