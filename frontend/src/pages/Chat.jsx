@@ -81,6 +81,7 @@ export default function Chat() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [imageData, setImageData] = useState("");
+  const [sendError, setSendError] = useState("");
   const scrollerRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -119,6 +120,7 @@ export default function Chat() {
 
   useEffect(() => {
     if (!active?.id) return undefined;
+    setSendError("");
     loadMessages(active.id);
     const t = setInterval(() => loadMessages(active.id), POLL_INTERVAL_MS);
     return () => clearInterval(t);
@@ -129,6 +131,7 @@ export default function Chat() {
     const t = text.trim();
     if (!t && !imageData) return;
     setSending(true);
+    setSendError("");
     try {
       await api.post(`/chat/${active.id}/messages`, {
         text: t,
@@ -140,6 +143,14 @@ export default function Chat() {
       await loadMessages(active.id);
     } catch (error) {
       log.error("Chat.send failed", error);
+      const status = error?.response?.status;
+      if (status === 403) {
+        setSendError("You can't reply to this conversation.");
+      } else if (status === 401) {
+        setSendError("Your session expired. Please re-login.");
+      } else {
+        setSendError(error?.response?.data?.detail || "Couldn't send. Try again.");
+      }
     } finally {
       setSending(false);
     }
@@ -227,6 +238,14 @@ export default function Chat() {
               </div>
 
               <div className="p-3 border-t border-[color:var(--sc-border)] bg-white">
+                {sendError && (
+                  <div
+                    data-testid="chat-send-error"
+                    className="text-xs font-semibold text-[color:var(--sc-error)] bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 mb-2"
+                  >
+                    {sendError}
+                  </div>
+                )}
                 {imageData && (
                   <div className="relative inline-block mb-2">
                     <img alt="" src={imageData} className="h-16 rounded-lg" />

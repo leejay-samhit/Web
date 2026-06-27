@@ -41,13 +41,18 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - Responsive: desktop sidebar + mobile bottom tabs (4 tabs to clear the platform badge; Profile reachable via header avatar).
 
 ## Backlog / Next actions
-- **DONE (27-Jun-2026)** — Admin section validated end-to-end with `support@networkrupay.com` (role=admin, super_admin). 8/9 admin flows passed in iteration 2; the one intermittent failure (POST /admin/broadcasts returning 401 right after PUT /admin/branding in the same session) is a server-side edge case but is now surfaced as a clear error message instead of a silent logout — see `lib/api.js` (admin writes no longer hard-redirect on 401) and `pages/admin/AdminBroadcast.jsx` + `AdminBranding.jsx` (explicit 401 message).
-- **DONE (27-Jun-2026)** — ProtectedRoute now renders immediately from cached `sc_user`, so the Admin sidebar group is visible from first paint instead of after `/auth/me` hydrates.
+- **DONE (27-Jun-2026)** — Code-quality refactor: namespaced `tokenStore.js`, dev-only `log.js`, `useCallback`/`useMemo` across context providers and pages, all empty `catch (_) {}` blocks replaced with logged handlers, stable list keys in Orders + ProductDetail, ProtectedRoute renders immediately from cached user, AuthContext now also handles cross-tab logout via the `storage` event. Iteration-3 regression: 22/24 (2 failures were testing-agent typos, not app bugs). Zero raw `console.*` outside `lib/log.js`.
+- **DONE (27-Jun-2026)** — Chat: inline `chat-send-error` toast (403 → "You can't reply to this conversation", 401 → re-login hint).
+- **DONE (27-Jun-2026)** — Admin section validated end-to-end with `support@networkrupay.com` (super_admin). 8/9 admin flows pass.
+- **OPEN — backend** — Migrate auth from `Authorization: Bearer` to `httpOnly + Secure + SameSite=Lax` cookies. Frontend hardening (`tokenStore.js`) is the strongest mitigation possible while the JWT remains in JSON response bodies. As soon as the backend sets a session cookie we can delete `tokenStore.js`.
+- **OPEN — backend** — Intermittent 401 on POST `/api/admin/broadcasts` right after PUT `/api/admin/branding`. Frontend now surfaces this instead of silently logging out.
+- **OPEN — backend** — Test user receives 403 when posting into his own Network-Rupay chat thread (worked in iteration 1, blocked since iteration 3). Frontend now shows an inline message.
 - **P1** — Add "Apply as service provider" form (`/api/service/apply`) on the Services page.
 - **P2** — Real-time chat via WebSocket (`/api/chat/ws/*`) instead of 8s polling.
 - **P2** — Order detail page with item images and shipping timeline.
 - **P2** — Wire missing change-password endpoint if backend exposes a different path.
 - **P3** — i18n (the backend already returns categories like "Mobile Recharge & Bills") and offline cart cache.
+- **P3 — code complexity** — `Chat.jsx`, `Checkout.jsx`, `Dashboard.jsx`, `Layout.jsx`, `Login.jsx` are still 130-240 lines. We extracted MessageBubble + ThreadListItem + StatCard, but further breakup into hooks (`useChat`, `useDashboardData`) was deferred to avoid risk in a working app. Recommended only if these pages need to add significant new features.
 
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).
