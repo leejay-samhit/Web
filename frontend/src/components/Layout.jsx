@@ -33,7 +33,6 @@ const mobileNav = [
   { to: "/shop", icon: ShoppingBag, label: "Shop", testid: "tab-shop" },
   { to: "/chat", icon: MessageCircle, label: "Chat", testid: "tab-chat" },
   { to: "/wallet", icon: Wallet, label: "Wallet", testid: "tab-wallet" },
-  { to: "/profile", icon: User, label: "Profile", testid: "tab-profile" },
 ];
 
 function NotifBell() {
@@ -211,9 +210,9 @@ export default function Layout({ children, title }) {
           {children}
         </main>
 
-        {/* Mobile bottom tabs */}
-        <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[color:var(--sc-border)]">
-          <div className="grid grid-cols-5">
+        {/* Mobile bottom tabs (right padding keeps clear of platform 'Made with Emergent' badge) */}
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 z-[9999] bg-white border-t border-[color:var(--sc-border)] pr-44">
+          <div className="grid grid-cols-4">
             {mobileNav.map((m) => (
               <NavLink
                 key={m.to}
