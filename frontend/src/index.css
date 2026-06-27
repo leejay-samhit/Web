@@ -1,115 +1,116 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-    margin: 0;
-    font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-        sans-serif;
+:root {
+  /* Slangcart brand */
+  --sc-primary: #0F6E4F;
+  --sc-primary-600: #0c5b41;
+  --sc-primary-700: #094633;
+  --sc-accent-light: #E8F4ED;
+  --sc-bg: #F7FAF8;
+  --sc-surface: #FFFFFF;
+  --sc-ink: #0F1A14;
+  --sc-ink-muted: #5B6B62;
+  --sc-border: #E1ECE5;
+  --sc-warn: #D9A05B;
+  --sc-error: #C0392B;
+  --sc-success: #2E7D52;
+}
+
+@layer base {
+  :root {
+    --background: 142 30% 97%;
+    --foreground: 150 27% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 150 27% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 150 27% 8%;
+    --primary: 156 76% 24%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 142 40% 93%;
+    --secondary-foreground: 156 76% 18%;
+    --muted: 142 25% 95%;
+    --muted-foreground: 150 10% 40%;
+    --accent: 142 40% 93%;
+    --accent-foreground: 156 76% 18%;
+    --destructive: 0 70% 47%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 142 20% 90%;
+    --input: 142 20% 90%;
+    --ring: 156 76% 24%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    margin: 0;
+    background-color: var(--sc-bg);
+    color: var(--sc-ink);
+  }
 }
 
-code {
-    font-family:
-        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cfd8d2;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a3b3a9;
 }
 
-@layer base {
-    :root {
-        --background: 0 0% 100%;
-        --foreground: 0 0% 3.9%;
-        --card: 0 0% 100%;
-        --card-foreground: 0 0% 3.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 3.9%;
-        --primary: 0 0% 9%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 96.1%;
-        --secondary-foreground: 0 0% 9%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 45.1%;
-        --accent: 0 0% 96.1%;
-        --accent-foreground: 0 0% 9%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 89.8%;
-        --input: 0 0% 89.8%;
-        --ring: 0 0% 3.9%;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-    }
-    .dark {
-        --background: 0 0% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 0 0% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 0 0% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 0 0% 9%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 0 0% 14.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
-    }
+/* Slangcart utility classes */
+.sc-card {
+  @apply bg-white rounded-2xl border border-[color:var(--sc-border)];
+}
+.sc-btn-primary {
+  @apply bg-[color:var(--sc-primary)] text-white rounded-xl px-4 py-2.5 font-semibold hover:bg-[color:var(--sc-primary-600)] active:bg-[color:var(--sc-primary-700)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+.sc-btn-ghost {
+  @apply bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)] rounded-xl px-4 py-2.5 font-semibold hover:bg-[#d8ecdf] transition-colors;
+}
+.sc-btn-outline {
+  @apply border border-[color:var(--sc-border)] text-[color:var(--sc-ink)] rounded-xl px-4 py-2.5 font-semibold hover:bg-[color:var(--sc-accent-light)] transition-colors;
+}
+.sc-input {
+  @apply w-full bg-white border border-[color:var(--sc-border)] rounded-xl px-3.5 py-2.5 text-[color:var(--sc-ink)] placeholder:text-[color:var(--sc-ink-muted)] focus:outline-none focus:ring-2 focus:border-[color:var(--sc-primary)] transition;
+  --tw-ring-color: rgba(15, 110, 79, 0.3);
+}
+.sc-chip {
+  @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)];
+}
+.sc-heading {
+  @apply font-extrabold tracking-tight text-[color:var(--sc-ink)];
 }
 
-@layer base {
-    * {
-        @apply border-border;
-    }
-    body {
-        @apply bg-background text-foreground;
-    }
+/* Subtle entrance */
+@keyframes sc-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
+.sc-fade-in { animation: sc-fade-in 240ms ease-out; }
 
-@layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
-
-    [data-debug-wrapper="true"] > * {
-        margin-left: inherit;
-        margin-right: inherit;
-        margin-top: inherit;
-        margin-bottom: inherit;
-        padding-left: inherit;
-        padding-right: inherit;
-        padding-top: inherit;
-        padding-bottom: inherit;
-        column-gap: inherit;
-        row-gap: inherit;
-        gap: inherit;
-        border-left-width: inherit;
-        border-right-width: inherit;
-        border-top-width: inherit;
-        border-bottom-width: inherit;
-        border-left-style: inherit;
-        border-right-style: inherit;
-        border-top-style: inherit;
-        border-bottom-style: inherit;
-        border-left-color: inherit;
-        border-right-color: inherit;
-        border-top-color: inherit;
-        border-bottom-color: inherit;
-    }
+/* Avatar fallback gradient */
+.sc-avatar {
+  background: linear-gradient(135deg, #0F6E4F 0%, #2E7D52 100%);
 }

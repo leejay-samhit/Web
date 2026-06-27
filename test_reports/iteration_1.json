@@ -1,0 +1,45 @@
+{
+  "summary": "Comprehensive frontend-only E2E testing of Slangcart (external backend at https://network-pay-1.emergent.host). 43/45 assertions passed. All major flows work: unauth redirect, login (Test@gmail.com/Just@4me), dashboard with referral code X0II9X, sidebar nav, shop search + add-to-cart, cart badge increment, product detail, cart page, checkout validation error, services list + search, chat thread list, wallet balance/txn/withdraw modal (graceful 400 from server, no crash), network tree, profile address & bank forms, notifications bell -> /notifications + mark-all-read, admin route redirects to /dashboard for role=user, logout clears tokens. Only failure: mobile bottom tabs 'tab-wallet' and 'tab-profile' are blocked by the platform-injected 'Made with Emergent' badge (id=emergent-badge) in 414x900 viewport.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Layout.jsx (mobile bottom nav)",
+        "issue": "On mobile viewport (414x900) the 'Made with Emergent' floating badge (id=emergent-badge, bottom-right) overlaps tab-wallet and tab-profile and intercepts pointer events. Real users on small screens cannot tap Wallet or Profile from the bottom tabs. Playwright elementsFromPoint confirms the badge (<p> inside <a#emergent-badge>) sits above the tab anchor at the click coordinates. Even with force=true, navigation did not occur because the badge captured the click.",
+        "selector": "[data-testid=\"tab-wallet\"], [data-testid=\"tab-profile\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Mobile dashboard / all pages on small viewports",
+        "issues": [
+          "Bottom nav uses z-40 while the platform badge (#emergent-badge) is rendered above it and overlaps the two right-most tabs. Suggested fix: raise the mobile <nav> z-index above the emergent badge (e.g. z-[60] or 9999) AND/OR add a small right margin/padding on the bottom-nav grid so the badge doesn't sit over tabs."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix mobile bottom tabs (tab-wallet, tab-profile) being covered by the 'Made with Emergent' badge. Update /app/frontend/src/components/Layout.jsx mobile <nav> to use z-[60] (or higher than the emergent-badge) so its anchors win pointer events, or shift the nav grid to leave a gap on the right that excludes the badge area."
+  ],
+  "critical_code_review_comments": [
+    "ProtectedRoute correctly handles loading/unauth and admin-only redirects.",
+    "Login.jsx has all required data-testid attributes and surfaces login-error via response.detail.",
+    "Mobile bottom nav z-index (z-40) is too low compared to the platform 'Made with Emergent' badge — this is a recurring class of bug; consider z-[60]+ for any fixed-bottom UI.",
+    "Wallet withdraw handles backend 400 gracefully (no crash) — good.",
+    "Checkout validation properly shows checkout-error before invoking Razorpay when address fields are empty."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "95.6% (43/45)"},
+  "test_credentials": "Test@gmail.com / Just@4me (role=user) — works against external backend https://network-pay-1.emergent.host",
+  "seed_data_creation": "None — used the existing Test user account; one cart item was added during the run (auto-via /api/cart/add).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend is EXTERNAL (https://network-pay-1.emergent.host); do not touch it. Use Test@gmail.com/Just@4me. All testids are in place and working. Only outstanding issue is mobile bottom-nav overlap with the emergent-badge on 414x900 viewport — verify by setting viewport to 414x900, logging in, then trying to click [data-testid=tab-wallet] and [data-testid=tab-profile] without force. Both should navigate. On desktop everything passes. Admin routes correctly redirect for role=user.",
+  "rca of the issue": "RCA: On mobile breakpoints (lg:hidden), the bottom navigation in /app/frontend/src/components/Layout.jsx line 215 is `fixed bottom-0 inset-x-0 z-40`. The Emergent preview platform injects a floating <a id=\"emergent-badge\"> at bottom-right with a higher stacking context. With 5 equal-width tabs in a viewport of 414px, tab-wallet (index 3) and tab-profile (index 4) physically sit under the badge's bounding box, so the badge's <p> intercepts pointer events. Repro: viewport 414x900 -> login -> goto /dashboard -> click [data-testid=tab-wallet]. Expected: navigate to /wallet. Actual: click intercepted, URL unchanged. Mitigation: increase the mobile nav's z-index above the badge (z-[60] / 9999), or add right padding on the nav-grid so tabs don't underlay the badge, or shift the badge with custom CSS. Recommended: change className to `lg:hidden fixed bottom-0 inset-x-0 z-[9999] bg-white border-t border-[color:var(--sc-border)]`."
+}
