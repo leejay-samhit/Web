@@ -46,7 +46,9 @@ export default function ServiceBookings() {
         ))}
       </div>
       {loading ? <Spinner /> : items.length === 0 ? (
-        <EmptyState icon={Calendar} title="No bookings yet" hint={role === "customer" ? "Book a service from the Services page." : "Bookings sent to you will appear here."} />
+        <div data-testid="sb-list">
+          <EmptyState icon={Calendar} title="No bookings yet" hint={role === "customer" ? "Book a service from the Services page." : "Bookings sent to you will appear here."} />
+        </div>
       ) : (
         <div className="space-y-2" data-testid="sb-list">
           {items.map((b) => (

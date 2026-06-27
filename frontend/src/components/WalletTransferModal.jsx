@@ -41,7 +41,7 @@ export default function WalletTransferModal({ open, onClose, balance, onSuccess 
       <div className="bg-white rounded-2xl w-full max-w-sm p-5 sc-fade-in" data-testid="wt-modal">
         <div className="flex justify-between items-center mb-3">
           <div className="font-extrabold">Send money</div>
-          <button onClick={onClose}><X size={18} /></button>
+          <button data-testid="wt-close" onClick={onClose}><X size={18} /></button>
         </div>
         {success ? (
           <div className="text-center py-6">

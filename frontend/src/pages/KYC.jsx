@@ -99,9 +99,13 @@ export default function KYC() {
           <FileField label="Aadhaar back" value={form.aadhaar_back} onChange={(v) => setForm({ ...form, aadhaar_back: v })} testid="kyc-aadhaar-back" />
           <FileField label="PAN image" value={form.pan_image} onChange={(v) => setForm({ ...form, pan_image: v })} testid="kyc-pan-image" />
           <FileField label="Selfie" value={form.selfie} onChange={(v) => setForm({ ...form, selfie: v })} testid="kyc-selfie" />
-          {(!submitted || status === "rejected") && (
+          {(!submitted || status === "rejected") ? (
             <button data-testid="kyc-submit" onClick={submit} disabled={busy} className="sc-btn-primary inline-flex items-center gap-1.5">
               {busy && <Loader2 size={14} className="animate-spin" />} Submit KYC
+            </button>
+          ) : (
+            <button data-testid="kyc-submit" disabled className="sc-btn-outline inline-flex items-center gap-1.5 opacity-60 cursor-not-allowed">
+              {status === "approved" ? "Already approved" : "Already submitted"}
             </button>
           )}
           {msg && <div data-testid="kyc-msg" className="text-sm font-semibold text-[color:var(--sc-primary)]">{msg}</div>}
