@@ -41,18 +41,17 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - Responsive: desktop sidebar + mobile bottom tabs (4 tabs to clear the platform badge; Profile reachable via header avatar).
 
 ## Backlog / Next actions
-- **DONE (27-Jun-2026)** — Code-quality refactor: namespaced `tokenStore.js`, dev-only `log.js`, `useCallback`/`useMemo` across context providers and pages, all empty `catch (_) {}` blocks replaced with logged handlers, stable list keys in Orders + ProductDetail, ProtectedRoute renders immediately from cached user, AuthContext now also handles cross-tab logout via the `storage` event. Iteration-3 regression: 22/24 (2 failures were testing-agent typos, not app bugs). Zero raw `console.*` outside `lib/log.js`.
-- **DONE (27-Jun-2026)** — Chat: inline `chat-send-error` toast (403 → "You can't reply to this conversation", 401 → re-login hint).
-- **DONE (27-Jun-2026)** — Admin section validated end-to-end with `support@networkrupay.com` (super_admin). 8/9 admin flows pass.
-- **OPEN — backend** — Migrate auth from `Authorization: Bearer` to `httpOnly + Secure + SameSite=Lax` cookies. Frontend hardening (`tokenStore.js`) is the strongest mitigation possible while the JWT remains in JSON response bodies. As soon as the backend sets a session cookie we can delete `tokenStore.js`.
-- **OPEN — backend** — Intermittent 401 on POST `/api/admin/broadcasts` right after PUT `/api/admin/branding`. Frontend now surfaces this instead of silently logging out.
-- **OPEN — backend** — Test user receives 403 when posting into his own Network-Rupay chat thread (worked in iteration 1, blocked since iteration 3). Frontend now shows an inline message.
-- **P1** — Add "Apply as service provider" form (`/api/service/apply`) on the Services page.
-- **P2** — Real-time chat via WebSocket (`/api/chat/ws/*`) instead of 8s polling.
-- **P2** — Order detail page with item images and shipping timeline.
-- **P2** — Wire missing change-password endpoint if backend exposes a different path.
-- **P3** — i18n (the backend already returns categories like "Mobile Recharge & Bills") and offline cart cache.
-- **P3 — code complexity** — `Chat.jsx`, `Checkout.jsx`, `Dashboard.jsx`, `Layout.jsx`, `Login.jsx` are still 130-240 lines. We extracted MessageBubble + ThreadListItem + StatCard, but further breakup into hooks (`useChat`, `useDashboardData`) was deferred to avoid risk in a working app. Recommended only if these pages need to add significant new features.
+- **DONE (27-Jun-2026, iter 4)** — Code-quality round 2: `src/constants/config.js`, 3 custom hooks (`useChatThread`, `useDashboardData`, `useRazorpayCheckout`), 17 sub-components extracted across Dashboard/Chat/Shop/Services/Orders/Notifications/Wallet/ProductDetail/Checkout. All nested ternaries replaced with named render helpers. Admin pages' `load` is `useCallback` + `useRef` for stable search. **45/46 regression assertions** pass (1 test-data artifact).
+- **DONE (iter 3)** — `tokenStore.js`, dev-only `log.js`, all empty catches eliminated, stable list keys, cross-tab logout via storage event, ProtectedRoute renders from cached user. Zero `console.*` outside `log.js`.
+- **DONE (iter 2)** — Admin section validated with super_admin. 8/9 admin flows pass.
+- **OPEN — backend** — Migrate auth from `Authorization: Bearer` to `httpOnly + Secure + SameSite=Lax` cookies. Until then `tokenStore.js` is the strongest in-browser mitigation; encryption would be theatre.
+- **OPEN — backend** — Intermittent 401 on POST `/api/admin/broadcasts` right after PUT `/api/admin/branding`. Frontend surfaces it.
+- **OPEN — backend** — Test user receives 403 when posting into his own Network-Rupay chat thread. Frontend now shows a `chat-send-error` chip via `useChatThread.sendError`.
+- **P1** — "Apply as service provider" form (`/api/service/apply`).
+- **P2** — WebSocket chat (replace `CHAT_POLL_INTERVAL_MS` polling).
+- **P2** — Order detail page with timeline.
+- **P2** — Wire change-password endpoint if backend exposes a different path.
+- **P3** — i18n + offline cart cache.
 
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).
