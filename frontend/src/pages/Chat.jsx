@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
+import EmptyState from "@/components/EmptyState";
+import useChatThread from "@/hooks/useChatThread";
 import { useAuth } from "@/context/AuthContext";
 import { formatDateTime, initials } from "@/lib/utils";
 import { Send, ArrowLeft, ImagePlus, MessageCircle } from "lucide-react";
-import EmptyState from "@/components/EmptyState";
+import { CHAT_MAX_IMAGE_BYTES } from "@/constants/config";
+import { useEffect } from "react";
 import { log } from "@/lib/log";
-
-const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
-const POLL_INTERVAL_MS = 8000;
 
 function MessageBubble({ message, mine }) {
   return (
@@ -71,19 +71,130 @@ function ThreadListItem({ thread, active, onSelect }) {
   );
 }
 
+function ThreadList({ threads, loading, activeId, onSelect }) {
+  if (loading) return <Spinner />;
+  if (threads.length === 0) {
+    return <EmptyState icon={MessageCircle} title="No chats yet" hint="Your conversations will appear here." />;
+  }
+  return (
+    <>
+      {threads.map((t) => (
+        <ThreadListItem key={t.id} thread={t} active={activeId === t.id} onSelect={onSelect} />
+      ))}
+    </>
+  );
+}
+
+function MessageList({ messages, loading, currentUserId, scrollerRef }) {
+  if (loading && messages.length === 0) return <Spinner />;
+  return (
+    <>
+      {messages.map((m) => (
+        <MessageBubble key={m.id} message={m} mine={m.sender_id === currentUserId} />
+      ))}
+    </>
+  );
+}
+
+function ChatComposer({ sending, sendError, onSend, onFile, imageData, clearImage }) {
+  const [text, setText] = useState("");
+  const fileRef = useRef(null);
+
+  const doSend = useCallback(async () => {
+    const ok = await onSend({ text, imageData });
+    if (ok) setText("");
+  }, [onSend, text, imageData]);
+
+  const onKeyDown = useCallback(
+    (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        doSend();
+      }
+    },
+    [doSend]
+  );
+
+  return (
+    <div className="p-3 border-t border-[color:var(--sc-border)] bg-white">
+      {sendError && (
+        <div
+          data-testid="chat-send-error"
+          className="text-xs font-semibold text-[color:var(--sc-error)] bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 mb-2"
+        >
+          {sendError}
+        </div>
+      )}
+      {imageData && (
+        <div className="relative inline-block mb-2">
+          <img alt="" src={imageData} className="h-16 rounded-lg" />
+          <button
+            onClick={clearImage}
+            className="absolute -top-1 -right-1 w-5 h-5 bg-black/70 text-white rounded-full text-xs"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        <input type="file" accept="image/*" hidden ref={fileRef} onChange={onFile} />
+        <button
+          data-testid="chat-attach"
+          onClick={() => fileRef.current?.click()}
+          className="w-10 h-10 rounded-xl border border-[color:var(--sc-border)] grid place-items-center text-[color:var(--sc-ink-muted)] hover:bg-[color:var(--sc-accent-light)]"
+        >
+          <ImagePlus size={18} />
+        </button>
+        <textarea
+          data-testid="chat-input"
+          rows={1}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="Type a message…"
+          className="sc-input flex-1 resize-none max-h-32"
+        />
+        <button
+          data-testid="chat-send"
+          onClick={doSend}
+          disabled={sending || (!text.trim() && !imageData)}
+          className="sc-btn-primary px-3"
+        >
+          <Send size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConversationHeader({ thread, onBack }) {
+  return (
+    <div className="p-3 border-b border-[color:var(--sc-border)] flex items-center gap-2">
+      <button className="lg:hidden" onClick={onBack} data-testid="chat-back">
+        <ArrowLeft size={18} />
+      </button>
+      <div className="w-9 h-9 rounded-full sc-avatar text-white text-xs font-bold grid place-items-center overflow-hidden">
+        {thread.other?.profile_image ? (
+          <img alt="" src={thread.other.profile_image} className="w-full h-full object-cover" />
+        ) : (
+          initials(thread.other?.name)
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="font-extrabold text-sm truncate">{thread.other?.name}</div>
+        <div className="text-[11px] text-[color:var(--sc-ink-muted)]">{thread.other?.referral_code}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function Chat() {
   const { user } = useAuth();
   const [threads, setThreads] = useState([]);
   const [loadingThreads, setLoadingThreads] = useState(true);
   const [active, setActive] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [loadingMsgs, setLoadingMsgs] = useState(false);
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
   const [imageData, setImageData] = useState("");
-  const [sendError, setSendError] = useState("");
-  const scrollerRef = useRef(null);
-  const fileRef = useRef(null);
+  const { messages, loading: loadingMsgs, sending, sendError, scrollerRef, send } = useChatThread(active?.id || null);
 
   const loadThreads = useCallback(async () => {
     setLoadingThreads(true);
@@ -97,69 +208,14 @@ export default function Chat() {
     }
   }, []);
 
-  const loadMessages = useCallback(async (threadId) => {
-    setLoadingMsgs(true);
-    try {
-      const { data } = await api.get(`/chat/${threadId}/messages`, { params: { limit: 100 } });
-      const arr = Array.isArray(data) ? data : data?.messages || data?.items || [];
-      const sorted = arr.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      setMessages(sorted);
-      setTimeout(() => {
-        scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight });
-      }, 50);
-    } catch (error) {
-      log.error("Chat.loadMessages failed", error);
-    } finally {
-      setLoadingMsgs(false);
-    }
-  }, []);
-
   useEffect(() => {
     loadThreads();
   }, [loadThreads]);
 
-  useEffect(() => {
-    if (!active?.id) return undefined;
-    setSendError("");
-    loadMessages(active.id);
-    const t = setInterval(() => loadMessages(active.id), POLL_INTERVAL_MS);
-    return () => clearInterval(t);
-  }, [active?.id, loadMessages]);
-
-  const send = useCallback(async () => {
-    if (!active) return;
-    const t = text.trim();
-    if (!t && !imageData) return;
-    setSending(true);
-    setSendError("");
-    try {
-      await api.post(`/chat/${active.id}/messages`, {
-        text: t,
-        image_data_url: imageData || "",
-        client_dedupe_key: `${active.id}-${Date.now()}`,
-      });
-      setText("");
-      setImageData("");
-      await loadMessages(active.id);
-    } catch (error) {
-      log.error("Chat.send failed", error);
-      const status = error?.response?.status;
-      if (status === 403) {
-        setSendError("You can't reply to this conversation.");
-      } else if (status === 401) {
-        setSendError("Your session expired. Please re-login.");
-      } else {
-        setSendError(error?.response?.data?.detail || "Couldn't send. Try again.");
-      }
-    } finally {
-      setSending(false);
-    }
-  }, [active, text, imageData, loadMessages]);
-
   const onFile = useCallback((e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > MAX_IMAGE_BYTES) {
+    if (f.size > CHAT_MAX_IMAGE_BYTES) {
       alert("Image must be under 3MB");
       return;
     }
@@ -168,41 +224,25 @@ export default function Chat() {
     reader.readAsDataURL(f);
   }, []);
 
-  const onKeyDown = useCallback(
-    (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        send();
-      }
+  const handleSend = useCallback(
+    async ({ text }) => {
+      const ok = await send({ text, imageData });
+      if (ok) setImageData("");
+      return ok;
     },
-    [send]
+    [send, imageData]
   );
 
   return (
     <Layout title="Slang-Connect">
       <div className="sc-card overflow-hidden flex h-[calc(100vh-200px)] min-h-[500px]">
-        {/* Threads list */}
         <aside className={`w-full lg:w-80 border-r border-[color:var(--sc-border)] flex-col ${active ? "hidden lg:flex" : "flex"}`}>
           <div className="p-3 border-b border-[color:var(--sc-border)] font-extrabold text-sm">Chats</div>
           <div className="flex-1 overflow-y-auto" data-testid="thread-list">
-            {loadingThreads ? (
-              <Spinner />
-            ) : threads.length === 0 ? (
-              <EmptyState icon={MessageCircle} title="No chats yet" hint="Your conversations will appear here." />
-            ) : (
-              threads.map((t) => (
-                <ThreadListItem
-                  key={t.id}
-                  thread={t}
-                  active={active?.id === t.id}
-                  onSelect={setActive}
-                />
-              ))
-            )}
+            <ThreadList threads={threads} loading={loadingThreads} activeId={active?.id} onSelect={setActive} />
           </div>
         </aside>
 
-        {/* Conversation */}
         <section className={`flex-1 flex-col ${active ? "flex" : "hidden lg:flex"}`}>
           {!active ? (
             <div className="flex-1 grid place-items-center">
@@ -210,76 +250,22 @@ export default function Chat() {
             </div>
           ) : (
             <>
-              <div className="p-3 border-b border-[color:var(--sc-border)] flex items-center gap-2">
-                <button className="lg:hidden" onClick={() => setActive(null)} data-testid="chat-back">
-                  <ArrowLeft size={18} />
-                </button>
-                <div className="w-9 h-9 rounded-full sc-avatar text-white text-xs font-bold grid place-items-center overflow-hidden">
-                  {active.other?.profile_image ? (
-                    <img alt="" src={active.other.profile_image} className="w-full h-full object-cover" />
-                  ) : (
-                    initials(active.other?.name)
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <div className="font-extrabold text-sm truncate">{active.other?.name}</div>
-                  <div className="text-[11px] text-[color:var(--sc-ink-muted)]">{active.other?.referral_code}</div>
-                </div>
+              <ConversationHeader thread={active} onBack={() => setActive(null)} />
+              <div
+                ref={scrollerRef}
+                className="flex-1 overflow-y-auto p-4 space-y-2 bg-[color:var(--sc-bg)]"
+                data-testid="messages-pane"
+              >
+                <MessageList messages={messages} loading={loadingMsgs} currentUserId={user?.id} scrollerRef={scrollerRef} />
               </div>
-
-              <div ref={scrollerRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-[color:var(--sc-bg)]" data-testid="messages-pane">
-                {loadingMsgs && messages.length === 0 ? (
-                  <Spinner />
-                ) : (
-                  messages.map((m) => (
-                    <MessageBubble key={m.id} message={m} mine={m.sender_id === user?.id} />
-                  ))
-                )}
-              </div>
-
-              <div className="p-3 border-t border-[color:var(--sc-border)] bg-white">
-                {sendError && (
-                  <div
-                    data-testid="chat-send-error"
-                    className="text-xs font-semibold text-[color:var(--sc-error)] bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 mb-2"
-                  >
-                    {sendError}
-                  </div>
-                )}
-                {imageData && (
-                  <div className="relative inline-block mb-2">
-                    <img alt="" src={imageData} className="h-16 rounded-lg" />
-                    <button onClick={() => setImageData("")} className="absolute -top-1 -right-1 w-5 h-5 bg-black/70 text-white rounded-full text-xs">×</button>
-                  </div>
-                )}
-                <div className="flex items-end gap-2">
-                  <input type="file" accept="image/*" hidden ref={fileRef} onChange={onFile} />
-                  <button
-                    data-testid="chat-attach"
-                    onClick={() => fileRef.current?.click()}
-                    className="w-10 h-10 rounded-xl border border-[color:var(--sc-border)] grid place-items-center text-[color:var(--sc-ink-muted)] hover:bg-[color:var(--sc-accent-light)]"
-                  >
-                    <ImagePlus size={18} />
-                  </button>
-                  <textarea
-                    data-testid="chat-input"
-                    rows={1}
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    onKeyDown={onKeyDown}
-                    placeholder="Type a message…"
-                    className="sc-input flex-1 resize-none max-h-32"
-                  />
-                  <button
-                    data-testid="chat-send"
-                    onClick={send}
-                    disabled={sending || (!text.trim() && !imageData)}
-                    className="sc-btn-primary px-3"
-                  >
-                    <Send size={18} />
-                  </button>
-                </div>
-              </div>
+              <ChatComposer
+                sending={sending}
+                sendError={sendError}
+                onSend={handleSend}
+                onFile={onFile}
+                imageData={imageData}
+                clearImage={() => setImageData("")}
+              />
             </>
           )}
         </section>

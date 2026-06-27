@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { formatINR } from "@/lib/utils";
 import { Plus, Trash2, X, Loader2 } from "lucide-react";
+import { log } from "@/lib/log";
 
 const initial = {
   name: "",
@@ -24,18 +25,20 @@ export default function AdminProducts() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get("/admin/products");
       setList(Array.isArray(data) ? data : data?.items || []);
+    } catch (error) {
+      log.error("AdminProducts.load failed", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const set = (k) => (e) => {
     const v = e?.target ? e.target.value : e;

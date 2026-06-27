@@ -1,10 +1,56 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import { Wrench, Search, MapPin, Phone, X, CheckCircle2 } from "lucide-react";
 import { formatINR } from "@/lib/utils";
+import { log } from "@/lib/log";
+
+function ServiceCard({ s, onBook }) {
+  const available = s.availability_status === "available";
+  return (
+    <div key={s.id} className="sc-card p-4 flex flex-col gap-2" data-testid={`service-${s.id}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-extrabold text-[color:var(--sc-ink)] truncate">{s.service_name || s.name}</div>
+          <div className="text-xs text-[color:var(--sc-ink-muted)]">{s.service_category}</div>
+        </div>
+        <span
+          className="sc-chip"
+          style={available ? { background: "#E7F6EC", color: "#0F6E4F" } : { background: "#FBEDE2", color: "#A0522D" }}
+        >
+          ● {available ? "Available" : "Busy"}
+        </span>
+      </div>
+      {s.service_description && (
+        <div className="text-xs text-[color:var(--sc-ink-muted)] line-clamp-2">{s.service_description}</div>
+      )}
+      <div className="flex items-center justify-between mt-2">
+        <div className="text-sm font-extrabold text-[color:var(--sc-primary)]">{formatINR(s.service_charge)}</div>
+        <button
+          data-testid={`svc-book-${s.id}`}
+          onClick={() => onBook(s)}
+          className="sc-btn-primary text-xs py-1.5 px-3"
+        >
+          Book
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function renderServices({ loading, services, onBook }) {
+  if (loading) return <Spinner />;
+  if (services.length === 0) {
+    return <EmptyState icon={Wrench} title="No services found" hint="Adjust your search or PIN code." />;
+  }
+  return (
+    <div data-testid="services-grid" className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {services.map((s) => <ServiceCard key={s.id} s={s} onBook={onBook} />)}
+    </div>
+  );
+}
 
 export default function Services() {
   const [services, setServices] = useState([]);
@@ -18,27 +64,33 @@ export default function Services() {
   const [bookError, setBookError] = useState("");
   const [invoices, setInvoices] = useState([]);
 
-  const load = async () => {
+  const qRef = useRef(q);
+  const pinRef = useRef(pincode);
+  qRef.current = q;
+  pinRef.current = pincode;
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = {};
-      if (q) params.q = q;
-      if (pincode) params.pincode = pincode;
+      if (qRef.current) params.q = qRef.current;
+      if (pinRef.current) params.pincode = pinRef.current;
       const [s, inv] = await Promise.allSettled([
         api.get("/services", { params }),
         api.get("/services/reveals/me"),
       ]);
       if (s.status === "fulfilled") setServices(s.value.data?.items || []);
+      else log.error("Services.load /services failed", s.reason);
       if (inv.status === "fulfilled") setInvoices(inv.value.data?.items || inv.value.data || []);
+      else log.error("Services.load /reveals failed", inv.reason);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line
-  }, []);
+  }, [load]);
 
   const book = async () => {
     if (!bookOpen) return;
@@ -88,40 +140,7 @@ export default function Services() {
           </button>
         </div>
 
-        {loading ? (
-          <Spinner />
-        ) : services.length === 0 ? (
-          <EmptyState icon={Wrench} title="No services found" hint="Adjust your search or PIN code." />
-        ) : (
-          <div data-testid="services-grid" className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {services.map((s) => (
-              <div key={s.id} className="sc-card p-4 flex flex-col gap-2" data-testid={`service-${s.id}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-extrabold text-[color:var(--sc-ink)] truncate">{s.service_name || s.name}</div>
-                    <div className="text-xs text-[color:var(--sc-ink-muted)]">{s.service_category}</div>
-                  </div>
-                  {s.availability_status === "available" ? (
-                    <span className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>● Available</span>
-                  ) : (
-                    <span className="sc-chip" style={{ background: "#FBEDE2", color: "#A0522D" }}>● Busy</span>
-                  )}
-                </div>
-                {s.service_description && <div className="text-xs text-[color:var(--sc-ink-muted)] line-clamp-2">{s.service_description}</div>}
-                <div className="flex items-center justify-between mt-2">
-                  <div className="text-sm font-extrabold text-[color:var(--sc-primary)]">{formatINR(s.service_charge)}</div>
-                  <button
-                    data-testid={`svc-book-${s.id}`}
-                    onClick={() => setBookOpen(s)}
-                    className="sc-btn-primary text-xs py-1.5 px-3"
-                  >
-                    Book
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {renderServices({ loading, services, onBook: setBookOpen })}
 
         {invoices?.length > 0 && (
           <div className="sc-card p-5" data-testid="svc-invoices">

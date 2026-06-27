@@ -1,12 +1,13 @@
 import axios from "axios";
 import { getToken, getRefresh, setTokens, clearTokens } from "@/lib/tokenStore";
+import { API_TIMEOUT_MS, HTTP_UNAUTHORIZED } from "@/constants/config";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API_BASE = `${BACKEND_URL}/api`;
 
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: API_TIMEOUT_MS,
 });
 
 api.interceptors.request.use((config) => {
@@ -24,7 +25,7 @@ api.interceptors.response.use(
   (r) => r,
   async (error) => {
     const original = error.config || {};
-    if (error?.response?.status === 401 && !original._retry) {
+    if (error?.response?.status === HTTP_UNAUTHORIZED && !original._retry) {
       const refresh = getRefresh();
 
       if (refresh) {

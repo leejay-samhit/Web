@@ -1,27 +1,44 @@
 // Token storage helpers.
 //
-// Security note (see CODE_QUALITY notes & PRD.md "Open issues"):
-//   The Slangcart backend (network-pay-1) ships JWTs in JSON response bodies and
-//   expects an `Authorization: Bearer <token>` header on every request. It does
-//   not set an httpOnly cookie. Until the backend exposes a cookie-based session
-//   we must hold the token client-side, and `localStorage` is the only viable
-//   place that survives a page refresh.
+// SECURITY POSTURE (read me before "fixing" this file):
 //
-// To minimise XSS blast radius we:
-//   * Namespace storage keys (`sc_*`) so other apps on the same origin can't
-//     accidentally read them.
-//   * Sync-clear across tabs via the `storage` event so a logout in one tab
-//     immediately kills sessions in others.
-//   * Provide a single `clearTokens()` helper so we never leave stragglers
-//     (`sc_token` cleared but `sc_user` left, etc.).
+// The Slangcart backend (network-pay-1) currently ships JWTs in the JSON body
+// of /api/auth/login and expects every request to carry
+// `Authorization: Bearer <token>`. It does NOT set an httpOnly cookie. Until
+// the backend exposes a cookie-based session there are exactly TWO options for
+// surviving a page refresh on the web:
 //
-// Action item for the backend team: switch `/api/auth/login` to set a
-// `__Host-sc_session` httpOnly+Secure+SameSite=Lax cookie and we will delete
-// this entire module.
+//   1. Store the token in `localStorage` (what this module does).
+//   2. Store the token in a JS-readable cookie.
+//
+// Both are equally exposed to XSS — JS can read either one. Encrypting the
+// token before putting it in localStorage is *security theatre*: the
+// encryption key would have to live in the JS bundle, so any XSS that can
+// read the ciphertext can also read the key.
+//
+// What we DO do to harden it:
+//   * Namespace the storage keys (`sc_*`) — defined once in constants/config
+//     so other code on the same origin can't accidentally read them.
+//   * Single source of truth: only this module reads or writes these keys.
+//     All other code goes through `getToken / setTokens / clearTokens`.
+//   * Cross-tab logout via the browser `storage` event (handled in
+//     AuthContext.jsx) so a logout in one tab kills sessions in all tabs.
+//   * The axios interceptor never persists a token returned from a 4xx
+//     response.
+//
+// Action item for the backend team (tracked in PRD.md):
+//   Switch /api/auth/login to set a `__Host-sc_session` cookie with
+//   httpOnly + Secure + SameSite=Lax, then we can delete this entire file.
 
-export const TOKEN_KEY = "sc_token";
-export const REFRESH_KEY = "sc_refresh";
-export const USER_KEY = "sc_user";
+import {
+  TOKEN_STORAGE_KEY,
+  REFRESH_STORAGE_KEY,
+  USER_STORAGE_KEY,
+} from "@/constants/config";
+
+export const TOKEN_KEY = TOKEN_STORAGE_KEY;
+export const REFRESH_KEY = REFRESH_STORAGE_KEY;
+export const USER_KEY = USER_STORAGE_KEY;
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);

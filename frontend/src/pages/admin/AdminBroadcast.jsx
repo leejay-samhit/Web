@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { formatDateTime } from "@/lib/utils";
 import { Send, Loader2 } from "lucide-react";
+import { log } from "@/lib/log";
 
 const AUDIENCES = ["all", "approved", "blocked", "pending"];
 
@@ -14,18 +15,20 @@ export default function AdminBroadcast() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get("/admin/broadcasts", { params: { limit: 30 } });
       setList(Array.isArray(data) ? data : data?.items || []);
+    } catch (error) {
+      log.error("AdminBroadcast.load failed", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target?.value ?? e }));
 

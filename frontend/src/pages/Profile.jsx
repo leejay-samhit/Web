@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { initials } from "@/lib/utils";
 import { Camera, Loader2, Save, KeyRound, Bell, MapPin, Banknote } from "lucide-react";
 import { log } from "@/lib/log";
+import { AVATAR_MAX_BYTES } from "@/constants/config";
 
 function Section({ title, icon: Icon, children, testid }) {
   return (
@@ -59,7 +60,7 @@ export default function Profile() {
   const onAvatar = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 2 * 1024 * 1024) return alert("Image must be under 2MB");
+    if (f.size > AVATAR_MAX_BYTES) return alert("Image must be under 2MB");
     setBusyImg(true);
     const r = new FileReader();
     r.onload = async () => {

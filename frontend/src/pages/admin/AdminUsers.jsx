@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { initials, formatINR } from "@/lib/utils";
 import { Search, ShieldOff, ShieldCheck, KeyRound } from "lucide-react";
+import { log } from "@/lib/log";
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -11,20 +12,24 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(null);
 
-  const load = async () => {
+  const qRef = useRef(q);
+  qRef.current = q;
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/admin/users", { params: { q, limit: 50 } });
+      const { data } = await api.get("/admin/users", { params: { q: qRef.current, limit: 50 } });
       setUsers(data?.items || data || []);
+    } catch (error) {
+      log.error("AdminUsers.load failed", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line
-  }, []);
+  }, [load]);
 
   const toggleBlock = async (u) => {
     setActing(u.id);

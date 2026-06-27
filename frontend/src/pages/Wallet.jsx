@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
@@ -6,6 +6,35 @@ import EmptyState from "@/components/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDateTime } from "@/lib/utils";
 import { ArrowDownToLine, Wallet as WalletIcon, X, Loader2 } from "lucide-react";
+import { log } from "@/lib/log";
+
+function TxnRow({ t }) {
+  const positive = (t.type || "").includes("commission") || (t.type || "").includes("credit") || (t.amount > 0 && t.type !== "withdraw");
+  return (
+    <div key={t.id} className="py-2.5 flex items-center justify-between gap-2" data-testid={`txn-${t.id}`}>
+      <div className="min-w-0">
+        <div className="text-sm font-semibold truncate">{t.description || t.type}</div>
+        <div className="text-[11px] text-[color:var(--sc-ink-muted)]">{formatDateTime(t.created_at || t.paid_at)}</div>
+      </div>
+      <div className="text-right">
+        <div className={`text-sm font-extrabold ${positive ? "text-[color:var(--sc-success)]" : "text-[color:var(--sc-ink)]"}`}>
+          {positive ? "+" : "-"} {formatINR(Math.abs(t.amount))}
+        </div>
+        <div className="text-[11px] text-[color:var(--sc-ink-muted)]">{t.status}</div>
+      </div>
+    </div>
+  );
+}
+
+function renderTxns(loading, txns) {
+  if (loading) return <Spinner />;
+  if (txns.length === 0) return <EmptyState icon={WalletIcon} title="No transactions yet" />;
+  return (
+    <div className="mt-3 divide-y divide-[color:var(--sc-border)]" data-testid="txn-list">
+      {txns.slice(0, 12).map((t) => <TxnRow key={t.id} t={t} />)}
+    </div>
+  );
+}
 
 export default function Wallet() {
   const { user, refreshMe } = useAuth();
@@ -17,7 +46,7 @@ export default function Wallet() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [t, w] = await Promise.allSettled([
@@ -25,15 +54,17 @@ export default function Wallet() {
         api.get("/withdrawals/me"),
       ]);
       if (t.status === "fulfilled") setTxns(Array.isArray(t.value.data) ? t.value.data : t.value.data?.items || []);
+      else log.error("Wallet.load /transactions/me failed", t.reason);
       if (w.status === "fulfilled") setWithdrawals(Array.isArray(w.value.data) ? w.value.data : w.value.data?.items || []);
+      else log.error("Wallet.load /withdrawals/me failed", w.reason);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const submit = async () => {
     setErr("");
@@ -83,29 +114,7 @@ export default function Wallet() {
               <div className="font-extrabold">Recent transactions</div>
               <span className="text-xs text-[color:var(--sc-ink-muted)]">{txns.length}</span>
             </div>
-            {loading ? <Spinner /> : txns.length === 0 ? (
-              <EmptyState icon={WalletIcon} title="No transactions yet" />
-            ) : (
-              <div className="mt-3 divide-y divide-[color:var(--sc-border)]" data-testid="txn-list">
-                {txns.slice(0, 12).map((t) => {
-                  const positive = (t.type || "").includes("commission") || (t.type || "").includes("credit") || (t.amount > 0 && t.type !== "withdraw");
-                  return (
-                    <div key={t.id} className="py-2.5 flex items-center justify-between gap-2" data-testid={`txn-${t.id}`}>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold truncate">{t.description || t.type}</div>
-                        <div className="text-[11px] text-[color:var(--sc-ink-muted)]">{formatDateTime(t.created_at || t.paid_at)}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`text-sm font-extrabold ${positive ? "text-[color:var(--sc-success)]" : "text-[color:var(--sc-ink)]"}`}>
-                          {positive ? "+" : "-"} {formatINR(Math.abs(t.amount))}
-                        </div>
-                        <div className="text-[11px] text-[color:var(--sc-ink-muted)]">{t.status}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {renderTxns(loading, txns)}
           </div>
 
           <div className="sc-card p-5">

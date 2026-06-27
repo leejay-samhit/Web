@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { Loader2, RefreshCw, Save } from "lucide-react";
+import { log } from "@/lib/log";
 
 export default function AdminBranding() {
   const [data, setData] = useState(null);
@@ -10,18 +11,20 @@ export default function AdminBranding() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get("/branding");
       setData(data);
+    } catch (error) {
+      log.error("AdminBranding.load failed", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const setColor = (k, v) => setData((d) => ({ ...d, colors: { ...(d?.colors || {}), [k]: v } }));
 

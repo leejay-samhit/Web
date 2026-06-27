@@ -8,6 +8,68 @@ import { formatINR } from "@/lib/utils";
 import { Search, ShoppingBag, Plus, Check } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 
+function ProductCard({ p, inCart, busy, onAdd }) {
+  return (
+    <div className="sc-card overflow-hidden flex flex-col group" data-testid={`product-card-${p.id}`}>
+      <Link to={`/product/${p.id}`} className="aspect-square bg-[color:var(--sc-accent-light)] overflow-hidden">
+        {p.image_url ? (
+          <img
+            alt=""
+            src={p.image_url}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]">
+            <ShoppingBag size={28} />
+          </div>
+        )}
+      </Link>
+      <div className="p-3 flex-1 flex flex-col">
+        <Link to={`/product/${p.id}`} className="text-sm font-semibold text-[color:var(--sc-ink)] line-clamp-2">
+          {p.name}
+        </Link>
+        {p.brand && <div className="text-[11px] text-[color:var(--sc-ink-muted)] mt-0.5">{p.brand}</div>}
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="font-extrabold text-[color:var(--sc-ink)]">{formatINR(p.price)}</div>
+          <button
+            data-testid={`add-cart-${p.id}`}
+            onClick={() => onAdd(p)}
+            disabled={busy || inCart}
+            className={`w-8 h-8 rounded-lg grid place-items-center transition ${
+              inCart
+                ? "bg-[color:var(--sc-success)] text-white"
+                : "bg-[color:var(--sc-primary)] text-white hover:bg-[color:var(--sc-primary-600)]"
+            }`}
+            title={inCart ? "In cart" : "Add to cart"}
+          >
+            {inCart ? <Check size={16} /> : <Plus size={16} />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderProducts({ loading, filtered, cartIds, busyId, onAdd }) {
+  if (loading) return <Spinner />;
+  if (filtered.length === 0) {
+    return <EmptyState icon={ShoppingBag} title="No products found" hint="Try a different search or category." />;
+  }
+  return (
+    <div data-testid="products-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-4">
+      {filtered.map((p) => (
+        <ProductCard
+          key={p.id}
+          p={p}
+          inCart={cartIds.has(p.id)}
+          busy={busyId === p.id}
+          onAdd={onAdd}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function Shop() {
   const { cart, add } = useCart();
   const [products, setProducts] = useState([]);
@@ -105,57 +167,7 @@ export default function Shop() {
         )}
 
         {/* Products */}
-        {loading ? (
-          <Spinner />
-        ) : filtered.length === 0 ? (
-          <EmptyState icon={ShoppingBag} title="No products found" hint="Try a different search or category." />
-        ) : (
-          <div data-testid="products-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-4">
-            {filtered.map((p) => {
-              const inCart = cartIds.has(p.id);
-              return (
-                <div key={p.id} className="sc-card overflow-hidden flex flex-col group" data-testid={`product-card-${p.id}`}>
-                  <Link to={`/product/${p.id}`} className="aspect-square bg-[color:var(--sc-accent-light)] overflow-hidden">
-                    {p.image_url ? (
-                      <img
-alt=""                         src={p.image_url}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]">
-                        <ShoppingBag size={28} />
-                      </div>
-                    )}
-                  </Link>
-                  <div className="p-3 flex-1 flex flex-col">
-                    <Link to={`/product/${p.id}`} className="text-sm font-semibold text-[color:var(--sc-ink)] line-clamp-2">
-                      {p.name}
-                    </Link>
-                    {p.brand && (
-                      <div className="text-[11px] text-[color:var(--sc-ink-muted)] mt-0.5">{p.brand}</div>
-                    )}
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <div className="font-extrabold text-[color:var(--sc-ink)]">{formatINR(p.price)}</div>
-                      <button
-                        data-testid={`add-cart-${p.id}`}
-                        onClick={() => addToCart(p)}
-                        disabled={busyId === p.id || inCart}
-                        className={`w-8 h-8 rounded-lg grid place-items-center transition ${
-                          inCart
-                            ? "bg-[color:var(--sc-success)] text-white"
-                            : "bg-[color:var(--sc-primary)] text-white hover:bg-[color:var(--sc-primary-600)]"
-                        }`}
-                        title={inCart ? "In cart" : "Add to cart"}
-                      >
-                        {inCart ? <Check size={16} /> : <Plus size={16} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {renderProducts({ loading, filtered, cartIds, busyId, onAdd: addToCart })}
       </div>
     </Layout>
   );

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { formatINR, formatDateTime } from "@/lib/utils";
+import { log } from "@/lib/log";
 
 const STATUSES = ["placed", "paid", "processing", "shipped", "delivered", "cancelled"];
 
@@ -12,20 +13,21 @@ export default function AdminOrders() {
   const [statusFilter, setStatusFilter] = useState("");
   const [busy, setBusy] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = statusFilter ? { status: statusFilter } : {};
       const { data } = await api.get("/admin/orders", { params });
       setOrders(Array.isArray(data) ? data : data?.items || []);
+    } catch (error) {
+      log.error("AdminOrders.load failed", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
   useEffect(() => {
     load();
-    // eslint-disable-next-line
-  }, [statusFilter]);
+  }, [load]);
 
   const updateStatus = async (id, status) => {
     setBusy(id);
