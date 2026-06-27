@@ -1,0 +1,36 @@
+{
+  "short_name": "Slangcart",
+  "name": "Slangcart — Shop · Service · Connect · Earn",
+  "description": "India's all-in-one referral, shopping, service and chat platform.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7FAF8",
+  "theme_color": "#0F6E4F",
+  "lang": "en-IN",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Shop", "url": "/shop" },
+    { "name": "Wallet", "url": "/wallet" },
+    { "name": "Chat", "url": "/chat" }
+  ]
+}

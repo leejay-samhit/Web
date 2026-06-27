@@ -1,0 +1,25 @@
+# Slangcart — robots.txt
+# Allow all well-behaved crawlers.
+
+User-agent: *
+Allow: /
+
+# Don't waste crawl budget on auth-walled pages.
+Disallow: /cart
+Disallow: /checkout
+Disallow: /orders
+Disallow: /wallet
+Disallow: /profile
+Disallow: /kyc
+Disallow: /notifications
+Disallow: /support
+Disallow: /chat
+Disallow: /admin
+Disallow: /vendor
+Disallow: /bookings
+Disallow: /wishlist
+Disallow: /become-provider
+Disallow: /become-vendor
+Disallow: /network
+
+Sitemap: https://slangcart.com/sitemap.xml
