@@ -7,6 +7,7 @@ import { Wrench, Search, MapPin, Phone, X, CheckCircle2 } from "lucide-react";
 import { formatINR } from "@/lib/utils";
 import { log } from "@/lib/log";
 import LocationBanner from "@/components/LocationBanner";
+import { useUserLocation } from "@/hooks/useUserLocation";
 
 function ServiceCard({ s, onBook }) {
   const available = s.availability_status === "available";
@@ -54,6 +55,7 @@ function renderServices({ loading, services, onBook }) {
 }
 
 export default function Services() {
+  const { location } = useUserLocation();
   const [services, setServices] = useState([]);
   const [q, setQ] = useState("");
   const [pincode, setPincode] = useState("");
@@ -70,12 +72,25 @@ export default function Services() {
   qRef.current = q;
   pinRef.current = pincode;
 
+  // Auto-fill the PIN code field from captured GPS location (if backend
+  // returned one on POST /users/me/location) — first time only, so the user
+  // can still override it.
+  useEffect(() => {
+    if (location?.pincode && !pincode) setPincode(String(location.pincode));
+  }, [location?.pincode, pincode]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = {};
       if (qRef.current) params.q = qRef.current;
       if (pinRef.current) params.pincode = pinRef.current;
+      // Forward captured geo-coordinates so the backend can sort by distance
+      // when nearby-services lands. FastAPI ignores unknown params today.
+      if (location?.latitude && location?.longitude) {
+        params.lat = location.latitude;
+        params.lng = location.longitude;
+      }
       const [s, inv] = await Promise.allSettled([
         api.get("/services", { params }),
         api.get("/services/reveals/me"),
@@ -87,7 +102,7 @@ export default function Services() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [location?.latitude, location?.longitude]);
 
   useEffect(() => {
     load();

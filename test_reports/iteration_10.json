@@ -1,0 +1,35 @@
+{
+  "summary": "iter-10 frontend-only test. Verified lat/lng forwarding from useUserLocation into /api/products, /api/shop-layout, /api/services. Baseline (no location captured) correctly omits lat/lng. Geolocation set via page.context.set_geolocation(12.97, 77.59); loc-capture clicked; loc-update appeared; reload + navigation triggered XHRs with lat=12.97&lng=77.59. /services pincode auto-fill semantics correct (backend did NOT return pincode in POST /users/me/location response, so input stayed empty as gated). All iter-9 regression items still pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Shop.jsx locParams memo is well-scoped on lat/lng/pincode primitives — avoids reference churn. Good.",
+    "Services.jsx load() depends on location.lat/lng but reads q/pincode via refs — refetch on PIN change requires explicit Search click, which matches existing UX. OK.",
+    "useUserLocation.js does not verify HTTPS or handle stale cache invalidation; minor (not in scope of this iteration)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100%"},
+  "test_credentials": "Test@gmail.com / Just@4me (used)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Geolocation can be mocked via page.context().grant_permissions(['geolocation'], origin=...) + page.context().set_geolocation({latitude, longitude, accuracy}). Capture XHR query params via page.on('request', handler) and parse_qs(urlparse(req.url).query). Live backend at network-pay-1.emergent.host does NOT yet filter by lat/lng but FastAPI tolerates unknown params — confirmed 200 OK with lat/lng forwarded. Stored location object from backend has shape {ok:true, location:{user_location_lat,user_location_lng,user_location_updated_at}} without pincode — that's why Services pincode auto-fill stays empty (correct gated behavior).",
+  "test_outcomes": {
+    "baseline_no_lat_on_products_and_layout": "PASS",
+    "products_forwards_lat_lng_after_capture": "PASS (limit=200&lat=12.97&lng=77.59)",
+    "shop_layout_forwards_lat_lng_after_capture": "PASS (scope=home&lat=12.97&lng=77.59)",
+    "services_forwards_lat_lng_after_capture": "PASS (lat=12.97&lng=77.59)",
+    "services_baseline_no_lat": "PASS",
+    "services_pincode_autofill_gated_on_existence": "PASS (backend returned no pincode → input empty, as designed)",
+    "loc_banner_on_shop": "PASS",
+    "loc_banner_on_services": "PASS",
+    "header_cart_and_header_wishlist_render": "PASS",
+    "loc_capture_to_loc_update_state_switch": "PASS"
+  }
+}

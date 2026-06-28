@@ -9,6 +9,7 @@ import ShopBlock from "@/components/shop/ShopBlock";
 import { formatINR } from "@/lib/utils";
 import { Search, ShoppingBag, Plus, Check } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { useUserLocation } from "@/hooks/useUserLocation";
 import { log } from "@/lib/log";
 
 function ProductCard({ p, inCart, busy, onAdd }) {
@@ -55,6 +56,7 @@ function productMatchesCat(p, cat) {
 
 export default function Shop() {
   const { cart, add } = useCart();
+  const { location } = useUserLocation();
   const [products, setProducts] = useState([]);
   const [cats, setCats] = useState([]);
   const [blocks, setBlocks] = useState([]);
@@ -63,14 +65,27 @@ export default function Shop() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
 
+  // Build location-aware query params. Backend may not yet filter by these,
+  // but FastAPI ignores unknown params so it's safe to forward — when the
+  // nearby-products endpoint ships, this UI works without any change.
+  const locParams = useMemo(() => {
+    if (!location?.latitude || !location?.longitude) return {};
+    return {
+      lat: location.latitude,
+      lng: location.longitude,
+      ...(location.pincode ? { pincode: location.pincode } : {}),
+    };
+  }, [location?.latitude, location?.longitude, location?.pincode]);
+
   useEffect(() => {
     let alive = true;
     (async () => {
+      setLoading(true);
       try {
         const [p, c, b] = await Promise.allSettled([
-          api.get("/products", { params: { limit: 200 } }),
+          api.get("/products", { params: { limit: 200, ...locParams } }),
           api.get("/shop-categories"),
-          api.get("/shop-layout", { params: { scope: "home" } }),
+          api.get("/shop-layout", { params: { scope: "home", ...locParams } }),
         ]);
         if (!alive) return;
         if (p.status === "fulfilled") setProducts(Array.isArray(p.value.data) ? p.value.data : p.value.data?.items || []);
@@ -80,7 +95,7 @@ export default function Shop() {
       finally { if (alive) setLoading(false); }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [locParams]);
 
   const cartIds = useMemo(() => new Set((cart.items || []).map((i) => i.product_id)), [cart.items]);
 
