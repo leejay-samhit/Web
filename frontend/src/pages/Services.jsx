@@ -6,6 +6,7 @@ import EmptyState from "@/components/EmptyState";
 import { Wrench, Search, MapPin, Phone, X, CheckCircle2 } from "lucide-react";
 import { formatINR } from "@/lib/utils";
 import { log } from "@/lib/log";
+import LocationBanner from "@/components/LocationBanner";
 
 function ServiceCard({ s, onBook }) {
   const available = s.availability_status === "available";
@@ -113,7 +114,8 @@ export default function Services() {
 
   return (
     <Layout title="Services">
-      <div className="space-y-5">
+      <div className="space-y-3">
+        <LocationBanner />
         <div className="sc-card p-3 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-[200px]">
             <Search size={18} className="text-[color:var(--sc-ink-muted)] ml-1" />

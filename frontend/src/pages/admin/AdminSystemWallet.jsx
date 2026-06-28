@@ -3,157 +3,324 @@ import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { formatINR, formatDateTime } from "@/lib/utils";
-import { Loader2, Plus, ArrowDownToLine, RefreshCw } from "lucide-react";
+import {
+  Loader2, Plus, RefreshCw, Download, AlertTriangle, CheckCircle2,
+  TrendingUp, TrendingDown, Landmark, Wallet, Receipt, ShieldAlert,
+  ArrowDownToLine, FileSpreadsheet,
+} from "lucide-react";
 import { log } from "@/lib/log";
 
-function Stat({ label, value, testid }) {
+const GROUPS = [
+  { key: "group_1_revenue",            title: "1. Revenue Ledger",        icon: TrendingUp,    main: "gross",                fields: [["registration", "Registration"], ["service", "Service"], ["platform_fee", "Platform fee"], ["shop", "Shop"], ["reversed", "Reversed"]] },
+  { key: "group_2_liability",          title: "2. User Liability Wallet", icon: Wallet,        main: "available_user_balance", fields: [["total_reward_credits", "Reward credits"], ["total_withdrawals_settled", "Withdrawals settled"]] },
+  { key: "group_3_gst",                title: "3. GST Ledger",            icon: Receipt,       main: "payable",              fields: [["collected", "Collected"], ["paid", "Paid"]] },
+  { key: "group_4_platform_fee",       title: "4. Platform Fee Ledger",   icon: Landmark,      main: "collected",            fields: [] },
+  { key: "group_5_expenses",           title: "5. Expense Ledger",        icon: TrendingDown,  main: "total",                fields: [["gst_paid_excluded", "GST paid excluded"]] },
+  { key: "group_6_pending_withdrawals",title: "6. Pending Withdrawals",   icon: ArrowDownToLine, main: "pending_amount",     fields: [] },
+  { key: "group_7_bank",               title: "7. Bank Ledger",           icon: Landmark,      main: "balance",              fields: [["credits", "Credits"], ["debits", "Debits"]] },
+  { key: "group_8_refunds",            title: "8. Refund Ledger",         icon: ShieldAlert,   main: "total",                fields: [["count", "Count"], ["clawback_total", "Clawback"], ["platform_fee_reversed", "PF reversed"], ["outstanding_debt", "Outstanding debt"], ["outstanding_debt_users", "Debt users"]] },
+];
+
+function StatRow({ label, value, kind = "money" }) {
   return (
-    <div data-testid={testid} className="sc-card p-4">
-      <div className="text-xs font-semibold text-[color:var(--sc-ink-muted)]">{label}</div>
-      <div className="text-xl font-extrabold mt-1">{value}</div>
+    <div className="flex justify-between py-1 text-xs border-b border-[color:var(--sc-border)] last:border-0">
+      <span className="text-[color:var(--sc-ink-muted)]">{label}</span>
+      <span className="font-semibold">{kind === "money" ? formatINR(value || 0) : (value ?? "—")}</span>
     </div>
   );
 }
 
+function GroupCard({ group, data }) {
+  const Icon = group.icon;
+  const d = data || {};
+  return (
+    <div className="sc-card p-4" data-testid={`g-${group.key}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-9 h-9 rounded-xl bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary)] grid place-items-center">
+          <Icon size={16} />
+        </div>
+        <div className="font-extrabold text-sm">{group.title}</div>
+      </div>
+      <div className="text-2xl font-extrabold mb-1">{formatINR(d[group.main] || 0)}</div>
+      <div className="text-[10px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] mb-2">{group.main.replace(/_/g, " ")}</div>
+      <div className="space-y-0.5">
+        {group.fields.map(([k, label]) => (
+          <StatRow key={k} label={label} value={d[k]} kind={typeof d[k] === "number" && k.includes("count") || k.includes("users") ? "count" : "money"} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ExpenseRow({ e }) {
+  return (
+    <tr className="border-t border-[color:var(--sc-border)]" data-testid={`exp-${e.id}`}>
+      <td className="px-3 py-2 text-xs font-mono">{e.display_id || e.id?.slice(0, 10)}</td>
+      <td className="px-3 py-2 text-xs"><span className="sc-chip capitalize">{(e.category || "").replace(/_/g, " ")}</span></td>
+      <td className="px-3 py-2 text-xs">{e.vendor || "—"}</td>
+      <td className="px-3 py-2 text-xs">{e.description || "—"}</td>
+      <td className="px-3 py-2 text-xs text-[color:var(--sc-ink-muted)]">{formatDateTime(e.incurred_at || e.created_at)}</td>
+      <td className="px-3 py-2 text-xs text-right font-semibold">{formatINR(e.amount)}</td>
+    </tr>
+  );
+}
+
 export default function AdminSystemWallet() {
-  const [data, setData] = useState({});
-  const [breakdown, setBreakdown] = useState(null);
-  const [txns, setTxns] = useState([]);
+  const [nw, setNw] = useState(null);
+  const [sourceBreakdown, setSourceBreakdown] = useState(null);
+  const [tallyWithdrawals, setTallyWithdrawals] = useState({ items: [], total_count: 0, total_amount: 0 });
+  const [expenses, setExpenses] = useState({ items: [], total: 0 });
+  const [expenseCats, setExpenseCats] = useState([]);
+  const [alerts, setAlerts] = useState({ current: {}, alerts: [] });
   const [loading, setLoading] = useState(true);
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
+
+  // Deposit form (Direct-added Money UTR)
+  const [dep, setDep] = useState({ amount: "", utr: "", bank_ref: "", remarks: "" });
+  const [depBusy, setDepBusy] = useState(false);
+
+  // Expense form (Manual Adjustment Entry)
+  const [exp, setExp] = useState({ category: "office_expenses", amount: "", vendor: "", description: "", utr: "", reference: "" });
+  const [expBusy, setExpBusy] = useState(false);
+
   const [acting, setActing] = useState("");
+  const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [w, b, t] = await Promise.all([
-        api.get("/admin/system-wallet"),
-        api.get("/admin/system-wallet/breakdown").catch(() => ({ data: null })),
-        api.get("/admin/system-wallet/transactions", { params: { limit: 25 } }).catch(() => ({ data: [] })),
+      const [n, src, tw, exs, excat, al] = await Promise.allSettled([
+        api.get("/admin/finance/net-worth"),
+        api.get("/admin/system-wallet/source-breakdown"),
+        api.get("/admin/system-wallet/tally-withdrawals"),
+        api.get("/admin/expenses", { params: { limit: 50 } }),
+        api.get("/admin/expenses/categories"),
+        api.get("/admin/ledger-alerts"),
       ]);
-      setData(w.data || {});
-      setBreakdown(b.data || null);
-      const txnsArr = Array.isArray(t.data) ? t.data : (t.data?.items || t.data?.transactions || []);
-      setTxns(txnsArr);
-    } catch (error) { log.error("AdminSystemWallet.load failed", error); }
+      if (n.status === "fulfilled") setNw(n.value.data);
+      if (src.status === "fulfilled") setSourceBreakdown(src.value.data);
+      if (tw.status === "fulfilled") setTallyWithdrawals(tw.value.data || { items: [] });
+      if (exs.status === "fulfilled") setExpenses(exs.value.data || { items: [] });
+      if (excat.status === "fulfilled") setExpenseCats(excat.value.data?.items || []);
+      if (al.status === "fulfilled") setAlerts(al.value.data || { current: {}, alerts: [] });
+    } catch (e) { log.error("AdminSystemWallet.load failed", e); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const deposit = async () => {
-    if (!amount) return;
-    setActing("deposit");
+    if (!dep.amount || !dep.utr) { setMsg("Amount and UTR are required."); return; }
+    setDepBusy(true); setMsg("");
     try {
-      await api.post("/admin/system-wallet/deposit", { amount: Number(amount), note });
-      setAmount(""); setNote("");
+      await api.post("/admin/system-wallet/deposit", { amount: Number(dep.amount), utr: dep.utr, bank_ref: dep.bank_ref || undefined, remarks: dep.remarks || undefined });
+      setDep({ amount: "", utr: "", bank_ref: "", remarks: "" });
+      setMsg("UTR deposit recorded.");
       load();
-    } catch (e) { alert(e?.response?.data?.detail || "Failed"); }
-    finally { setActing(""); }
+    } catch (e) { setMsg(e?.response?.data?.detail || "Deposit failed"); }
+    finally { setDepBusy(false); }
   };
 
-  const tally = async () => {
-    setActing("tally");
-    try { await api.post("/admin/system-wallet/tally-withdraw"); load(); }
-    catch (e) { alert(e?.response?.data?.detail || "Failed"); }
-    finally { setActing(""); }
+  const addExpense = async () => {
+    if (!exp.amount || !exp.category) { setMsg("Amount and category are required."); return; }
+    setExpBusy(true); setMsg("");
+    try {
+      await api.post("/admin/expenses", { ...exp, amount: Number(exp.amount) });
+      setExp({ category: "office_expenses", amount: "", vendor: "", description: "", utr: "", reference: "" });
+      setMsg("Expense recorded.");
+      load();
+    } catch (e) { setMsg(e?.response?.data?.detail || "Expense add failed"); }
+    finally { setExpBusy(false); }
   };
 
   const reconcile = async () => {
     setActing("reconcile");
-    try { await api.post("/admin/system-wallet/reconcile"); load(); }
-    catch (e) { alert(e?.response?.data?.detail || "Failed"); }
+    try { await api.post("/admin/system-wallet/reconcile"); setMsg("Reconciled."); load(); }
+    catch (e) { setMsg(e?.response?.data?.detail || "Failed"); }
     finally { setActing(""); }
+  };
+
+  const exportCsv = async (kind) => {
+    setActing(`export-${kind}`);
+    try {
+      const url = `/admin/finance/export/${kind}`;
+      const res = await api.get(url, { responseType: "blob" });
+      const a = document.createElement("a");
+      const u = URL.createObjectURL(res.data);
+      a.href = u; a.download = `${kind}.csv`; a.click();
+      setTimeout(() => URL.revokeObjectURL(u), 1000);
+    } catch (e) { setMsg(`Export ${kind} failed`); }
+    finally { setActing(""); }
+  };
+
+  const resolveAlert = async (id) => {
+    try { await api.post(`/admin/ledger-alerts/${id}/resolve`, { note: "Resolved from web" }); load(); }
+    catch (e) { setMsg(e?.response?.data?.detail || "Failed"); }
   };
 
   if (loading) return <Layout title="Admin · System wallet"><Spinner /></Layout>;
 
-  const buckets = data?.buckets || {};
-  const total = data?.total ?? data?.balance ?? 0;
+  const bt = nw?.bank_tally || {};
+  const ms = nw?.master || {};
 
   return (
     <Layout title="Admin · System wallet · Treasury">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat testid="sw-total" label="Total treasury" value={formatINR(total)} />
-        <Stat testid="sw-deposits-bucket" label="Direct signup" value={formatINR(buckets.direct_signup ?? 0)} />
-        <Stat testid="sw-referral" label="Referral commission" value={formatINR(buckets.referral_commission ?? 0)} />
-        <Stat testid="sw-residual" label="Fee residual" value={formatINR(buckets.fee_residual ?? 0)} />
+      {msg && <div data-testid="sw-msg" className="sc-card p-2 mb-3 text-sm font-semibold text-[color:var(--sc-primary)]">{msg}</div>}
+
+      {/* Bank tally + master net worth */}
+      <div className="grid lg:grid-cols-2 gap-4 mb-4">
+        <div className="sc-card p-5" data-testid="sw-bank-tally">
+          <div className="font-extrabold mb-3 flex items-center gap-2"><Landmark size={16} /> Bank balance tally (on platform)</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Inflow</div><div className="text-xl font-extrabold text-green-700">{formatINR(bt.inflow)}</div></div>
+            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Outflow</div><div className="text-xl font-extrabold text-red-700">{formatINR(bt.outflow)}</div></div>
+            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Net</div><div className="text-2xl font-extrabold">{formatINR(bt.net)}</div></div>
+            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">UTR deposits</div><div className="text-xl font-extrabold">{formatINR(bt.utr_deposits)}</div></div>
+            <div className="col-span-2 text-[11px] text-[color:var(--sc-ink-muted)]">Reversals {bt.reversals_count ?? 0} · Adjustments {bt.adjustments_count ?? 0} · {bt.adjustments_amount ? `Δ ${formatINR(bt.adjustments_amount)}` : ""}</div>
+            <div className="col-span-2 text-[10px] text-[color:var(--sc-ink-muted)] mt-1 italic">{bt.formula}</div>
+          </div>
+        </div>
+
+        <div className="sc-card p-5" data-testid="sw-master">
+          <div className="font-extrabold mb-3 flex items-center gap-2"><TrendingUp size={16} /> Company net worth</div>
+          <div className="text-3xl font-extrabold text-[color:var(--sc-primary)] mb-2">{formatINR(ms.net_worth)}</div>
+          <div className="space-y-0.5 text-xs">
+            <StatRow label="Bank tally net" value={ms.components?.bank_tally_net} />
+            <StatRow label="Pending collections" value={ms.components?.pending_collections} />
+            <StatRow label="User wallet balance (–)" value={ms.components?.user_wallet_balance} />
+            <StatRow label="Pending withdrawals (–)" value={ms.components?.pending_withdrawals} />
+            <StatRow label="GST payable (–)" value={ms.components?.gst_payable} />
+          </div>
+          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-2 italic">{ms.formula}</div>
+        </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-4 mt-4">
+      {/* 8 Group ledger */}
+      <div className="font-extrabold mb-2 text-sm uppercase tracking-wider text-[color:var(--sc-ink-muted)]">8 Group Ledger</div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5" data-testid="sw-groups">
+        {GROUPS.map((g) => <GroupCard key={g.key} group={g} data={nw?.[g.key]} />)}
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        <button data-testid="sw-reconcile" disabled={acting === "reconcile"} onClick={reconcile} className="sc-btn-outline inline-flex items-center gap-1.5">
+          {acting === "reconcile" ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />} Reconcile
+        </button>
+        <button data-testid="sw-export-transactions" disabled={acting === "export-transactions"} onClick={() => exportCsv("transactions")} className="sc-btn-outline inline-flex items-center gap-1.5">
+          {acting === "export-transactions" ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />} Export Transactions
+        </button>
+        <button data-testid="sw-export-expenses" disabled={acting === "export-expenses"} onClick={() => exportCsv("expenses")} className="sc-btn-outline inline-flex items-center gap-1.5">
+          {acting === "export-expenses" ? <Loader2 className="animate-spin" size={14} /> : <FileSpreadsheet size={14} />} Export Expenses
+        </button>
+        <button data-testid="sw-export-bank" disabled={acting === "export-bank"} onClick={() => exportCsv("bank")} className="sc-btn-outline inline-flex items-center gap-1.5">
+          {acting === "export-bank" ? <Loader2 className="animate-spin" size={14} /> : <Landmark size={14} />} Export Bank Ledger
+        </button>
+      </div>
+
+      {/* UTR deposit + Manual Adjustment */}
+      <div className="grid lg:grid-cols-2 gap-4 mb-5">
         <div className="sc-card p-4" data-testid="sw-deposit-card">
-          <div className="font-extrabold mb-3">Deposit funds</div>
-          <input className="sc-input mb-2" data-testid="sw-amount" type="number" placeholder="Amount (₹)" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <input className="sc-input mb-2" data-testid="sw-note" placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
-          <div className="flex flex-wrap gap-2">
-            <button data-testid="sw-deposit" disabled={acting === "deposit" || !amount} onClick={deposit} className="sc-btn-primary inline-flex items-center gap-1.5">
-              {acting === "deposit" ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Deposit
-            </button>
-            <button data-testid="sw-tally" disabled={acting === "tally"} onClick={tally} className="sc-btn-outline inline-flex items-center gap-1.5">
-              {acting === "tally" ? <Loader2 className="animate-spin" size={14} /> : <ArrowDownToLine size={14} />} Tally withdraw
-            </button>
-            <button data-testid="sw-reconcile" disabled={acting === "reconcile"} onClick={reconcile} className="sc-btn-outline inline-flex items-center gap-1.5">
-              {acting === "reconcile" ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />} Reconcile
-            </button>
+          <div className="font-extrabold mb-3">Direct-added Money (UTR)</div>
+          <div className="grid grid-cols-2 gap-2">
+            <input className="sc-input" type="number" data-testid="sw-dep-amount" placeholder="Amount (₹) *" value={dep.amount} onChange={(e) => setDep({ ...dep, amount: e.target.value })} />
+            <input className="sc-input" data-testid="sw-dep-utr" placeholder="UTR *" value={dep.utr} onChange={(e) => setDep({ ...dep, utr: e.target.value })} />
+            <input className="sc-input" data-testid="sw-dep-ref" placeholder="Bank ref (optional)" value={dep.bank_ref} onChange={(e) => setDep({ ...dep, bank_ref: e.target.value })} />
+            <input className="sc-input" data-testid="sw-dep-remarks" placeholder="Remarks" value={dep.remarks} onChange={(e) => setDep({ ...dep, remarks: e.target.value })} />
           </div>
+          <button data-testid="sw-deposit" disabled={depBusy || !dep.amount || !dep.utr} onClick={deposit} className="sc-btn-primary mt-3 inline-flex items-center gap-1.5">
+            {depBusy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Record UTR deposit
+          </button>
         </div>
 
-        <div className="sc-card p-4" data-testid="sw-buckets">
-          <div className="font-extrabold mb-3">All buckets</div>
-          <div className="space-y-1.5 text-sm">
-            {Object.entries(buckets).map(([k, v]) => (
-              <div key={k} className="flex justify-between border-b border-[color:var(--sc-border)] py-1.5">
-                <span className="capitalize">{k.replace(/_/g, " ")}</span>
-                <strong>{formatINR(v ?? 0)}</strong>
-              </div>
-            ))}
-            {Object.keys(buckets).length === 0 && <div className="text-[color:var(--sc-ink-muted)]">No buckets.</div>}
+        <div className="sc-card p-4" data-testid="sw-expense-card">
+          <div className="font-extrabold mb-3">Manual Adjustment / Expense entry</div>
+          <div className="grid grid-cols-2 gap-2">
+            <select className="sc-input col-span-2" data-testid="sw-exp-cat" value={exp.category} onChange={(e) => setExp({ ...exp, category: e.target.value })}>
+              {expenseCats.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+            </select>
+            <input className="sc-input" type="number" data-testid="sw-exp-amount" placeholder="Amount (₹) *" value={exp.amount} onChange={(e) => setExp({ ...exp, amount: e.target.value })} />
+            <input className="sc-input" data-testid="sw-exp-vendor" placeholder="Vendor" value={exp.vendor} onChange={(e) => setExp({ ...exp, vendor: e.target.value })} />
+            <input className="sc-input col-span-2" data-testid="sw-exp-desc" placeholder="Description" value={exp.description} onChange={(e) => setExp({ ...exp, description: e.target.value })} />
+            <input className="sc-input" data-testid="sw-exp-utr" placeholder="UTR (optional)" value={exp.utr} onChange={(e) => setExp({ ...exp, utr: e.target.value })} />
+            <input className="sc-input" data-testid="sw-exp-ref" placeholder="Reference" value={exp.reference} onChange={(e) => setExp({ ...exp, reference: e.target.value })} />
           </div>
+          <button data-testid="sw-add-expense" disabled={expBusy || !exp.amount} onClick={addExpense} className="sc-btn-primary mt-3 inline-flex items-center gap-1.5">
+            {expBusy ? <Loader2 className="animate-spin" size={14} /> : <Plus size={14} />} Add expense
+          </button>
         </div>
       </div>
 
-      {breakdown && (
-        <div className="sc-card mt-4 p-4" data-testid="sw-breakdown">
-          <div className="font-extrabold mb-3">Inflow / Outflow breakdown</div>
-          <div className="grid md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <div className="font-bold text-[color:var(--sc-primary)] mb-1">Inflow</div>
-              {Object.entries(breakdown.inflow || {}).map(([k, v]) => (
-                <div key={k} className="flex justify-between border-b border-[color:var(--sc-border)] py-1">
-                  <span className="capitalize text-xs">{k.replace(/_/g, " ")}</span>
-                  <strong className="text-xs">{typeof v === "number" ? formatINR(v) : String(v)}</strong>
+      {/* Withdraw for Account Tally */}
+      <div className="sc-card p-4 mb-4" data-testid="sw-tally-withdrawals">
+        <div className="font-extrabold mb-3 flex items-center gap-2"><ArrowDownToLine size={16} /> Withdraw for Account Tally</div>
+        <div className="grid grid-cols-3 gap-3 text-xs">
+          <div><div className="text-[color:var(--sc-ink-muted)]">Pending count</div><div className="text-lg font-bold">{tallyWithdrawals.total_count ?? 0}</div></div>
+          <div><div className="text-[color:var(--sc-ink-muted)]">Pending amount</div><div className="text-lg font-bold">{formatINR(tallyWithdrawals.total_amount)}</div></div>
+          <div className="text-right text-[color:var(--sc-ink-muted)] text-[11px]">Settle from /admin/withdrawals queue.</div>
+        </div>
+      </div>
+
+      {/* User source accountability */}
+      <div className="sc-card p-4 mb-4" data-testid="sw-source">
+        <div className="font-extrabold mb-3 flex items-center gap-2"><FileSpreadsheet size={16} /> User Source Accountability</div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {(sourceBreakdown?.rows || []).map((r) => (
+            <div key={r.source} className="border border-[color:var(--sc-border)] rounded-xl p-3" data-testid={`src-${r.source}`}>
+              <div className="text-[10px] uppercase tracking-wider text-[color:var(--sc-ink-muted)]">{r.source}</div>
+              <div className="text-xl font-extrabold">{formatINR(r.amount)}</div>
+              <div className="text-xs text-[color:var(--sc-ink-muted)]">{r.count ?? 0} entries</div>
+              {sourceBreakdown?.fan_out?.[r.source] && (
+                <div className="mt-2 pt-2 border-t border-[color:var(--sc-border)] text-[11px] text-[color:var(--sc-ink-muted)]">
+                  Paid out: {formatINR(sourceBreakdown.fan_out[r.source].payouts_amount)} · {sourceBreakdown.fan_out[r.source].payouts_count} txns
                 </div>
-              ))}
+              )}
             </div>
-            <div>
-              <div className="font-bold text-[color:var(--sc-error)] mb-1">Outflow</div>
-              {Object.entries(breakdown.outflow || {}).map(([k, v]) => (
-                <div key={k} className="flex justify-between border-b border-[color:var(--sc-border)] py-1">
-                  <span className="capitalize text-xs">{k.replace(/_/g, " ")}</span>
-                  <strong className="text-xs">{typeof v === "number" ? formatINR(v) : String(v)}</strong>
-                </div>
-              ))}
-            </div>
+          ))}
+          {(sourceBreakdown?.rows || []).length === 0 && <div className="text-sm text-[color:var(--sc-ink-muted)] col-span-full text-center py-4">No source data.</div>}
+        </div>
+      </div>
+
+      {/* Drift alerts */}
+      <div className="sc-card p-4 mb-4" data-testid="sw-alerts">
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-extrabold flex items-center gap-2"><AlertTriangle size={16} /> Money flow drift alerts</div>
+          <div className="text-xs text-[color:var(--sc-ink-muted)]">
+            held {formatINR(alerts.current?.held)} / expected {formatINR(alerts.current?.expected_held)}
+            {alerts.current?.drift !== undefined && <span className={`ml-2 font-bold ${Math.abs(alerts.current.drift) > 1 ? "text-[color:var(--sc-error)]" : "text-[color:var(--sc-primary)]"}`}>Δ {formatINR(alerts.current.drift)}</span>}
           </div>
         </div>
-      )}
+        <div className="space-y-1 max-h-64 overflow-y-auto">
+          {alerts.alerts?.slice(0, 10).map((a) => (
+            <div key={a.id} className="flex items-start gap-2 text-xs border-b border-[color:var(--sc-border)] py-1.5" data-testid={`alert-${a.id}`}>
+              <div className={`mt-0.5 ${a.resolved ? "text-[color:var(--sc-primary)]" : "text-amber-600"}`}>
+                {a.resolved ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold">{a.message}</div>
+                <div className="text-[10px] text-[color:var(--sc-ink-muted)]">{formatDateTime(a.created_at)} {a.resolved ? `· resolved: ${a.resolution_note || ""}` : ""}</div>
+              </div>
+              {!a.resolved && <button data-testid={`alert-resolve-${a.id}`} onClick={() => resolveAlert(a.id)} className="text-[10px] font-semibold px-2 py-0.5 rounded border border-[color:var(--sc-border)]">Resolve</button>}
+            </div>
+          ))}
+          {(!alerts.alerts || alerts.alerts.length === 0) && <div className="text-sm text-[color:var(--sc-ink-muted)] text-center py-4">No alerts.</div>}
+        </div>
+      </div>
 
-      <div className="sc-card mt-4 overflow-x-auto" data-testid="sw-txns">
-        <div className="px-4 pt-4 font-extrabold">Recent treasury transactions</div>
+      {/* Recent expenses */}
+      <div className="sc-card overflow-x-auto" data-testid="sw-expense-list">
+        <div className="px-4 pt-4 font-extrabold">Recent expenses ({expenses.total ?? expenses.items?.length ?? 0})</div>
         <table className="w-full text-sm mt-2">
           <thead className="bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]">
-            <tr><th className="text-left px-4 py-2.5">When</th><th className="text-left px-4 py-2.5">Type</th><th className="text-left px-4 py-2.5">Note</th><th className="text-right px-4 py-2.5">Amount</th></tr>
+            <tr>
+              <th className="text-left px-3 py-2">ID</th>
+              <th className="text-left px-3 py-2">Category</th>
+              <th className="text-left px-3 py-2">Vendor</th>
+              <th className="text-left px-3 py-2">Description</th>
+              <th className="text-left px-3 py-2">When</th>
+              <th className="text-right px-3 py-2">Amount</th>
+            </tr>
           </thead>
           <tbody>
-            {txns.map((t) => (
-              <tr key={t.id} className="border-t border-[color:var(--sc-border)]">
-                <td className="px-4 py-2 text-xs text-[color:var(--sc-ink-muted)]">{formatDateTime(t.created_at)}</td>
-                <td className="px-4 py-2"><span className="sc-chip capitalize">{t.type || t.kind}</span></td>
-                <td className="px-4 py-2 text-xs">{t.note || t.description || t.remarks || "—"}</td>
-                <td className="px-4 py-2 text-right font-semibold">{formatINR(t.amount ?? 0)}</td>
-              </tr>
-            ))}
-            {txns.length === 0 && <tr><td colSpan={4} className="px-4 py-10 text-center text-[color:var(--sc-ink-muted)]">No transactions.</td></tr>}
+            {(expenses.items || []).slice(0, 25).map((e) => <ExpenseRow key={e.id} e={e} />)}
+            {(expenses.items || []).length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-[color:var(--sc-ink-muted)]">No expenses.</td></tr>}
           </tbody>
         </table>
       </div>

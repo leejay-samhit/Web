@@ -184,6 +184,14 @@ export default function Layout({ children, title }) {
             </h1>
             <div className="flex items-center gap-2">
               <Link
+                to="/wishlist"
+                data-testid="header-wishlist"
+                className="relative w-10 h-10 rounded-full bg-white border border-[color:var(--sc-border)] flex items-center justify-center hover:bg-[color:var(--sc-accent-light)]"
+                title="Wishlist"
+              >
+                <Heart size={18} className="text-[color:var(--sc-ink)]" />
+              </Link>
+              <Link
                 to="/cart"
                 data-testid="header-cart"
                 className="relative w-10 h-10 rounded-full bg-white border border-[color:var(--sc-border)] flex items-center justify-center hover:bg-[color:var(--sc-accent-light)]"
