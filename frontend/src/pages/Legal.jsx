@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import DOMPurify from "dompurify";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
@@ -35,6 +36,18 @@ export default function Legal() {
     return () => { alive = false; };
   }, [kind]);
 
+  // Sanitize legal HTML to prevent XSS attacks. Only allow a safe subset of
+  // formatting tags / attributes. SVG and inline-event handlers are stripped.
+  const sanitized = useMemo(
+    () =>
+      DOMPurify.sanitize(content || "", {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form"],
+        FORBID_ATTR: ["style", "onerror", "onload", "onclick"],
+      }),
+    [content],
+  );
+
   return (
     <Layout title={TITLES[kind] || "Legal"}>
       {loading ? <Spinner /> : (
@@ -44,7 +57,10 @@ export default function Legal() {
             <h1 className="text-2xl font-extrabold text-[color:var(--sc-ink)]">{TITLES[kind] || kind}</h1>
           </div>
           {content ? (
-            <div className="prose prose-sm max-w-none whitespace-pre-line text-[color:var(--sc-ink)]" dangerouslySetInnerHTML={{ __html: content }} />
+            <div
+              className="prose prose-sm max-w-none whitespace-pre-line text-[color:var(--sc-ink)]"
+              dangerouslySetInnerHTML={{ __html: sanitized }}
+            />
           ) : (
             <div className="text-sm text-[color:var(--sc-ink-muted)]">No content available.</div>
           )}

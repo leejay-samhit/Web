@@ -20,8 +20,10 @@ if (typeof window !== "undefined" && BACKEND_URL) {
           "API calls will 404. Set it to the external backend (e.g. https://network-pay-1.emergent.host)."
       );
     }
-  } catch (_e) {
-    /* malformed URL is caught later by axios */
+  } catch (e) {
+    // Malformed REACT_APP_BACKEND_URL — surface to console so devs notice.
+    // axios will still throw a clear network error on the first actual call.
+    log.error("[Slangcart] Invalid REACT_APP_BACKEND_URL", BACKEND_URL, e);
   }
 }
 

@@ -58,7 +58,7 @@ export default function AdminSettings() {
                   <div key={k} className="sm:col-span-2">
                     <label className="text-xs font-semibold text-[color:var(--sc-ink-muted)]">{k}</label>
                     <textarea className="sc-input mt-1 font-mono text-xs" rows={4} data-testid={`set-${k}`} value={JSON.stringify(v, null, 2)} onChange={(e) => {
-                      try { update(k, JSON.parse(e.target.value)); } catch { /* ignore until valid */ }
+                      try { update(k, JSON.parse(e.target.value)); } catch (err) { log.debug("AdminSettings: invalid JSON for", k, err?.message); }
                     }} />
                   </div>
                 );

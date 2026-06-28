@@ -12,4 +12,7 @@ export const log = {
   info: (...args) => {
     if (isDev) console.info(...args);
   },
+  debug: (...args) => {
+    if (isDev) console.debug(...args);
+  },
 };
