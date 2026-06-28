@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 8 — Frontend-only regression of the pure file-organization refactor that split admin routes/sidebar config into /app/frontend/src/AdminRoutes.jsx and /app/frontend/src/constants/adminNav.js. RESULT: 100% PASS on all 5 regression targets (R1 admin login + sidebar groups + user nav items, R2 admin sidebar test-ids + 34 admin routes reachable + /admin → /admin/analytics + /admin/chat → /chat, R3 user role-gating, R4 Legal/DOMPurify XSS still sanitized, R5 wildcard → /dashboard). Zero behavioral drift introduced by the refactor.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications_passed": [
+    "R1 admin_login: support@networkrupay.com / Nlee@1115 → landed on /dashboard",
+    "R1 sidebar shows STORE / OPERATIONS / EXPORT group headings (all three visible in DOM)",
+    "R1 regular user nav-* test-ids still present for admin: nav-dashboard, nav-shop, nav-chat, nav-wallet, nav-profile",
+    "R2 admin sidebar test-ids: 19/19 present — admin-nav-products, admin-nav-shop-layout, admin-nav-shop-categories, admin-nav-promo-banners, admin-nav-analytics, admin-nav-admin-access, admin-nav-payment-gateway, admin-nav-vendor-applications, admin-nav-service-applications, admin-nav-distributor-areas, admin-nav-system-wallet-treasury, admin-nav-data-backups, admin-nav-product-roadmap, admin-nav-transactions, admin-nav-admin-audit-log, admin-nav-payout-structure, admin-nav-upi-payments-pending, admin-nav-legal-pages, admin-nav-all-csv-exports",
+    "R2 /admin redirects to /admin/analytics",
+    "R2 /admin/chat redirects to /chat",
+    "R2 admin route spot-check: 19/19 admin pages reachable (no 404, render >5 testids each): /admin/products, /admin/shop-layout, /admin/shop-categories, /admin/promo-banners, /admin/analytics, /admin/admins, /admin/payment-gateway, /admin/vendor-applications, /admin/system-wallet, /admin/backups, /admin/transactions, /admin/audit-logs, /admin/settings, /admin/upi-payments, /admin/legal-pages, /admin/exports, /admin/distributors, /admin/changes, /admin/service-applications",
+    "R3 user_login: Test@gmail.com / Just@4me → landed on /dashboard",
+    "R3 user sidebar shows ZERO admin-nav-* test-ids; STORE/OPERATIONS/EXPORT DATA headings NOT present in sidebar (role gating intact)",
+    "R3 user pages render: /dashboard (24 testids), /shop (32), /wallet (30), /cart (25), /profile (52)",
+    "R3 role gating enforced: user visiting /admin/products redirected to /dashboard",
+    "R4 /legal/terms renders with data-testid='legal-content' present; DOM scan of legal-content subtree: 0 <script>, 0 <iframe>, 0 <object>/<embed>, 0 on*-prefixed attributes; innerHTML length=1162 (real backend content rendered via DOMPurify wrap)",
+    "R4 page.on('dialog') listener captured ZERO dialogs throughout test runs — no XSS payload fired",
+    "R5 wildcard /__nope__ correctly redirects to /dashboard"
+  ],
+  "test_report_links": [
+    "/app/test_reports/iteration_8.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminRoutes.jsx — clean separation: g(el) helper wraps every entry in <ProtectedRoute adminOnly>, including the /admin/chat redirect (g(<Navigate to='/chat' replace/>)) which is correct because it ensures only admins can be 'silently' bounced through this path. The /admin → /admin/analytics redirect is intentionally NOT wrapped in g() — fine because Navigate has no side effects and ProtectedRoute will gate the destination anyway.",
+    "constants/adminNav.js — pure data module, lucide icons imported once and reused, label-to-testid derivation lives in Layout.jsx (label.toLowerCase().replace(/[^a-z0-9]+/g,'-')) so the 19 admin-nav-* test-ids are deterministic and stable across future label edits as long as labels stay textually unchanged. Verified live: 'System wallet · Treasury' → admin-nav-system-wallet-treasury, 'UPI payments (pending)' → admin-nav-upi-payments-pending — exactly as the request anticipated.",
+    "App.js — 83 lines, single adminRoutes.map() block, wildcard '*' route is last (correct ordering vs. /admin paths), public /legal/:kind route correctly placed before guarded user routes.",
+    "No behavioral regressions detected; pure file-organization refactor was successful. .env REACT_APP_BACKEND_URL was correctly set to https://network-pay-1.emergent.host during this run (the drift flagged in iterations 5/7 did NOT recur this iteration)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "n/a (frontend-only test as requested)",
+    "frontend": "100% (5/5 regression targets, 19/19 admin nav test-ids, 19/19 admin route renders, 5/5 user routes, 0 XSS dialogs)"
+  },
+  "test_credentials": "Admin: support@networkrupay.com / Nlee@1115 (verified live). User: Test@gmail.com / Just@4me (verified live).",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The admin route + sidebar refactor (AdminRoutes.jsx + constants/adminNav.js) is verified ZERO behavioral regression — all 19 admin sidebar test-ids resolve, all admin routes render, both redirects (/admin → /admin/analytics, /admin/chat → /chat) work, wildcard → /dashboard works, role gating intact (user blocked from /admin/products), and the iteration-7 DOMPurify XSS sanitization in Legal.jsx is still in place (legal-content present, 0 scripts/iframes/on*-attrs in DOM). .env REACT_APP_BACKEND_URL drift did NOT recur in this run.",
+  "rca_of_the_issue": "n/a — no bugs found. The refactor is purely structural and all dynamic test-id derivation (label→kebab) continues to produce the expected stable testids."
+}

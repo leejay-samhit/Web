@@ -26,38 +26,9 @@ import KYC from "@/pages/KYC";
 import Tickets from "@/pages/Tickets";
 import TicketDetail from "@/pages/TicketDetail";
 import Legal from "@/pages/Legal";
-import AdminUsers from "@/pages/admin/AdminUsers";
-import AdminProducts from "@/pages/admin/AdminProducts";
-import AdminOrders from "@/pages/admin/AdminOrders";
-import AdminBroadcast from "@/pages/admin/AdminBroadcast";
-import AdminBranding from "@/pages/admin/AdminBranding";
-import AdminAnalytics from "@/pages/admin/AdminAnalytics";
-import AdminApprovals from "@/pages/admin/AdminApprovals";
-import AdminKYC from "@/pages/admin/AdminKYC";
-import AdminWithdrawals from "@/pages/admin/AdminWithdrawals";
-import AdminTickets from "@/pages/admin/AdminTickets";
-import AdminShopLayout from "@/pages/admin/AdminShopLayout";
-import AdminShopCategories from "@/pages/admin/AdminShopCategories";
-import AdminPromoBanners from "@/pages/admin/AdminPromoBanners";
-import AdminAdmins from "@/pages/admin/AdminAdmins";
-import AdminApprovedRegistrations from "@/pages/admin/AdminApprovedRegistrations";
-import AdminRejectedRegistrations from "@/pages/admin/AdminRejectedRegistrations";
-import AdminPaymentGateway from "@/pages/admin/AdminPaymentGateway";
-import AdminVendorApplications from "@/pages/admin/AdminVendorApplications";
-import AdminServiceApplications from "@/pages/admin/AdminServiceApplications";
-import AdminServiceCategories from "@/pages/admin/AdminServiceCategories";
-import AdminServiceAnalytics from "@/pages/admin/AdminServiceAnalytics";
-import AdminDistributors from "@/pages/admin/AdminDistributors";
-import AdminSystemWallet from "@/pages/admin/AdminSystemWallet";
-import AdminVendors from "@/pages/admin/AdminVendors";
-import AdminBackups from "@/pages/admin/AdminBackups";
-import AdminChanges from "@/pages/admin/AdminChanges";
-import AdminTransactions from "@/pages/admin/AdminTransactions";
-import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
-import AdminSettings from "@/pages/admin/AdminSettings";
-import AdminUPIPayments from "@/pages/admin/AdminUPIPayments";
-import AdminLegalPages from "@/pages/admin/AdminLegalPages";
-import AdminExports from "@/pages/admin/AdminExports";
+import { adminRoutes } from "@/AdminRoutes";
+
+const userGuard = (el) => <ProtectedRoute>{el}</ProtectedRoute>;
 
 function App() {
   return (
@@ -74,68 +45,31 @@ function App() {
 
               {/* User area */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/shop" element={<ProtectedRoute><Shop /></ProtectedRoute>} />
-              <Route path="/product/:id" element={<ProtectedRoute><ProductDetail /></ProtectedRoute>} />
-              <Route path="/cart" element={<ProtectedRoute><Cart /></ProtectedRoute>} />
-              <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
-              <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
-              <Route path="/wishlist" element={<ProtectedRoute><Wishlist /></ProtectedRoute>} />
-              <Route path="/services" element={<ProtectedRoute><Services /></ProtectedRoute>} />
-              <Route path="/bookings" element={<ProtectedRoute><ServiceBookings /></ProtectedRoute>} />
-              <Route path="/become-provider" element={<ProtectedRoute><BecomeProvider /></ProtectedRoute>} />
-              <Route path="/become-vendor" element={<ProtectedRoute><BecomeVendor /></ProtectedRoute>} />
-              <Route path="/vendor" element={<ProtectedRoute><VendorDashboard /></ProtectedRoute>} />
-              <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-              <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
-              <Route path="/network" element={<ProtectedRoute><Network /></ProtectedRoute>} />
-              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-              <Route path="/kyc" element={<ProtectedRoute><KYC /></ProtectedRoute>} />
-              <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-              <Route path="/support" element={<ProtectedRoute><Tickets /></ProtectedRoute>} />
-              <Route path="/support/:id" element={<ProtectedRoute><TicketDetail /></ProtectedRoute>} />
+              <Route path="/dashboard" element={userGuard(<Dashboard />)} />
+              <Route path="/shop" element={userGuard(<Shop />)} />
+              <Route path="/product/:id" element={userGuard(<ProductDetail />)} />
+              <Route path="/cart" element={userGuard(<Cart />)} />
+              <Route path="/checkout" element={userGuard(<Checkout />)} />
+              <Route path="/orders" element={userGuard(<Orders />)} />
+              <Route path="/wishlist" element={userGuard(<Wishlist />)} />
+              <Route path="/services" element={userGuard(<Services />)} />
+              <Route path="/bookings" element={userGuard(<ServiceBookings />)} />
+              <Route path="/become-provider" element={userGuard(<BecomeProvider />)} />
+              <Route path="/become-vendor" element={userGuard(<BecomeVendor />)} />
+              <Route path="/vendor" element={userGuard(<VendorDashboard />)} />
+              <Route path="/chat" element={userGuard(<Chat />)} />
+              <Route path="/wallet" element={userGuard(<Wallet />)} />
+              <Route path="/network" element={userGuard(<Network />)} />
+              <Route path="/profile" element={userGuard(<Profile />)} />
+              <Route path="/kyc" element={userGuard(<KYC />)} />
+              <Route path="/notifications" element={userGuard(<Notifications />)} />
+              <Route path="/support" element={userGuard(<Tickets />)} />
+              <Route path="/support/:id" element={userGuard(<TicketDetail />)} />
 
-              {/* Admin area */}
-              <Route path="/admin" element={<Navigate to="/admin/analytics" replace />} />
-              <Route path="/admin/analytics" element={<ProtectedRoute adminOnly><AdminAnalytics /></ProtectedRoute>} />
-              <Route path="/admin/users" element={<ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>} />
-              <Route path="/admin/approvals" element={<ProtectedRoute adminOnly><AdminApprovals /></ProtectedRoute>} />
-              <Route path="/admin/kyc" element={<ProtectedRoute adminOnly><AdminKYC /></ProtectedRoute>} />
-              <Route path="/admin/withdrawals" element={<ProtectedRoute adminOnly><AdminWithdrawals /></ProtectedRoute>} />
-              <Route path="/admin/tickets" element={<ProtectedRoute adminOnly><AdminTickets /></ProtectedRoute>} />
-              <Route path="/admin/products" element={<ProtectedRoute adminOnly><AdminProducts /></ProtectedRoute>} />
-              <Route path="/admin/orders" element={<ProtectedRoute adminOnly><AdminOrders /></ProtectedRoute>} />
-              <Route path="/admin/broadcast" element={<ProtectedRoute adminOnly><AdminBroadcast /></ProtectedRoute>} />
-              <Route path="/admin/branding" element={<ProtectedRoute adminOnly><AdminBranding /></ProtectedRoute>} />
-
-              {/* Store admin pages */}
-              <Route path="/admin/shop-layout" element={<ProtectedRoute adminOnly><AdminShopLayout /></ProtectedRoute>} />
-              <Route path="/admin/shop-categories" element={<ProtectedRoute adminOnly><AdminShopCategories /></ProtectedRoute>} />
-              <Route path="/admin/promo-banners" element={<ProtectedRoute adminOnly><AdminPromoBanners /></ProtectedRoute>} />
-
-              {/* Operations admin pages */}
-              <Route path="/admin/chat" element={<ProtectedRoute adminOnly><Navigate to="/chat" replace /></ProtectedRoute>} />
-              <Route path="/admin/admins" element={<ProtectedRoute adminOnly><AdminAdmins /></ProtectedRoute>} />
-              <Route path="/admin/approved-registrations" element={<ProtectedRoute adminOnly><AdminApprovedRegistrations /></ProtectedRoute>} />
-              <Route path="/admin/rejected-registrations" element={<ProtectedRoute adminOnly><AdminRejectedRegistrations /></ProtectedRoute>} />
-              <Route path="/admin/payment-gateway" element={<ProtectedRoute adminOnly><AdminPaymentGateway /></ProtectedRoute>} />
-              <Route path="/admin/vendor-applications" element={<ProtectedRoute adminOnly><AdminVendorApplications /></ProtectedRoute>} />
-              <Route path="/admin/service-applications" element={<ProtectedRoute adminOnly><AdminServiceApplications /></ProtectedRoute>} />
-              <Route path="/admin/service-categories" element={<ProtectedRoute adminOnly><AdminServiceCategories /></ProtectedRoute>} />
-              <Route path="/admin/service-analytics" element={<ProtectedRoute adminOnly><AdminServiceAnalytics /></ProtectedRoute>} />
-              <Route path="/admin/distributors" element={<ProtectedRoute adminOnly><AdminDistributors /></ProtectedRoute>} />
-              <Route path="/admin/system-wallet" element={<ProtectedRoute adminOnly><AdminSystemWallet /></ProtectedRoute>} />
-              <Route path="/admin/vendors" element={<ProtectedRoute adminOnly><AdminVendors /></ProtectedRoute>} />
-              <Route path="/admin/backups" element={<ProtectedRoute adminOnly><AdminBackups /></ProtectedRoute>} />
-              <Route path="/admin/changes" element={<ProtectedRoute adminOnly><AdminChanges /></ProtectedRoute>} />
-              <Route path="/admin/transactions" element={<ProtectedRoute adminOnly><AdminTransactions /></ProtectedRoute>} />
-              <Route path="/admin/audit-logs" element={<ProtectedRoute adminOnly><AdminAuditLogs /></ProtectedRoute>} />
-              <Route path="/admin/settings" element={<ProtectedRoute adminOnly><AdminSettings /></ProtectedRoute>} />
-              <Route path="/admin/upi-payments" element={<ProtectedRoute adminOnly><AdminUPIPayments /></ProtectedRoute>} />
-              <Route path="/admin/legal-pages" element={<ProtectedRoute adminOnly><AdminLegalPages /></ProtectedRoute>} />
-
-              {/* Export data */}
-              <Route path="/admin/exports" element={<ProtectedRoute adminOnly><AdminExports /></ProtectedRoute>} />
+              {/* Admin area — config-driven, see AdminRoutes.jsx */}
+              {adminRoutes.map(({ path, element }) => (
+                <Route key={path} path={path} element={element} />
+              ))}
 
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
