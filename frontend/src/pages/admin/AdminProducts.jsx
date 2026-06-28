@@ -209,7 +209,7 @@ export default function AdminProducts() {
                 {form.images?.length > 0 && (
                   <div className="flex gap-1 mt-2 flex-wrap">
                     {form.images.map((u, i) => (
-                      <div key={i} className="relative" data-testid={`ap-extra-${i}`}>
+                      <div key={`${u.slice(-16)}-${i}`} className="relative" data-testid={`ap-extra-${i}`}>
                         <img alt="" src={u} className="h-14 w-14 rounded border border-[color:var(--sc-border)] object-cover" />
                         <button type="button" onClick={() => setForm((s) => ({ ...s, images: s.images.filter((_, ii) => ii !== i) }))} className="absolute -top-1 -right-1 bg-[color:var(--sc-error)] text-white rounded-full w-4 h-4 grid place-items-center text-[10px]">×</button>
                       </div>

@@ -1,12 +1,12 @@
 // Block-editor modal used by AdminShopLayout. Renders the appropriate fields
 // for each of the 12 block types, mirroring the mobile-app editor.
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { X, Plus, Trash2, Loader2 } from "lucide-react";
 import api from "@/lib/api";
 import { BLOCK_TYPES, BLOCK_TYPE_BY_KEY, LAYOUT_STYLES, SIZES, TEXT_ALIGNS, DATA_SOURCES } from "@/constants/shopBlocks";
 import { log } from "@/lib/log";
 
-const emptyItem = { label: "", subtitle: "", image_data_url: "", link_type: "", link_value: "", color: "" };
+const emptyItem = () => ({ _key: `it_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, label: "", subtitle: "", image_data_url: "", link_type: "", link_value: "", color: "" });
 
 function readFileAsDataUrl(f) {
   return new Promise((res) => {
@@ -42,6 +42,14 @@ export default function BlockEditor({ block, onClose, onSaved }) {
   const cfg = BLOCK_TYPE_BY_KEY[type] || BLOCK_TYPES[0];
   const needs = cfg.needs;
 
+  // Memoize the product dropdown options so we don't re-filter/slice on every
+  // keystroke in other fields. Only re-runs when products or already-picked
+  // IDs change.
+  const pickableProducts = useMemo(
+    () => products.filter((p) => !form.product_ids?.includes(p.id)).slice(0, 100),
+    [products, form.product_ids],
+  );
+
   const set = (k, v) => setForm((s) => ({ ...s, [k]: v }));
 
   const onImg = async (e) => {
@@ -61,7 +69,7 @@ export default function BlockEditor({ block, onClose, onSaved }) {
     });
   };
 
-  const addItem = () => setForm((s) => ({ ...s, items: [...(s.items || []), { ...emptyItem }] }));
+  const addItem = () => setForm((s) => ({ ...s, items: [...(s.items || []), emptyItem()] }));
   const updItem = (idx, k, v) => setForm((s) => {
     const items = [...(s.items || [])];
     items[idx] = { ...items[idx], [k]: v };
@@ -158,7 +166,7 @@ export default function BlockEditor({ block, onClose, onSaved }) {
               </div>
               <div className="space-y-2">
                 {(form.items || []).map((it, idx) => (
-                  <div key={idx} className="border border-[color:var(--sc-border)] rounded-xl p-3 grid grid-cols-2 gap-2" data-testid={`sl-item-${idx}`}>
+                  <div key={it._key || `existing_${idx}`} className="border border-[color:var(--sc-border)] rounded-xl p-3 grid grid-cols-2 gap-2" data-testid={`sl-item-${idx}`}>
                     <input className="sc-input" placeholder="Label" value={it.label} onChange={(e) => updItem(idx, "label", e.target.value)} />
                     <input className="sc-input" placeholder="Subtitle" value={it.subtitle} onChange={(e) => updItem(idx, "subtitle", e.target.value)} />
                     <input className="sc-input" placeholder="Link type (url/product/category)" value={it.link_type} onChange={(e) => updItem(idx, "link_type", e.target.value)} />
@@ -191,7 +199,7 @@ export default function BlockEditor({ block, onClose, onSaved }) {
                   <div className="flex gap-2 mb-2">
                     <select className="sc-input flex-1" data-testid="sl-product-pick" value={productPick} onChange={(e) => setProductPick(e.target.value)}>
                       <option value="">Pick a product…</option>
-                      {products.filter((p) => !form.product_ids?.includes(p.id)).slice(0, 100).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {pickableProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                     <button data-testid="sl-product-add" onClick={() => { if (productPick) { togglePid(productPick); setProductPick(""); } }} className="sc-btn-outline text-sm"><Plus size={14} /></button>
                   </div>

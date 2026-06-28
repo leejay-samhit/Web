@@ -1,0 +1,38 @@
+{
+  "summary": "iter-11 frontend-only test BLOCKED — external backend at https://network-pay-1.emergent.host is currently returning 'Deployment not found' (HTTP 400). With /api/auth/login unreachable, every gated test (USER /shop renderer, BlockEditor stable-key, AdminProducts extras, system-wallet, location forwarding) cannot be exercised end-to-end. Frontend compiles and the login screen renders without console errors aside from the environment-drift guard. Static code review of the four refactored files confirms the iter-11 contract: ShopBlock.jsx is 61 lines and dispatches via a RENDERERS map; blocks.jsx implements 13 per-type renderers + helpers and uses composite itemKey(it,idx)=`${link_value}|${label}|${image_data_url.slice(-12)}|${idx}` for sub-items; BlockEditor.jsx emptyItem() emits a synthetic _key=`it_<ts>_<rand>` and the items map uses it._key, pickableProducts is wrapped in useMemo([products, form.product_ids]); AdminProducts.jsx uses key=`${u.slice(-16)}-${i}` for the extra-images map at line 212. CORS confirmed: setting REACT_APP_BACKEND_URL to network-pay-1.emergent.host triggers preflight failures from the slang-commerce.preview origin, so the slang-commerce ingress (which used to proxy /api/* into the external backend) is the only viable origin — and that ingress is the layer currently broken.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "https://network-pay-1.emergent.host/api/*", "issue": "Returns 'Deployment not found' (HTTP 400). External backend appears removed/unreachable. iter-10 ran against this same host successfully — regression is infra-level, not code-level.", "priority": "CRITICAL"},
+      {"endpoint": "https://slang-commerce.preview.emergentagent.com/api/*", "issue": "Returns 404 for all /api routes — preview ingress to external backend is not currently set up; local k8s backend on :8001 also 404s for /api/auth/login (no local app)", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Login (both Test@gmail.com and support@networkrupay.com)", "issue": "Sign-in button click fires axios POST but backend returns 400/404 -> page stays on /login. Blocks ALL downstream tests.", "affected_selectors": ["[role=button][name='Sign in']", "form on /login"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "URGENT: Restore/redeploy the external backend at https://network-pay-1.emergent.host — currently returns 'Deployment not found'. iter-10 confirmed it was reachable; this is a fresh outage independent of the iter-11 refactor.",
+    "After backend restoration, re-run iter-11 — the four refactored files look correct on static review and should pass: stable-key delete-middle test, useMemo product picker, AdminProducts image-survival, ShopBlock dispatcher rendering.",
+    "Consider adding a one-shot smoke health-check in CI: GET https://slang-commerce.preview.emergentagent.com/api/health (or /api/branding which is public) so a backend outage is caught before UI tests start."
+  ],
+  "critical_code_review_comments": [
+    "ShopBlock.jsx (61 lines): clean dispatcher, RENDERERS map + PRODUCT_BLOCK_TYPES Set is idiomatic, useMemo deps [needsProducts, b, allProducts] are correct (b is referentially stable per block).",
+    "blocks.jsx itemKey() uses image_data_url.slice(-12) — for very large dataURL images two distinct images could theoretically share the same last 12 chars (PNG IEND footer). Probability is negligible in practice (idx is included), but if author wants belt-and-suspenders, increase slice depth to 24 or hash the URL.",
+    "BlockEditor.jsx _key generator uses Date.now()+random — collision-free in practice; falls back to `existing_${idx}` for items loaded from server which do NOT have _key. That fallback is still index-keyed so the delete-middle survival property only holds for items added in the current editor session, NOT for items loaded from a saved block. Worth a follow-up: synthesize a _key on load (e.g., useEffect after setting form from `block`) so editing saved blocks behaves the same.",
+    "AdminProducts.jsx key=${u.slice(-16)}-${i}: with data-URLs the last 16 chars are part of the base64 image payload — collision-resistant for distinct uploads. Index is appended which means deleting from middle still re-indexes downstream keys (i changes) and re-mounts those nodes. The stated 'survival' guarantee only holds for items *before* the deletion point; items after will re-mount. If the goal is full survival, drop the `-${i}` suffix and rely on a longer slice (e.g., -32) or a stored synthetic id.",
+    "BlockEditor useMemo for pickableProducts: deps [products, form.product_ids] — form.product_ids is replaced on every togglePid, so memo invalidates correctly. Good. No stale-closure risk."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (external backend down)", "frontend": "0% executable (blocked at login)"},
+  "test_credentials": "Tried Test@gmail.com / Just@4me and support@networkrupay.com / Nlee@1115 from /app/memory/test_credentials.md — both blocked by backend outage, NOT credential issue.",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "main_agent_can_self_test": false,
+  "context_for_next_testing_agent": "REACT_APP_BACKEND_URL must remain https://slang-commerce.preview.emergentagent.com — setting it directly to network-pay-1.emergent.host hits CORS (no Access-Control-Allow-Origin from external backend). The slang-commerce ingress was the only proxy path. Once the user/main agent confirms the external backend is back online (curl -s -X POST https://network-pay-1.emergent.host/api/auth/login -d '...' should return 200/401, NOT 'Deployment not found'), simply re-run the playwright suite from this iteration. The code under test is in good shape per static review; only infra is blocking. Console guard '[Slangcart] REACT_APP_BACKEND_URL points to the frontend's own host' is a false positive in this preview topology — it fires because the preview host and the API host are the same FQDN by design.",
+  "rca of the issue": "External Emergent deployment 'network-pay-1' is offline (returns 'Deployment not found'). The slang-commerce preview ingress that used to proxy /api/* to that deployment is consequently returning 404 for all /api routes. Login fails -> no authenticated context -> none of the protected pages (/shop with shop-blocks, /admin/*) can mount their data. Reproduction: curl -s -X POST https://network-pay-1.emergent.host/api/auth/login -d '{...}' -> 'Deployment not found'. Mitigation: redeploy the network-pay-1 Emergent job, OR point the preview ingress at a different healthy backend. No frontend code change needed."
+}
