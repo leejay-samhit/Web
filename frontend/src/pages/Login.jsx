@@ -17,14 +17,22 @@ export default function Login() {
   // If a previous request was rejected because the backend revoked our
   // session (e.g. a login on another device kicked us out), surface that
   // explanation here so the user understands why they're back at /login.
+  // The flag lives in localStorage to survive the hard reload that the
+  // axios interceptor triggers — and we delay the clear by 2.5s so the
+  // post-reload mount also reads it (instead of a 1-frame race where the
+  // SPA-router mount consumes it before the reload paints).
   useEffect(() => {
+    let timeoutId;
     try {
-      const reason = sessionStorage.getItem("sc_logout_reason");
+      const reason = localStorage.getItem("sc_logout_reason");
       if (reason === "session_revoked") {
         setNotice("Another device or browser signed in to this account, so this session was ended. (The server only allows one active session per account at a time.)");
-        sessionStorage.removeItem("sc_logout_reason");
+        timeoutId = setTimeout(() => {
+          try { localStorage.removeItem("sc_logout_reason"); } catch { /* ignore */ }
+        }, 2500);
       }
     } catch { /* ignore storage errors */ }
+    return () => { if (timeoutId) clearTimeout(timeoutId); };
   }, []);
 
   const submit = async (e) => {

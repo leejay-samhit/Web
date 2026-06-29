@@ -72,11 +72,12 @@ api.interceptors.response.use(
       const isAdminWrite = url.includes("/admin/") || original?.method !== "get";
 
       // Detect the backend's specific single-session-revoked reason so /login
-      // can explain to the user why they got kicked out. Without this they
-      // just see a generic redirect and assume the app broke.
+      // can explain to the user why they got kicked out. We use localStorage
+      // (not sessionStorage) so the flag survives the window.location hard
+      // reload below. Login.jsx clears it after the banner has been on screen.
       const detail = error?.response?.data?.detail;
       if (detail === "session_revoked") {
-        try { sessionStorage.setItem("sc_logout_reason", "session_revoked"); } catch { /* ignored */ }
+        try { localStorage.setItem("sc_logout_reason", "session_revoked"); } catch { /* ignored */ }
       }
 
       clearTokens();

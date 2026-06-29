@@ -1,0 +1,34 @@
+{
+  "summary": "iter-13 re-test of the race-condition fix for session_revoked banner. ALL 7 test cases PASS. The Option-B fix (localStorage + 2.5s delayed clear) survives the api.js hard reload — the post-reload Login mount reads the flag and renders data-testid='login-notice' with the correct copy. After >3s the flag is cleaned up so subsequent /login visits stay clean. Negative case (detail='token_expired') correctly does NOT set the flag.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "https://slang-commerce.preview.emergentagent.com/api/*", "issue": "Preview /api proxy still 404s (REACT_APP_BACKEND_URL points to the frontend's own host per the startup guard in api.js). Same infra issue flagged in iter-11/12. NOT part of this iteration's scope — request was frontend-only and stated this is a deployment-side ingress problem. Real-auth regression suites remain unrunnable in preview.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Outside this iteration's scope, repeat from prior reports) Fix the preview-env REACT_APP_BACKEND_URL drift so the startup guard in api.js stops warning and the /api/* proxy stops returning 404. Real-auth regression coverage cannot resume until this is fixed.",
+    "(Optional polish, low priority) Login.jsx copy still asserts 'one active session per account at a time'. If/when the backend is changed to allow concurrent web+app sessions, this string needs updating.",
+    "(Optional polish, low priority) api.js line ~79 still does a strict `detail === 'session_revoked'` equality check. If the FastAPI middleware ever emits 'SESSION_REVOKED' or 'session revoked' the banner won't trigger. Consider a small allow-list or case-insensitive contains."
+  ],
+  "critical_code_review_comments": [
+    "Fix is minimal and well-commented: api.js now writes to localStorage (survives hard reload) and Login.jsx schedules removeItem via a 2.5s setTimeout with proper clearTimeout on unmount — no leak.",
+    "The 2.5s window is a reasonable trade-off: long enough to absorb the react-router → hard-reload → first paint chain (observed ~300-800ms here), short enough that a user re-visiting /login a few seconds later won't see a stale banner.",
+    "Minor: the comment block in Login.jsx useEffect is excellent — explicitly documents the race and why the timeout exists. Keep it.",
+    "Still no automated unit/integration test for this code path in the repo. Consider adding a Playwright spec that mirrors the page.route recipe used in this iteration so the fix is regression-protected."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (preview /api proxy still 404 — infra, not code)", "frontend": "7/7 iter-13 assertions pass (T1, T2, T3, T4, T5-REFIX, T6, T7)"},
+  "test_credentials": "Used /app/memory/test_credentials.md (Test@gmail.com/Just@4me). Real login still 404s on preview ingress, so T2 only verifies that login-error surfaces (text 'Not Found'); the credential validity itself was not exercisable end-to-end.",
+  "seed_data_creation": "none; 401 was faked via page.route('**/api/auth/me', ...) and a fake localStorage token, per the agent-to-agent context note.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Race condition is fixed. The recipe to reproduce the FIXED behavior: (1) page.add_init_script sets localStorage['sc_token']='fake'; (2) page.route('**/api/auth/me', ...) → 401 detail='session_revoked'; (3) goto /shop; (4) wait ~3.5s for the redirect+hard-reload chain; (5) data-testid='login-notice' is visible on /login with the 'Another device or browser signed in...' copy and stays visible past 1s. For the negative T7, swap the detail to 'token_expired' — the localStorage flag stays null and the banner never appears. The preview /api 404 issue is independent and only blocks real-credential regressions (iter-9/10/11 suite).",
+  "rca of the issue": "Previous iter-12 race condition is now fully resolved. Root cause was that api.js stored the reason in sessionStorage and Login.jsx removed it on first read, so the brief react-router mount consumed the flag before the api.js hard-reload remounted /login on an empty sessionStorage. The fix moves the flag to localStorage (survives window.location.href reload) and delays the cleanup by 2.5s via setTimeout (so the post-reload Login mount also reads it). Verified end-to-end with the page.route mock — banner is visible, stays for >1s, and is cleaned up within 3s so subsequent visits stay clean."
+}
