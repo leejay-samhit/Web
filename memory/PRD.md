@@ -70,6 +70,14 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - **OPEN — backend** — Migrate auth to httpOnly cookies.
 - **OPEN — backend** — Intermittent 401 on admin broadcasts after branding write.
 - **OPEN — backend** — Chat 403 on Test user's own thread.
+- **OPEN — backend** — Concurrent web↔app sessions still revoke each other. Mitigated by Login.jsx UX warning.
+- **DONE (29-Jun-2026, iter 14)** — **P0 parity batch (4/4 PASS).**
+  - **A · Services rewritten** — Browse-by-Category chip strip (fetches `/services/categories`, filters via `?category_id=`). ServiceCard now opens a full **ProviderProfileModal** (`/services/{id}/profile` + `/services/reveal-config`) with KYC/languages/PIN/rating chips, charge card, and a **GST-aware Reveal-contact card**: shows fee + GST + total + wallet balance, a non-negotiable "I agree" terms checkbox, insufficient-balance gating, and `POST /services/{id}/reveal-phone` to debit wallet & reveal. Profile modal also has a Book-now CTA wired to the existing booking modal.
+  - **B · Register parity** — After successful `/auth/register`, if `registration_paid` is falsy the page transitions to a `reg-pay-step` UI with the ₹100 + ₹18 GST = ₹118 breakdown and a `Pay & activate` button calling `POST /payment/register-fee` → `refreshMe()` → `/dashboard`. Added a defensive `formatApiError` helper that coerces FastAPI 422 detail arrays into a readable string (fixes a HIGH-priority silent-failure bug surfaced by the testing agent). Form is now `noValidate` so the client-side guard surfaces an in-page `reg-error` on empty submit.
+  - **C · AdminProducts** — Added a new **Spec tabs (advanced)** textarea (`ap-spec-tabs`) with `name | label:value; …` parser feeding the backend's `SpecTab[]` shape. Fixed `whats_in_box` payload from the legacy `{label}` → the correct `{name, image_data_url}` schema. All 25 expected `ap-*` testids are present.
+  - **D · AdminSystemWallet** — `GroupCard` is now a `<button>` with hover-lift, "Tap to view transactions →" hint. Added **GroupTxnsModal** that fetches `/admin/finance/groups/{group_id}/transactions?limit=100` and renders a When/Type/Description/Status/Amount table (`g-txns-table`) with proper close-button.
+  - Restored `REACT_APP_BACKEND_URL` from the preview URL drift back to `https://network-pay-1.emergent.host`.
+  - **Test report:** `/app/test_reports/iteration_14.json` — Task A 12/12, Task B 5/5 happy path (+ the 422 fix self-verified), Task C 25/25 testids, Task D modal/table/close 100%. Regression 100%.
 - **P1** — Add product Questions & Reviews UI on `ProductDetail` (endpoints already exist: `/products/{pid}/questions`, `/products/{pid}/reviews`).
 - **P2** — Shop layout from `/shop-layout`; brand/vendor "search-as-you-type" using `/brands/suggest`, `/vendors/suggest`.
 - **P2** — WebSocket chat replacing polling.

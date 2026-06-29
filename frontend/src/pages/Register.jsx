@@ -26,9 +26,27 @@ export default function Register() {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // Normalize FastAPI/Pydantic error payloads (which can be string OR
+  // array of {msg,...} objects) into a plain user-friendly string.
+  const formatApiError = (err, fallback = "Something went wrong.") => {
+    const detail = err?.response?.data?.detail ?? err?.response?.data?.message;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      const msgs = detail.map((d) => d?.msg || (typeof d === "string" ? d : null)).filter(Boolean);
+      if (msgs.length) return msgs.join("; ");
+    }
+    if (detail && typeof detail === "object" && detail.msg) return detail.msg;
+    return err?.message || fallback;
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setError("");
+    // Client-side guard so empty submit surfaces in reg-error too.
+    if (!form.name.trim() || !form.email.trim() || !form.password) {
+      setError("Please fill in your name, email, and password.");
+      return;
+    }
     setLoading(true);
     try {
       const data = await register(form);
@@ -40,7 +58,7 @@ export default function Register() {
       // Either token issued without payment OR no token returned at all.
       setRegistered(u);
     } catch (err) {
-      setError(err?.response?.data?.detail || err?.response?.data?.message || "Registration failed.");
+      setError(formatApiError(err, "Registration failed."));
     } finally {
       setLoading(false);
     }
@@ -55,7 +73,7 @@ export default function Register() {
       nav("/dashboard");
     } catch (e) {
       log.error("Register: pay registration-fee failed", e);
-      setPayError(e?.response?.data?.detail || "Payment failed. Please try again.");
+      setPayError(formatApiError(e, "Payment failed. Please try again."));
     } finally {
       setPaying(false);
     }
@@ -140,7 +158,7 @@ export default function Register() {
         </div>
         <h1 className="text-3xl font-extrabold text-[color:var(--sc-ink)]">Create your account</h1>
         <p className="text-[color:var(--sc-ink-muted)] mt-1">Join the Slangcart network in 30 seconds.</p>
-        <form onSubmit={submit} className="mt-6 space-y-3">
+        <form onSubmit={submit} noValidate className="mt-6 space-y-3">
           <input data-testid="reg-name" required placeholder="Full name" value={form.name} onChange={set("name")} className="sc-input" />
           <input data-testid="reg-email" required type="email" placeholder="Email" value={form.email} onChange={set("email")} className="sc-input" />
           <input data-testid="reg-phone" placeholder="Phone (10-digit)" value={form.phone} onChange={set("phone")} className="sc-input" inputMode="tel" />
