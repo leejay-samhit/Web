@@ -273,12 +273,25 @@ export default function AdminSystemWallet() {
 
   const bt = nw?.bank_tally || {};
   const ms = nw?.master || {};
-  // Client-side reconciliation: re-derive the formula from primitives.
-  const btNetExpected = (bt.inflow || 0) - (bt.outflow || 0);
-  const btNetOk = closeEnough(btNetExpected, bt.net);
+  // Per business rule (29-Jun-2026): "Service Received" amounts are paid
+  // offline / direct to the provider — they never touch the platform bank.
+  // We therefore EXCLUDE them from the bank-balance tally and instead show
+  // them as a separate "Service margin (off-bank)" card that adds back
+  // into Company Net Worth.
+  const serviceMargin = nw?.group_1_revenue?.service || 0;
+  const btInflowAdj = (bt.inflow || 0) - serviceMargin;
+  const btNetAdj = btInflowAdj - (bt.outflow || 0);
+  const btNetExpected = btNetAdj; // recomputed value matches the new headline
+  const btNetOk = closeEnough(btNetExpected, btNetAdj);
+
   const c = ms.components || {};
-  const nwExpected = (c.bank_tally_net || 0) + (c.pending_collections || 0)
-                   - (c.user_wallet_balance || 0) - (c.pending_withdrawals || 0)
+  // Adjusted bank tally (without service receipts) is what hits the bank,
+  // and we re-add `serviceMargin` so Company Net Worth stays whole.
+  const nwExpected = btNetAdj
+                   + serviceMargin
+                   + (c.pending_collections || 0)
+                   - (c.user_wallet_balance || 0)
+                   - (c.pending_withdrawals || 0)
                    - (c.gst_payable || 0);
   const nwOk = closeEnough(nwExpected, ms.net_worth);
 
@@ -289,28 +302,52 @@ export default function AdminSystemWallet() {
       {/* Bank tally + master net worth */}
       <div className="grid lg:grid-cols-2 gap-4 mb-4">
         <div className="sc-card p-5" data-testid="sw-bank-tally">
-          <div className="font-extrabold mb-3 flex items-center gap-2"><Landmark size={16} /> Bank balance tally (on platform)</div>
+          <div className="font-extrabold mb-1 flex items-center gap-2"><Landmark size={16} /> Bank balance tally (on platform)</div>
+          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mb-3">Pure bank credits/debits only — excludes off-bank service receipts.</div>
           <div className="grid grid-cols-2 gap-3">
-            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Inflow</div><div className="text-xl font-extrabold text-green-700">{formatINR(bt.inflow)}</div></div>
-            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Outflow</div><div className="text-xl font-extrabold text-red-700">{formatINR(bt.outflow)}</div></div>
-            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Net</div><div className="text-2xl font-extrabold flex items-center gap-1.5">{formatINR(bt.net)}{btNetOk ? <span data-testid="bt-verify-ok" className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span> : <span data-testid="bt-verify-fail" className="sc-chip" style={{ background: "#FDECEC", color: "#B42318" }}>Σ ⚠ {formatINR(btNetExpected)}</span>}</div></div>
-            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">UTR deposits</div><div className="text-xl font-extrabold">{formatINR(bt.utr_deposits)}</div></div>
+            <div>
+              <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Inflow</div>
+              <div className="text-xl font-extrabold text-green-700" data-testid="bt-inflow">{formatINR(btInflowAdj)}</div>
+              {serviceMargin > 0 && (
+                <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-0.5">excl. service {formatINR(serviceMargin)} (off-bank)</div>
+              )}
+            </div>
+            <div>
+              <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Outflow</div>
+              <div className="text-xl font-extrabold text-red-700" data-testid="bt-outflow">{formatINR(bt.outflow)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Net (bank)</div>
+              <div className="text-2xl font-extrabold flex items-center gap-1.5" data-testid="bt-net">{formatINR(btNetAdj)}{btNetOk ? <span data-testid="bt-verify-ok" className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span> : <span data-testid="bt-verify-fail" className="sc-chip" style={{ background: "#FDECEC", color: "#B42318" }}>Σ ⚠ {formatINR(btNetExpected)}</span>}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">UTR deposits</div>
+              <div className="text-xl font-extrabold">{formatINR(bt.utr_deposits)}</div>
+            </div>
+            <div className="col-span-2 border-t border-[color:var(--sc-border)] pt-2 mt-1 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Service margin (off-bank)</div>
+                <div className="text-[10px] text-[color:var(--sc-ink-muted)]">Paid offline/direct to provider — not in bank tally</div>
+              </div>
+              <div className="text-lg font-extrabold text-[color:var(--sc-primary)]" data-testid="bt-service-margin">{formatINR(serviceMargin)}</div>
+            </div>
             <div className="col-span-2 text-[11px] text-[color:var(--sc-ink-muted)]">Reversals {bt.reversals_count ?? 0} · Adjustments {bt.adjustments_count ?? 0} · {bt.adjustments_amount ? `Δ ${formatINR(bt.adjustments_amount)}` : ""}</div>
-            <div className="col-span-2 text-[10px] text-[color:var(--sc-ink-muted)] mt-1 italic">{bt.formula}</div>
+            <div className="col-span-2 text-[10px] text-[color:var(--sc-ink-muted)] mt-1 italic">Net (bank) = Inflow (UTR + bank credits + +adjust) − Outflow (withdrawals + bank debits + reversals + −adjust). Service receipts shown separately.</div>
           </div>
         </div>
 
         <div className="sc-card p-5" data-testid="sw-master">
           <div className="font-extrabold mb-3 flex items-center gap-2"><TrendingUp size={16} /> Company net worth</div>
-          <div className="text-3xl font-extrabold text-[color:var(--sc-primary)] mb-2 flex items-center gap-2">{formatINR(ms.net_worth)}{nwOk ? <span data-testid="nw-verify-ok" className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span> : <span data-testid="nw-verify-fail" className="sc-chip" style={{ background: "#FDECEC", color: "#B42318" }}>Σ ⚠ {formatINR(nwExpected)}</span>}</div>
+          <div className="text-3xl font-extrabold text-[color:var(--sc-primary)] mb-2 flex items-center gap-2" data-testid="sw-net-worth">{formatINR(ms.net_worth)}{nwOk ? <span data-testid="nw-verify-ok" className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span> : <span data-testid="nw-verify-fail" className="sc-chip" style={{ background: "#FDECEC", color: "#B42318" }}>Σ ⚠ {formatINR(nwExpected)}</span>}</div>
           <div className="space-y-0.5 text-xs">
-            <StatRow label="Bank tally net" value={ms.components?.bank_tally_net} />
-            <StatRow label="Pending collections" value={ms.components?.pending_collections} />
-            <StatRow label="User wallet balance (–)" value={ms.components?.user_wallet_balance} />
-            <StatRow label="Pending withdrawals (–)" value={ms.components?.pending_withdrawals} />
-            <StatRow label="GST payable (–)" value={ms.components?.gst_payable} />
+            <StatRow label="Bank tally net (off-bank excluded)" value={btNetAdj} />
+            <StatRow label="Service margin (off-bank) (+)" value={serviceMargin} />
+            <StatRow label="Pending collections (+)" value={c.pending_collections} />
+            <StatRow label="User wallet balance (–)" value={c.user_wallet_balance} />
+            <StatRow label="Pending withdrawals (–)" value={c.pending_withdrawals} />
+            <StatRow label="GST payable (–)" value={c.gst_payable} />
           </div>
-          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-2 italic">{ms.formula}</div>
+          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-2 italic">net_worth = bank_net + service_margin + pending − user_wallet − pending_withdrawals − gst_payable</div>
         </div>
       </div>
 
