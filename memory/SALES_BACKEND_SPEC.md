@@ -119,12 +119,19 @@ POST   /api/vendor/me/pos/invoice/consume    → { invoice_no }    # atomic ++
 
 ```
 POST   /api/vendor/me/pos/sales              ← CreateSaleRequest → SaleResponse
+POST   /api/vendor/me/pos/sales/bulk-import  ← { sales: [...] } → { id_map: {local_id: cloud_id}, imported, skipped }
 GET    /api/vendor/me/pos/sales              ?from&to&q&payment_mode&min_amt&max_amt&status&limit&offset
 GET    /api/vendor/me/pos/sales/{id}         → SaleResponse
 POST   /api/vendor/me/pos/sales/{id}/cancel  → SaleResponse
 POST   /api/vendor/me/pos/sales/{id}/refund  ← {reason} → SaleResponse
 GET    /api/vendor/me/pos/sales/{id}/invoice.pdf   → application/pdf
 ```
+
+> **bulk-import contract** (frontend already calls this on the "Push to cloud"
+> button): accepts the localStorage `sales` array verbatim. The server must
+> generate fresh server-side `id` + `invoice_no` (or honor the client values
+> if unique) and return `id_map` so the client can mark each local row
+> `cloud_synced`. Items / payments are nested in each sale object.
 
 **CreateSaleRequest** must:
 1. Open a transaction (Mongo session).

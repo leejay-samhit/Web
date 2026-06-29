@@ -76,6 +76,12 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
   - Fixed Group 1 sub-stat layout — removed duplicated `platform_fee` row.
   - Added **Σ‑verify chips** to every additive/subtractive card.
   - Added one-line formula caption beneath every group card.
+- **DONE (29-Jun-2026, late evening)** — **POS cloud migration wired (zero-downtime auto-promote).**
+  - Added `src/lib/posCloud.js` — full async client for the 14 endpoints in `SALES_BACKEND_SPEC.md`, including 60-second cached `probeCloud()` so we don't spam 404s.
+  - `createInvoice` now mirror-writes to the cloud (best-effort, never blocks the local write). Successful cloud writes mark the local row with `cloud_id` + `cloud_synced_at`. Same mirroring for cancel & refund.
+  - Added `bulkPushToCloud(uid)` and `pullFromCloud(uid)` helpers — used by the new **Cloud sync** panel on `/vendor/settings` that shows: current cloud availability (live probe), local invoice count, synced count, pending push count, manual Push / Pull buttons.
+  - As long as backend POS endpoints don't exist → panel says "📴 not deployed yet" and falls back silently. The moment the backend dev ships them, the probe flips to ✅ and the vendor can push their entire localStorage history in one click. From that point every new bill is double-written (local + cloud) and the migration is complete.
+  - Updated `SALES_BACKEND_SPEC.md` with the `bulk-import` contract the new code expects.
 - **DONE (29-Jun-2026, evening, post-deploy)** — **Vendor Sales / POS module v1 shipped (paths A+B+C combined).**
   - New routes under `/vendor/*`: `sales` (KPI dashboard), `pos` (billing screen), `invoices` (history + filters + cancel/refund/print), `cash` (daily closing + business statement), `analytics` (recharts: daily-trend line + revenue pie + top-products bar + top lists), `settings` (invoice prefix, business name/address/GSTIN, default GST, opening balance).
   - Shared `<VendorNav />` chip strip mounted on every vendor page including the existing `VendorDashboard`.

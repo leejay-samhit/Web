@@ -16,6 +16,7 @@
  */
 
 import api from "@/lib/api";
+import { mirrorSaleToCloud, probeCloud, listSales as cloudListSales, cancelSale as cloudCancelSale, refundSale as cloudRefundSale, bulkImportSales } from "@/lib/posCloud";
 
 const KEY = (uid) => `sc_vendor_pos_v1_${uid || "anon"}`;
 const SETTINGS_KEY = (uid) => `sc_vendor_pos_settings_v1_${uid || "anon"}`;
@@ -156,6 +157,17 @@ export async function createInvoice(uid, draft) {
     status: "completed",
     ...draft,
   };
+
+  // Best-effort cloud mirror — never blocks the local write.
+  // When the backend POS endpoints exist, this will start succeeding and the
+  // cloud copy becomes the canonical source on bulk-import.
+  let cloud = { ok: false };
+  try { cloud = await mirrorSaleToCloud({ ...invoice }); } catch { /* swallow */ }
+  if (cloud?.ok && cloud.server?.id) {
+    invoice.cloud_id = cloud.server.id;
+    invoice.cloud_synced_at = new Date().toISOString();
+  }
+
   writeAll(uid, [invoice, ...listInvoices(uid)]);
   return invoice;
 }
@@ -163,13 +175,64 @@ export async function createInvoice(uid, draft) {
 export function cancelInvoice(uid, id) {
   const list = listInvoices(uid).map((i) => (i.id === id ? { ...i, status: "cancelled", cancelled_at: new Date().toISOString() } : i));
   writeAll(uid, list);
-  return getInvoice(uid, id);
+  // best-effort cloud mirror
+  const inv = getInvoice(uid, id);
+  if (inv?.cloud_id) cloudCancelSale(inv.cloud_id).catch(() => {});
+  return inv;
 }
 
 export function refundInvoice(uid, id, reason) {
   const list = listInvoices(uid).map((i) => (i.id === id ? { ...i, status: "refunded", refunded_at: new Date().toISOString(), refund_reason: reason } : i));
   writeAll(uid, list);
-  return getInvoice(uid, id);
+  const inv = getInvoice(uid, id);
+  if (inv?.cloud_id) cloudRefundSale(inv.cloud_id, reason).catch(() => {});
+  return inv;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Cloud sync helpers                                                        */
+/*  Used by Vendor Settings to detect & migrate to backend storage when the   */
+/*  POS endpoints come online.                                                */
+/* -------------------------------------------------------------------------- */
+export async function isCloudAvailable() { return probeCloud(true); }
+
+/** Upload local invoices that haven't been mirrored yet. */
+export async function bulkPushToCloud(uid) {
+  const available = await probeCloud(true);
+  if (!available) return { ok: false, reason: "Cloud POS endpoints not available." };
+  const local = listInvoices(uid);
+  const pending = local.filter((i) => !i.cloud_id);
+  if (pending.length === 0) return { ok: true, pushed: 0, skipped: local.length };
+  try {
+    const result = await bulkImportSales(pending);
+    // Mark the local copies as synced using the returned id map.
+    const idMap = result?.id_map || {};
+    const merged = local.map((i) => idMap[i.id] ? { ...i, cloud_id: idMap[i.id], cloud_synced_at: new Date().toISOString() } : i);
+    writeAll(uid, merged);
+    return { ok: true, pushed: pending.length, skipped: local.length - pending.length };
+  } catch (e) {
+    return { ok: false, reason: e?.response?.data?.detail || e?.message || "bulk import failed" };
+  }
+}
+
+/** Pull the canonical list from cloud, then mirror locally (overwrites). */
+export async function pullFromCloud(uid) {
+  const available = await probeCloud(true);
+  if (!available) return { ok: false, reason: "Cloud POS endpoints not available." };
+  try {
+    const data = await cloudListSales({ limit: 500 });
+    const items = data?.items || [];
+    // Normalize cloud rows into the same shape the localStorage layer uses.
+    const localShape = items.map((s) => ({
+      ...s,
+      cloud_id: s.id,
+      cloud_synced_at: s.cloud_synced_at || new Date().toISOString(),
+    }));
+    writeAll(uid, localShape);
+    return { ok: true, pulled: items.length };
+  } catch (e) {
+    return { ok: false, reason: e?.response?.data?.detail || e?.message || "pull failed" };
+  }
 }
 
 export function duplicateInvoice(uid, id) {
