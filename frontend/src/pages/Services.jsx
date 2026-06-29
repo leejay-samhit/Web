@@ -4,7 +4,7 @@ import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import {
-  Wrench, Search, MapPin, Phone, X, CheckCircle2, ShieldCheck, User,
+  Wrench, Search, MapPin, Phone, X, ShieldCheck, User,
   Star, Languages, Wallet, ChevronRight, Copy, Lock,
 } from "lucide-react";
 import { formatINR } from "@/lib/utils";
@@ -13,18 +13,18 @@ import LocationBanner from "@/components/LocationBanner";
 import { useUserLocation } from "@/hooks/useUserLocation";
 
 /* -------------------------------------------------------------------------- */
-/*  ServiceCard — list tile                                                   */
+/*  ServiceCard — list tile (Book CTA removed per 29-Jun-2026 directive)      */
 /* -------------------------------------------------------------------------- */
-function ServiceCard({ s, onBook, onProfile }) {
+function ServiceCard({ s, onProfile }) {
   const available = s.availability_status === "available";
   return (
-    <div className="sc-card p-4 flex flex-col gap-2" data-testid={`service-${s.id}`}>
-      <button
-        type="button"
-        onClick={() => onProfile(s)}
-        data-testid={`svc-profile-${s.id}`}
-        className="text-left flex items-start gap-3 w-full"
-      >
+    <button
+      type="button"
+      onClick={() => onProfile(s)}
+      data-testid={`svc-card-${s.id}`}
+      className="sc-card p-4 flex flex-col gap-2 text-left hover:shadow-md hover:-translate-y-0.5 transition-all"
+    >
+      <div className="flex items-start gap-3 w-full">
         {s.profile_image ? (
           <img alt="" src={s.profile_image} className="w-12 h-12 rounded-full object-cover border border-[color:var(--sc-border)]" />
         ) : (
@@ -44,31 +44,24 @@ function ServiceCard({ s, onBook, onProfile }) {
             </span>
           </div>
         </div>
-      </button>
+      </div>
       {s.service_description && (
         <div className="text-xs text-[color:var(--sc-ink-muted)] line-clamp-2">{s.service_description}</div>
       )}
       <div className="flex items-center justify-between mt-2">
         <div className="text-sm font-extrabold text-[color:var(--sc-primary)]">{formatINR(s.service_charge)}</div>
-        <div className="flex gap-2">
-          <button data-testid={`svc-view-${s.id}`} onClick={() => onProfile(s)} className="sc-btn-outline text-xs py-1.5 px-3">View</button>
-          <button
-            data-testid={`svc-book-${s.id}`}
-            onClick={() => onBook(s)}
-            className="sc-btn-primary text-xs py-1.5 px-3"
-          >
-            Book
-          </button>
-        </div>
+        <span className="text-xs font-semibold text-[color:var(--sc-primary)] inline-flex items-center gap-1">
+          View profile <ChevronRight size={12} />
+        </span>
       </div>
-    </div>
+    </button>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Provider profile modal — phone reveal + book                              */
+/*  Provider profile modal — phone reveal only (Book CTA removed)             */
 /* -------------------------------------------------------------------------- */
-function ProviderProfileModal({ provider, onClose, onBook }) {
+function ProviderProfileModal({ provider, onClose }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [revealConfig, setRevealConfig] = useState(null);
@@ -91,7 +84,6 @@ function ProviderProfileModal({ provider, onClose, onBook }) {
         else log.error("ProviderProfileModal: profile fetch failed", p.reason);
         if (cfg.status === "fulfilled") {
           setRevealConfig(cfg.value.data);
-          // If we've already paid for this provider, show the phone immediately.
           if (cfg.value.data?.revealed_provider_ids?.includes(provider.id) && p.status === "fulfilled") {
             setRevealedPhone(p.value.data?.phone || null);
           }
@@ -112,10 +104,8 @@ function ProviderProfileModal({ provider, onClose, onBook }) {
     setError("");
     try {
       const { data } = await api.post(`/services/${provider.id}/reveal-phone`, { accept_terms: true });
-      // backend returns the phone in the response — or in `profile.phone`
       const phone = data?.phone || data?.provider_phone || profile?.phone;
       setRevealedPhone(phone);
-      // refresh reveal-config so wallet balance + revealed list is current
       try {
         const { data: cfg } = await api.get("/services/reveal-config");
         setRevealConfig(cfg);
@@ -148,7 +138,6 @@ function ProviderProfileModal({ provider, onClose, onBook }) {
         <div className="p-5 space-y-4">
           {loading ? <Spinner /> : (
             <>
-              {/* Header */}
               <div className="flex items-start gap-3">
                 {profile?.profile_image ? (
                   <img alt="" src={profile.profile_image} className="w-20 h-20 rounded-xl object-cover border border-[color:var(--sc-border)]" />
@@ -175,16 +164,13 @@ function ProviderProfileModal({ provider, onClose, onBook }) {
                 </div>
               </div>
 
-              {/* Service charge */}
               <div className="sc-card p-3 flex items-center justify-between">
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-[color:var(--sc-ink-muted)]">Service charge</div>
                   <div className="text-2xl font-extrabold text-[color:var(--sc-primary)]">{formatINR(profile?.service_charge ?? provider.service_charge)}</div>
                 </div>
-                <button data-testid="svc-profile-book" onClick={() => { onBook(profile || provider); onClose(); }} className="sc-btn-primary text-sm">Book now</button>
               </div>
 
-              {/* Description */}
               {(profile?.service_description || provider.service_description) && (
                 <div>
                   <div className="text-[10px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] mb-1">About</div>
@@ -192,7 +178,6 @@ function ProviderProfileModal({ provider, onClose, onBook }) {
                 </div>
               )}
 
-              {/* Meta */}
               <div className="grid grid-cols-2 gap-3 text-xs">
                 {(profile?.service_pincode || provider.service_pincode) && (
                   <div className="flex items-center gap-1.5 text-[color:var(--sc-ink-muted)]"><MapPin size={12} />PIN {profile?.service_pincode || provider.service_pincode}</div>
@@ -266,7 +251,7 @@ function ProviderProfileModal({ provider, onClose, onBook }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Category chip strip                                                       */
+/*  Category & sub-category chip strips                                       */
 /* -------------------------------------------------------------------------- */
 function CategoryChips({ categories, active, onChange }) {
   return (
@@ -295,17 +280,46 @@ function CategoryChips({ categories, active, onChange }) {
   );
 }
 
+function SubCategoryChips({ subcategories, active, onChange, loading }) {
+  if (!loading && subcategories.length === 0) return null;
+  return (
+    <div className="flex gap-2 overflow-x-auto py-1 -mx-1 px-1" data-testid="svc-subcategories">
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        data-testid="svc-sub-all"
+        className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition ${active === null ? "bg-[color:var(--sc-ink)] text-white border-transparent" : "bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary)] border-transparent"}`}
+      >
+        All sub-categories
+      </button>
+      {loading ? (
+        <div className="text-xs text-[color:var(--sc-ink-muted)] px-2 py-1.5">Loading sub-categories…</div>
+      ) : subcategories.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          onClick={() => onChange(s.id)}
+          data-testid={`svc-sub-${s.slug || s.id}`}
+          className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition ${active === s.id ? "bg-[color:var(--sc-ink)] text-white border-transparent" : "bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary)] border-transparent"}`}
+        >
+          {s.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Main page                                                                 */
 /* -------------------------------------------------------------------------- */
-function renderServices({ loading, services, onBook, onProfile }) {
+function renderServices({ loading, services, onProfile }) {
   if (loading) return <Spinner />;
   if (services.length === 0) {
     return <EmptyState icon={Wrench} title="No services found" hint="Adjust your search, PIN code, or category." />;
   }
   return (
     <div data-testid="services-grid" className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-      {services.map((s) => <ServiceCard key={s.id} s={s} onBook={onBook} onProfile={onProfile} />)}
+      {services.map((s) => <ServiceCard key={s.id} s={s} onProfile={onProfile} />)}
     </div>
   );
 }
@@ -314,24 +328,24 @@ export default function Services() {
   const { location } = useUserLocation();
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
+  const [subLoading, setSubLoading] = useState(false);
   const [activeCat, setActiveCat] = useState(null);
+  const [activeSub, setActiveSub] = useState(null);
   const [profileOf, setProfileOf] = useState(null);
   const [q, setQ] = useState("");
   const [pincode, setPincode] = useState("");
   const [loading, setLoading] = useState(true);
-  const [bookOpen, setBookOpen] = useState(null);
-  const [notes, setNotes] = useState("");
-  const [booking, setBooking] = useState(false);
-  const [bookSuccess, setBookSuccess] = useState(false);
-  const [bookError, setBookError] = useState("");
   const [invoices, setInvoices] = useState([]);
 
   const qRef = useRef(q);
   const pinRef = useRef(pincode);
   const catRef = useRef(activeCat);
+  const subRef = useRef(activeSub);
   qRef.current = q;
   pinRef.current = pincode;
   catRef.current = activeCat;
+  subRef.current = activeSub;
 
   useEffect(() => {
     if (location?.pincode && !pincode) setPincode(String(location.pincode));
@@ -344,6 +358,21 @@ export default function Services() {
       .catch((e) => log.error("Services.categories failed", e));
   }, []);
 
+  // Sub-categories: refetch whenever the active category changes
+  useEffect(() => {
+    if (!activeCat) {
+      setSubcategories([]);
+      setActiveSub(null);
+      return;
+    }
+    setSubLoading(true);
+    setActiveSub(null);
+    api.get("/service-subcategories", { params: { parent_id: activeCat } })
+      .then((r) => setSubcategories(r.data?.items || r.data || []))
+      .catch((e) => log.error("Services.subcategories failed", e))
+      .finally(() => setSubLoading(false));
+  }, [activeCat]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -351,6 +380,7 @@ export default function Services() {
       if (qRef.current) params.q = qRef.current;
       if (pinRef.current) params.pincode = pinRef.current;
       if (catRef.current) params.category_id = catRef.current;
+      if (subRef.current) params.subcategory_id = subRef.current;
       if (location?.latitude && location?.longitude) {
         params.lat = location.latitude;
         params.lng = location.longitude;
@@ -369,36 +399,19 @@ export default function Services() {
   }, [location?.latitude, location?.longitude]);
 
   useEffect(() => { load(); }, [load]);
-  // Re-fetch when user changes category chips
-  useEffect(() => { load(); }, [activeCat, load]);
-
-  const book = async () => {
-    if (!bookOpen) return;
-    setBooking(true);
-    setBookError("");
-    try {
-      await api.post(`/services/${bookOpen.id}/book`, { notes });
-      setBookSuccess(true);
-      setTimeout(() => {
-        setBookOpen(null);
-        setBookSuccess(false);
-        setNotes("");
-      }, 1200);
-    } catch (e) {
-      setBookError(e?.response?.data?.detail || "Could not book this service.");
-    } finally {
-      setBooking(false);
-    }
-  };
+  useEffect(() => { load(); }, [activeCat, activeSub, load]);
 
   return (
     <Layout title="Services">
       <div className="space-y-3">
         <LocationBanner />
 
-        {/* Category chips */}
         {categories.length > 0 && (
           <CategoryChips categories={categories} active={activeCat} onChange={setActiveCat} />
+        )}
+
+        {activeCat && (
+          <SubCategoryChips subcategories={subcategories} active={activeSub} onChange={setActiveSub} loading={subLoading} />
         )}
 
         <div className="sc-card p-3 flex flex-wrap items-center gap-2">
@@ -427,7 +440,7 @@ export default function Services() {
           </button>
         </div>
 
-        {renderServices({ loading, services, onBook: setBookOpen, onProfile: setProfileOf })}
+        {renderServices({ loading, services, onProfile: setProfileOf })}
 
         {invoices?.length > 0 && (
           <div className="sc-card p-5" data-testid="svc-invoices">
@@ -447,48 +460,11 @@ export default function Services() {
         )}
       </div>
 
-      {/* Provider profile modal */}
       {profileOf && (
         <ProviderProfileModal
           provider={profileOf}
           onClose={() => setProfileOf(null)}
-          onBook={setBookOpen}
         />
-      )}
-
-      {/* Booking modal */}
-      {bookOpen && (
-        <div className="fixed inset-0 bg-black/40 z-50 grid place-items-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-5 sc-fade-in" data-testid="book-modal">
-            <div className="flex justify-between items-center mb-2">
-              <div className="font-extrabold">Book {bookOpen.service_name || bookOpen.name}</div>
-              <button onClick={() => setBookOpen(null)} className="text-[color:var(--sc-ink-muted)]"><X size={18} /></button>
-            </div>
-            {bookSuccess ? (
-              <div className="py-6 text-center">
-                <CheckCircle2 size={36} className="text-[color:var(--sc-success)] mx-auto" />
-                <div className="font-extrabold mt-2">Booking sent!</div>
-              </div>
-            ) : (
-              <>
-                <textarea
-                  data-testid="book-notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Tell the provider what you need…"
-                  className="sc-input min-h-[100px] resize-none"
-                />
-                {bookError && <div className="text-sm font-semibold text-[color:var(--sc-error)] mt-2">{bookError}</div>}
-                <div className="flex justify-end gap-2 mt-4">
-                  <button onClick={() => setBookOpen(null)} className="sc-btn-outline text-sm">Cancel</button>
-                  <button data-testid="book-confirm" onClick={book} disabled={booking} className="sc-btn-primary text-sm">
-                    {booking ? "Booking…" : "Confirm booking"}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
       )}
     </Layout>
   );
