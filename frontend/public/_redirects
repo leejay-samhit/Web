@@ -1,0 +1,10 @@
+# Proxy /api/* to the FastAPI backend (network-pay-1) so the frontend can keep
+# REACT_APP_BACKEND_URL=https://slangcart.com. The trailing 200 makes this a
+# rewrite (transparent proxy), not a 30x redirect — browser never sees the
+# backend host, so no CORS preflight is required.
+# This file is honored by Cloudflare Pages and Netlify out of the box.
+/api/*  https://network-pay-1.emergent.host/api/:splat  200
+
+# SPA fallback — every non-asset route falls back to index.html so React Router
+# can handle deep links like /admin/users or /vendor/pos on hard refresh.
+/*  /index.html  200
