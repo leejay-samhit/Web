@@ -70,8 +70,17 @@ api.interceptors.response.use(
 
       const url = original?.url || "";
       const isAdminWrite = url.includes("/admin/") || original?.method !== "get";
+
+      // Detect the backend's specific single-session-revoked reason so /login
+      // can explain to the user why they got kicked out. Without this they
+      // just see a generic redirect and assume the app broke.
+      const detail = error?.response?.data?.detail;
+      if (detail === "session_revoked") {
+        try { sessionStorage.setItem("sc_logout_reason", "session_revoked"); } catch { /* ignored */ }
+      }
+
       clearTokens();
-      window.dispatchEvent(new CustomEvent("sc:unauthorized", { detail: { url } }));
+      window.dispatchEvent(new CustomEvent("sc:unauthorized", { detail: { url, reason: detail } }));
       if (!isAdminWrite && !window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
       }

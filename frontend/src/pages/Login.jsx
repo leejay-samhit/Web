@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Info } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
@@ -11,7 +11,21 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // If a previous request was rejected because the backend revoked our
+  // session (e.g. a login on another device kicked us out), surface that
+  // explanation here so the user understands why they're back at /login.
+  useEffect(() => {
+    try {
+      const reason = sessionStorage.getItem("sc_logout_reason");
+      if (reason === "session_revoked") {
+        setNotice("Another device or browser signed in to this account, so this session was ended. (The server only allows one active session per account at a time.)");
+        sessionStorage.removeItem("sc_logout_reason");
+      }
+    } catch { /* ignore storage errors */ }
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -126,6 +140,15 @@ export default function Login() {
                 </button>
               </div>
             </div>
+            {notice && (
+              <div
+                data-testid="login-notice"
+                className="text-xs font-semibold text-[color:var(--sc-primary-700)] bg-[color:var(--sc-accent-light)] border border-[color:var(--sc-accent-light)] rounded-xl px-3 py-2 flex items-start gap-2"
+              >
+                <Info size={14} className="mt-0.5 shrink-0" />
+                <span>{notice}</span>
+              </div>
+            )}
             {error && (
               <div
                 data-testid="login-error"

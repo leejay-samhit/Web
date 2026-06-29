@@ -1,0 +1,39 @@
+{
+  "summary": "iter-12 frontend UX (session_revoked notice) tested. T1-T4 PASS (manual sessionStorage flag drives login-notice, flag is consumed, no stale, invalid-creds keeps showing login-error). T5 FAIL: when /auth/me actually returns 401 detail=session_revoked, the user lands on /login WITHOUT data-testid='login-notice' visible — because api.js fires window.location.href='/login' AFTER react-router has already redirected the user and Login.jsx has already consumed sessionStorage['sc_logout_reason']; the subsequent hard reload mounts a fresh /login whose useEffect sees an empty sessionStorage. iter-9/10/11 regressions could NOT be re-exercised: in this preview the /api/* ingress is returning 404 'Not Found' for real auth (independent of code under test) so login with the seeded credentials still fails before reaching the admin pages.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "https://slang-commerce.preview.emergentagent.com/api/auth/login", "issue": "Returns HTTP 404 'Not Found' (proxy not forwarding to network-pay-1.emergent.host). Blocks every real-auth regression test. Same infra issue flagged in iter-11.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Login + api.js interceptor race", "issue": "On a real 401 with detail=session_revoked, the user never sees data-testid='login-notice'. Sequence (verified via TEST_HOOK on sessionStorage.setItem/removeItem): (a) interceptor sets sc_logout_reason='session_revoked' AND schedules window.location.href='/login'; (b) AuthProvider state flips to unauthenticated, react-router (PrivateRoute) navigates to /login WITHOUT a hard reload, Login.jsx mounts, useEffect reads the flag, sets notice state, removes the flag; (c) the queued window.location.href fires a HARD page reload; (d) fresh Login.jsx mounts, useEffect reads empty sessionStorage, notice is NEVER shown to the user. Net: the entire UX banner — the only thing this iteration ships — is invisible in the bug scenario it was built for.", "selector": "[data-testid='login-notice']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "401 session_revoked → /login redirect", "issue": "Race between react-router redirect (PrivateRoute) and the hard reload triggered by api.js (window.location.href='/login'). The hard reload wins the timing, but Login already consumed the sessionStorage flag during the brief react-router-only render. The notice flashes for <16ms (one frame) before being wiped.", "affected_selectors": ["[data-testid='login-notice']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix the race in /app/frontend/src/lib/api.js: do NOT use window.location.href='/login' for the soft-logout path when the SPA can already react-router-navigate via the sc:unauthorized event. Option A: drop the hard redirect entirely and let AuthProvider + PrivateRoute handle the navigation (the CustomEvent is already dispatched). Option B (lower-risk): keep the hard reload but set the sessionStorage flag with a TTL/once-flag and have Login.jsx clear it ONLY when it actually renders the notice paint (e.g. inside a setTimeout(0) after setState) — but the cleanest fix is Option A.",
+    "Alternatively, persist the reason in localStorage instead of sessionStorage and have Login.jsx remove it after the notice has been displayed for at least 1s (e.g. via a setTimeout in the same useEffect). That survives both the react-router mount AND the subsequent hard reload.",
+    "Independent: restore /api/* proxy on slang-commerce.preview.emergentagent.com so real-auth regression (iter-9/10/11 system-wallet, shop-layout, products extras, header-cart/header-wishlist) can be re-exercised. Currently every /api/auth/login returns 404 in the preview ingress."
+  ],
+  "critical_code_review_comments": [
+    "api.js line 84-86 hard-redirects via window.location.href even though clearTokens() + the CustomEvent already cause AuthProvider+PrivateRoute to navigate. Two redirect paths racing = the bug above. The hard reload is also semantically wrong for an SPA — it discards all in-memory React state including the notice we JUST tried to surface.",
+    "Login.jsx useEffect calls sessionStorage.removeItem immediately on first read. That makes the flag single-shot ACROSS the entire navigation chain — so if Login mounts twice (react-router mount, then hard-reload mount) only the FIRST mount sees the flag. Either keep the flag until the user submits/leaves /login, or use a paint-confirmed removal (requestAnimationFrame).",
+    "api.js line 78 only checks detail==='session_revoked'. Backend may also return variants like 'session revoked' or 'SESSION_REVOKED' from middleware. Consider a case-insensitive contains-check or matching a small set of known reasons.",
+    "Cosmetics: the notice text says 'one active session per account'. Once the backend is fixed to allow multi-session (the actual user complaint), this copy needs to come down or it will mislead users.",
+    "Login.jsx error.response.data could also expose detail==='session_revoked' from a direct login response (e.g., 'your account is already signed in elsewhere — sign out there first'). Currently that path goes into the generic error banner, not the friendly notice."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (preview /api proxy 404, infra not code)", "frontend": "4/6 specific iter-12 assertions pass; 1 critical race fails; 1 (token_expired negative) skipped because the positive case already fails"},
+  "test_credentials": "Used /app/memory/test_credentials.md (Test@gmail.com/Just@4me, support@networkrupay.com/Nlee@1115) — both rejected with HTTP 404 'Not Found' from the preview /api proxy, NOT a credential issue.",
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reproduce the race with this exact recipe (no real backend needed): (1) await page.route('**/api/auth/me', r => r.fulfill({status:401, headers:{'content-type':'application/json'}, body:'{\"detail\":\"session_revoked\"}'})). (2) await page.add_init_script monkey-patches sessionStorage.setItem/removeItem to console.log every call. (3) localStorage.setItem('sc_token','fake'). (4) goto /shop. (5) Observe console: you will see setItem sc_logout_reason → removeItem sc_logout_reason → (page reload) → no notice. After the main agent fixes api.js to NOT hard-reload (or persists the flag past one mount), re-run and assert data-testid='login-notice' is visible AND remains visible after a 2s wait. Also retry T6 (detail='token_expired' → redirect WITHOUT notice). Skip the iter-9/10/11 regression suite until the preview /api proxy returns to working state (login currently 404).",
+  "rca of the issue": "Race condition in the session_revoked UX path. /app/frontend/src/lib/api.js sets sessionStorage['sc_logout_reason'] then unconditionally fires window.location.href='/login'. Meanwhile clearTokens() + the sc:unauthorized CustomEvent cause AuthProvider to flip to unauthenticated, PrivateRoute triggers a react-router navigate to /login, Login.jsx mounts and useEffect immediately reads + removes the sessionStorage flag (surfacing the notice via setState). One frame later the queued hard navigation actually fires — full page reload — Login.jsx remounts on a fresh DOM, sessionStorage is now empty, the notice useEffect early-exits, the user sees a blank login page with no explanation. Reproduction (verified): page.route /api/auth/me → 401 detail=session_revoked, localStorage.setItem('sc_token','x'), goto /shop. Mitigation: pick one redirect strategy in api.js (recommend dropping window.location.href and relying on the CustomEvent + AuthProvider state) OR delay/guard sessionStorage.removeItem in Login.jsx so it survives a second mount."
+}
