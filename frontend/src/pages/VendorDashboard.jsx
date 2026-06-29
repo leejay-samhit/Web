@@ -6,6 +6,7 @@ import EmptyState from "@/components/EmptyState";
 import { formatINR, formatDateTime } from "@/lib/utils";
 import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2 } from "lucide-react";
 import { log } from "@/lib/log";
+import VendorNav from "@/components/vendor/VendorNav";
 
 const TABS = [
   { key: "products", label: "Products", icon: Package },
@@ -103,6 +104,7 @@ export default function VendorDashboard() {
 
   return (
     <Layout title="Vendor dashboard">
+      <VendorNav />
       <div className="flex items-center gap-2 mb-4 font-extrabold text-[color:var(--sc-ink)]">
         <Store size={18} className="text-[color:var(--sc-primary)]" /> {stats?.vendor?.shop_name || "My shop"}
       </div>

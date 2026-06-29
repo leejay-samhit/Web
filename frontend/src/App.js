@@ -15,6 +15,12 @@ import ServiceBookings from "@/pages/ServiceBookings";
 import BecomeProvider from "@/pages/BecomeProvider";
 import BecomeVendor from "@/pages/BecomeVendor";
 import VendorDashboard from "@/pages/VendorDashboard";
+import VendorSales from "@/pages/vendor/VendorSales";
+import VendorPOS from "@/pages/vendor/VendorPOS";
+import VendorInvoices from "@/pages/vendor/VendorInvoices";
+import VendorCashSummary from "@/pages/vendor/VendorCashSummary";
+import VendorAnalytics from "@/pages/vendor/VendorAnalytics";
+import VendorSettings from "@/pages/vendor/VendorSettings";
 import Chat from "@/pages/Chat";
 import Wallet from "@/pages/Wallet";
 import Network from "@/pages/Network";
@@ -57,6 +63,12 @@ function App() {
               <Route path="/become-provider" element={userGuard(<BecomeProvider />)} />
               <Route path="/become-vendor" element={userGuard(<BecomeVendor />)} />
               <Route path="/vendor" element={userGuard(<VendorDashboard />)} />
+              <Route path="/vendor/sales" element={userGuard(<VendorSales />)} />
+              <Route path="/vendor/pos" element={userGuard(<VendorPOS />)} />
+              <Route path="/vendor/invoices" element={userGuard(<VendorInvoices />)} />
+              <Route path="/vendor/cash" element={userGuard(<VendorCashSummary />)} />
+              <Route path="/vendor/analytics" element={userGuard(<VendorAnalytics />)} />
+              <Route path="/vendor/settings" element={userGuard(<VendorSettings />)} />
               <Route path="/chat" element={userGuard(<Chat />)} />
               <Route path="/wallet" element={userGuard(<Wallet />)} />
               <Route path="/network" element={userGuard(<Network />)} />
