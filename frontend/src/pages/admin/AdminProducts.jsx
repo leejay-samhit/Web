@@ -31,7 +31,8 @@ const initial = {
   protection_summary: "",
   warranty_summary: "",
   delivery_summary: "",
-  whats_in_box: "",       // newline-separated
+  whats_in_box: "",       // newline-separated names
+  spec_tabs: "",          // structured spec tabs (one "Tab Name|Label:Value;..." per line)
 };
 
 export default function AdminProducts() {
@@ -91,6 +92,26 @@ export default function AdminProducts() {
     return out;
   };
   const toStyled = (txt) => txt ? { text: txt } : null;
+  // Parse the spec_tabs textarea into the backend's SpecTab[] shape.
+  // Format per line: "Tab Name | label1:value1; label2:value2"
+  // (separators are flexible — "|" splits tab name from rows, ";" separates rows).
+  const parseSpecTabs = (txt) => {
+    const out = [];
+    for (const line of parseLines(txt)) {
+      const [name, rowsRaw = ""] = line.split("|").map((s) => s.trim());
+      const rows = rowsRaw
+        .split(";")
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .map((p) => {
+          const [label, ...vv] = p.split(":");
+          return { label: (label || "").trim(), value: vv.join(":").trim() };
+        })
+        .filter((r) => r.label || r.value);
+      if (name || rows.length) out.push({ name: name || "", rows });
+    }
+    return out;
+  };
 
   const create = async () => {
     setSaving(true);
@@ -120,7 +141,9 @@ export default function AdminProducts() {
         protection_summary: toStyled(form.protection_summary),
         warranty_summary: toStyled(form.warranty_summary),
         delivery_summary: toStyled(form.delivery_summary),
-        whats_in_box: parseLines(form.whats_in_box).map((label) => ({ label })),
+        // Backend schema: WhatsInBoxItem = { name, image_data_url } — NOT { label }
+        whats_in_box: parseLines(form.whats_in_box).map((name) => ({ name, image_data_url: "" })),
+        spec_tabs: parseSpecTabs(form.spec_tabs),
       };
       await api.post("/admin/products", payload);
       setOpen(false);
@@ -222,7 +245,21 @@ export default function AdminProducts() {
                 <summary className="text-xs font-bold uppercase text-[color:var(--sc-ink-muted)] cursor-pointer py-1">Key features &amp; box contents</summary>
                 <div className="space-y-2 mt-2">
                   <textarea className="sc-input min-h-[60px]" data-testid="ap-sub-features" placeholder={"Key features (one per line)"} value={form.sub_features} onChange={set("sub_features")} />
-                  <textarea className="sc-input min-h-[60px]" data-testid="ap-whats-in-box" placeholder={"What's in the box (one per line)"} value={form.whats_in_box} onChange={set("whats_in_box")} />
+                  <textarea className="sc-input min-h-[60px]" data-testid="ap-whats-in-box" placeholder={"What's in the box (one item per line)"} value={form.whats_in_box} onChange={set("whats_in_box")} />
+                </div>
+              </details>
+
+              <details>
+                <summary className="text-xs font-bold uppercase text-[color:var(--sc-ink-muted)] cursor-pointer py-1">Spec tabs (advanced)</summary>
+                <div className="space-y-1 mt-2">
+                  <textarea
+                    className="sc-input min-h-[80px] font-mono text-xs"
+                    data-testid="ap-spec-tabs"
+                    placeholder={"One tab per line.\nFormat: Tab Name | Label1:Value1; Label2:Value2\nExample:\nGeneral | Color:Black; Weight:250g\nDisplay | Size:6.5; Refresh:120Hz"}
+                    value={form.spec_tabs}
+                    onChange={set("spec_tabs")}
+                  />
+                  <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Each tab becomes a section on the product detail page.</div>
                 </div>
               </details>
 

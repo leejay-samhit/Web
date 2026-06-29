@@ -6,7 +6,7 @@ import { formatINR, formatDateTime } from "@/lib/utils";
 import {
   Loader2, Plus, RefreshCw, Download, AlertTriangle, CheckCircle2,
   TrendingUp, TrendingDown, Landmark, Wallet, Receipt, ShieldAlert,
-  ArrowDownToLine, FileSpreadsheet,
+  ArrowDownToLine, FileSpreadsheet, ChevronRight, X,
 } from "lucide-react";
 import { log } from "@/lib/log";
 
@@ -30,23 +30,107 @@ function StatRow({ label, value, kind = "money" }) {
   );
 }
 
-function GroupCard({ group, data }) {
+function GroupCard({ group, data, onClick }) {
   const Icon = group.icon;
   const d = data || {};
   return (
-    <div className="sc-card p-4" data-testid={`g-${group.key}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className="sc-card p-4 text-left hover:shadow-md hover:-translate-y-0.5 transition-all w-full"
+      data-testid={`g-${group.key}`}
+    >
       <div className="flex items-center gap-2 mb-2">
         <div className="w-9 h-9 rounded-xl bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary)] grid place-items-center">
           <Icon size={16} />
         </div>
-        <div className="font-extrabold text-sm">{group.title}</div>
+        <div className="font-extrabold text-sm flex-1">{group.title}</div>
+        <ChevronRight size={14} className="text-[color:var(--sc-ink-muted)]" />
       </div>
       <div className="text-2xl font-extrabold mb-1">{formatINR(d[group.main] || 0)}</div>
       <div className="text-[10px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] mb-2">{group.main.replace(/_/g, " ")}</div>
       <div className="space-y-0.5">
         {group.fields.map(([k, label]) => (
-          <StatRow key={k} label={label} value={d[k]} kind={typeof d[k] === "number" && k.includes("count") || k.includes("users") ? "count" : "money"} />
+          <StatRow key={k} label={label} value={d[k]} kind={(typeof d[k] === "number" && k.includes("count")) || k.includes("users") ? "count" : "money"} />
         ))}
+      </div>
+      <div className="text-[10px] text-[color:var(--sc-primary)] mt-2 font-semibold">Tap to view transactions →</div>
+    </button>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Group-transactions drill-in modal                                          */
+/* -------------------------------------------------------------------------- */
+function GroupTxnsModal({ group, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const { data: d } = await api.get(`/admin/finance/groups/${group.key}/transactions`, { params: { limit: 100 } });
+        if (!cancelled) setData(d);
+      } catch (e) {
+        if (!cancelled) setError(e?.response?.data?.detail || "Could not load transactions.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [group.key]);
+
+  const items = data?.items || [];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 grid place-items-center p-4" data-testid="g-txns-modal">
+      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col sc-fade-in">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[color:var(--sc-border)]">
+          <div>
+            <div className="font-extrabold">{data?.title || group.title}</div>
+            <div className="text-xs text-[color:var(--sc-ink-muted)]">
+              {items.length} transactions · subtotal <span className="font-semibold">{formatINR(data?.subtotal || 0)}</span>
+            </div>
+          </div>
+          <button onClick={onClose} data-testid="g-txns-close" className="text-[color:var(--sc-ink-muted)]"><X size={18} /></button>
+        </div>
+        <div className="overflow-y-auto p-4">
+          {loading ? <Spinner /> : error ? (
+            <div className="text-sm font-semibold text-[color:var(--sc-error)] py-6 text-center">{error}</div>
+          ) : items.length === 0 ? (
+            <div className="text-sm text-[color:var(--sc-ink-muted)] py-6 text-center">No transactions in this group yet.</div>
+          ) : (
+            <table className="w-full text-xs" data-testid="g-txns-table">
+              <thead className="bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)] sticky top-0">
+                <tr>
+                  <th className="text-left px-2 py-2">When</th>
+                  <th className="text-left px-2 py-2">Type</th>
+                  <th className="text-left px-2 py-2">Description</th>
+                  <th className="text-left px-2 py-2">Status</th>
+                  <th className="text-right px-2 py-2">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((t) => (
+                  <tr key={t.id} className="border-t border-[color:var(--sc-border)]" data-testid={`g-txn-${t.id}`}>
+                    <td className="px-2 py-2 text-[color:var(--sc-ink-muted)] whitespace-nowrap">{formatDateTime(t.created_at)}</td>
+                    <td className="px-2 py-2"><span className="sc-chip capitalize">{(t.type || "").replace(/_/g, " ")}</span></td>
+                    <td className="px-2 py-2">{t.description || "—"}</td>
+                    <td className="px-2 py-2">
+                      <span className={`sc-chip ${t.status === "success" ? "" : ""}`} style={t.status === "success" ? { background: "#E7F6EC", color: "#0F6E4F" } : { background: "#FBEDE2", color: "#A0522D" }}>
+                        {t.status || "—"}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-right font-semibold">{formatINR(t.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -84,6 +168,7 @@ export default function AdminSystemWallet() {
 
   const [acting, setActing] = useState("");
   const [msg, setMsg] = useState("");
+  const [groupModal, setGroupModal] = useState(null); // group object
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -196,8 +281,10 @@ export default function AdminSystemWallet() {
       {/* 8 Group ledger */}
       <div className="font-extrabold mb-2 text-sm uppercase tracking-wider text-[color:var(--sc-ink-muted)]">8 Group Ledger</div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5" data-testid="sw-groups">
-        {GROUPS.map((g) => <GroupCard key={g.key} group={g} data={nw?.[g.key]} />)}
+        {GROUPS.map((g) => <GroupCard key={g.key} group={g} data={nw?.[g.key]} onClick={() => setGroupModal(g)} />)}
       </div>
+
+      {groupModal && <GroupTxnsModal group={groupModal} onClose={() => setGroupModal(null)} />}
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2 mb-5">
