@@ -11,15 +11,31 @@ import {
 import { log } from "@/lib/log";
 
 const GROUPS = [
-  { key: "group_1_revenue",            title: "1. Revenue Ledger",        icon: TrendingUp,    main: "gross",                fields: [["registration", "Registration"], ["service", "Service"], ["platform_fee", "Platform fee"], ["shop", "Shop"], ["reversed", "Reversed"]] },
-  { key: "group_2_liability",          title: "2. User Liability Wallet", icon: Wallet,        main: "available_user_balance", fields: [["total_reward_credits", "Reward credits"], ["total_withdrawals_settled", "Withdrawals settled"]] },
-  { key: "group_3_gst",                title: "3. GST Ledger",            icon: Receipt,       main: "payable",              fields: [["collected", "Collected"], ["paid", "Paid"]] },
-  { key: "group_4_platform_fee",       title: "4. Platform Fee Ledger",   icon: Landmark,      main: "collected",            fields: [] },
-  { key: "group_5_expenses",           title: "5. Expense Ledger",        icon: TrendingDown,  main: "total",                fields: [["gst_paid_excluded", "GST paid excluded"]] },
-  { key: "group_6_pending_withdrawals",title: "6. Pending Withdrawals",   icon: ArrowDownToLine, main: "pending_amount",     fields: [] },
-  { key: "group_7_bank",               title: "7. Bank Ledger",           icon: Landmark,      main: "balance",              fields: [["credits", "Credits"], ["debits", "Debits"]] },
-  { key: "group_8_refunds",            title: "8. Refund Ledger",         icon: ShieldAlert,   main: "total",                fields: [["count", "Count"], ["clawback_total", "Clawback"], ["platform_fee_reversed", "PF reversed"], ["outstanding_debt", "Outstanding debt"], ["outstanding_debt_users", "Debt users"]] },
+  { key: "group_1_revenue",            title: "1. Revenue Ledger",        icon: TrendingUp,    main: "gross",                fields: [["registration", "Registration"], ["service", "Service"], ["shop", "Shop"], ["reversed", "Reversed"]], formula: "gross = registration + service + shop" },
+  { key: "group_2_liability",          title: "2. User Liability Wallet", icon: Wallet,        main: "available_user_balance", fields: [["total_reward_credits", "Reward credits"], ["total_withdrawals_settled", "Withdrawals settled"]], formula: "available = credits − withdrawals settled − holds" },
+  { key: "group_3_gst",                title: "3. GST Ledger",            icon: Receipt,       main: "payable",              fields: [["collected", "Collected"], ["paid", "Paid"]], formula: "payable = collected − paid" },
+  { key: "group_4_platform_fee",       title: "4. Platform Fee Ledger",   icon: Landmark,      main: "collected",            fields: [], formula: "Platform-fee revenue (separate from Group 1 gross)" },
+  { key: "group_5_expenses",           title: "5. Expense Ledger",        icon: TrendingDown,  main: "total",                fields: [["gst_paid_excluded", "GST paid excluded"]], formula: "total = sum of approved expenses" },
+  { key: "group_6_pending_withdrawals",title: "6. Pending Withdrawals",   icon: ArrowDownToLine, main: "pending_amount",     fields: [], formula: "Unpaid withdrawal requests awaiting bank disbursal" },
+  { key: "group_7_bank",               title: "7. Bank Ledger",           icon: Landmark,      main: "balance",              fields: [["credits", "Credits"], ["debits", "Debits"]], formula: "balance = credits − debits" },
+  { key: "group_8_refunds",            title: "8. Refund Ledger",         icon: ShieldAlert,   main: "total",                fields: [["count", "Count"], ["clawback_total", "Clawback"], ["platform_fee_reversed", "PF reversed"], ["outstanding_debt", "Outstanding debt"], ["outstanding_debt_users", "Debt users"]], formula: "total = sum of refunded amounts" },
 ];
+
+// Recompute the headline value client-side from the additive sub-stats, so we
+// can flag any math drift between the sum-of-fields and the backend headline.
+// (Subtractive groups like GST and Bank are also handled explicitly.)
+function recomputeMain(group, d) {
+  if (!d) return null;
+  switch (group.key) {
+    case "group_1_revenue":   return (d.registration || 0) + (d.service || 0) + (d.shop || 0);
+    case "group_3_gst":       return (d.collected || 0) - (d.paid || 0);
+    case "group_5_expenses":  return null; // backend-sum; no client recompute
+    case "group_7_bank":      return (d.credits || 0) - (d.debits || 0);
+    default: return null;
+  }
+}
+
+const closeEnough = (a, b, eps = 0.01) => Math.abs((a || 0) - (b || 0)) <= eps;
 
 function StatRow({ label, value, kind = "money" }) {
   return (
@@ -33,6 +49,9 @@ function StatRow({ label, value, kind = "money" }) {
 function GroupCard({ group, data, onClick }) {
   const Icon = group.icon;
   const d = data || {};
+  const headline = d[group.main] || 0;
+  const recomputed = recomputeMain(group, d);
+  const verified = recomputed === null ? null : closeEnough(recomputed, headline);
   return (
     <button
       type="button"
@@ -47,14 +66,23 @@ function GroupCard({ group, data, onClick }) {
         <div className="font-extrabold text-sm flex-1">{group.title}</div>
         <ChevronRight size={14} className="text-[color:var(--sc-ink-muted)]" />
       </div>
-      <div className="text-2xl font-extrabold mb-1">{formatINR(d[group.main] || 0)}</div>
-      <div className="text-[10px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] mb-2">{group.main.replace(/_/g, " ")}</div>
+      <div className="text-2xl font-extrabold mb-1">{formatINR(headline)}</div>
+      <div className="text-[10px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] mb-2 flex items-center gap-1.5">
+        <span>{group.main.replace(/_/g, " ")}</span>
+        {verified === true && (
+          <span className="sc-chip" data-testid={`g-${group.key}-verify-ok`} style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span>
+        )}
+        {verified === false && (
+          <span className="sc-chip" data-testid={`g-${group.key}-verify-fail`} style={{ background: "#FDECEC", color: "#B42318" }}>Σ ⚠ {formatINR(recomputed)}</span>
+        )}
+      </div>
       <div className="space-y-0.5">
         {group.fields.map(([k, label]) => (
           <StatRow key={k} label={label} value={d[k]} kind={(typeof d[k] === "number" && k.includes("count")) || k.includes("users") ? "count" : "money"} />
         ))}
       </div>
-      <div className="text-[10px] text-[color:var(--sc-primary)] mt-2 font-semibold">Tap to view transactions →</div>
+      <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-2 italic">{group.formula}</div>
+      <div className="text-[10px] text-[color:var(--sc-primary)] mt-1 font-semibold">Tap to view transactions →</div>
     </button>
   );
 }
@@ -245,6 +273,14 @@ export default function AdminSystemWallet() {
 
   const bt = nw?.bank_tally || {};
   const ms = nw?.master || {};
+  // Client-side reconciliation: re-derive the formula from primitives.
+  const btNetExpected = (bt.inflow || 0) - (bt.outflow || 0);
+  const btNetOk = closeEnough(btNetExpected, bt.net);
+  const c = ms.components || {};
+  const nwExpected = (c.bank_tally_net || 0) + (c.pending_collections || 0)
+                   - (c.user_wallet_balance || 0) - (c.pending_withdrawals || 0)
+                   - (c.gst_payable || 0);
+  const nwOk = closeEnough(nwExpected, ms.net_worth);
 
   return (
     <Layout title="Admin · System wallet · Treasury">
@@ -257,7 +293,7 @@ export default function AdminSystemWallet() {
           <div className="grid grid-cols-2 gap-3">
             <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Inflow</div><div className="text-xl font-extrabold text-green-700">{formatINR(bt.inflow)}</div></div>
             <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Outflow</div><div className="text-xl font-extrabold text-red-700">{formatINR(bt.outflow)}</div></div>
-            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Net</div><div className="text-2xl font-extrabold">{formatINR(bt.net)}</div></div>
+            <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Net</div><div className="text-2xl font-extrabold flex items-center gap-1.5">{formatINR(bt.net)}{btNetOk ? <span data-testid="bt-verify-ok" className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span> : <span data-testid="bt-verify-fail" className="sc-chip" style={{ background: "#FDECEC", color: "#B42318" }}>Σ ⚠ {formatINR(btNetExpected)}</span>}</div></div>
             <div><div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">UTR deposits</div><div className="text-xl font-extrabold">{formatINR(bt.utr_deposits)}</div></div>
             <div className="col-span-2 text-[11px] text-[color:var(--sc-ink-muted)]">Reversals {bt.reversals_count ?? 0} · Adjustments {bt.adjustments_count ?? 0} · {bt.adjustments_amount ? `Δ ${formatINR(bt.adjustments_amount)}` : ""}</div>
             <div className="col-span-2 text-[10px] text-[color:var(--sc-ink-muted)] mt-1 italic">{bt.formula}</div>
@@ -266,7 +302,7 @@ export default function AdminSystemWallet() {
 
         <div className="sc-card p-5" data-testid="sw-master">
           <div className="font-extrabold mb-3 flex items-center gap-2"><TrendingUp size={16} /> Company net worth</div>
-          <div className="text-3xl font-extrabold text-[color:var(--sc-primary)] mb-2">{formatINR(ms.net_worth)}</div>
+          <div className="text-3xl font-extrabold text-[color:var(--sc-primary)] mb-2 flex items-center gap-2">{formatINR(ms.net_worth)}{nwOk ? <span data-testid="nw-verify-ok" className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span> : <span data-testid="nw-verify-fail" className="sc-chip" style={{ background: "#FDECEC", color: "#B42318" }}>Σ ⚠ {formatINR(nwExpected)}</span>}</div>
           <div className="space-y-0.5 text-xs">
             <StatRow label="Bank tally net" value={ms.components?.bank_tally_net} />
             <StatRow label="Pending collections" value={ms.components?.pending_collections} />
