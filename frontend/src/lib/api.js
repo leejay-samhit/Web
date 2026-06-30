@@ -1,31 +1,13 @@
 import axios from "axios";
 import { getToken, getRefresh, setTokens, clearTokens } from "@/lib/tokenStore";
 import { API_TIMEOUT_MS, HTTP_UNAUTHORIZED } from "@/constants/config";
-import { log } from "@/lib/log";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// Backend URL is intentionally hardcoded here. The Emergent Deploy pipeline was
+// failing to bake REACT_APP_BACKEND_URL into the slangcart.com production build
+// reliably (env-var save was silently no-op'd), so we pin the URL in source.
+// Backend lives in a separate Emergent job; mobile app talks to the same host.
+const BACKEND_URL = "https://network-pay-1.emergent.host";
 export const API_BASE = `${BACKEND_URL}/api`;
-
-// Startup guard: catch the recurring '.env drift' bug where REACT_APP_BACKEND_URL
-// gets reset to the frontend's own preview URL. When that happens every /api/*
-// call returns 404 and login shows "Not Found". This makes the failure mode
-// obvious in the browser console.
-if (typeof window !== "undefined" && BACKEND_URL) {
-  try {
-    const backendHost = new URL(BACKEND_URL).host;
-    const currentHost = window.location.host;
-    if (backendHost === currentHost) {
-      log.error(
-        "[Slangcart] REACT_APP_BACKEND_URL points to the frontend's own host. " +
-          "API calls will 404. Set it to the external backend (e.g. https://network-pay-1.emergent.host)."
-      );
-    }
-  } catch (e) {
-    // Malformed REACT_APP_BACKEND_URL — surface to console so devs notice.
-    // axios will still throw a clear network error on the first actual call.
-    log.error("[Slangcart] Invalid REACT_APP_BACKEND_URL", BACKEND_URL, e);
-  }
-}
 
 const api = axios.create({
   baseURL: API_BASE,
