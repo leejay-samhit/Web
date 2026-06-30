@@ -20,6 +20,9 @@ export default function VendorInvoices() {
   const [maxAmt, setMaxAmt] = useState("");
   const [view, setView] = useState(null);
 
+  // `bump` is an intentional manual re-render trigger after local-storage
+  // writes — eslint can't see the side-effect, so silence the false positive.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const all = useMemo(() => listInvoices(uid), [uid, bump]);
   const filtered = useMemo(() => {
     return all.filter((i) => {

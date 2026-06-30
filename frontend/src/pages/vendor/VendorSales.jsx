@@ -34,6 +34,10 @@ export default function VendorSales() {
     const id = setInterval(onFocus, 30000);
     return () => { window.removeEventListener("focus", onFocus); clearInterval(id); };
   }, []);
+  // `tick` is an intentional manual re-render trigger (focus + 30s interval)
+  // so KPIs refresh against the latest localStorage state. eslint can't see
+  // the side-effect, so silence the false positive.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const k = useMemo(() => getDashboardKpis(uid), [uid, tick]);
 
   return (
