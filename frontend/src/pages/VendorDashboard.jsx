@@ -4,7 +4,7 @@ import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import { formatINR, formatDateTime } from "@/lib/utils";
-import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2 } from "lucide-react";
+import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2 } from "lucide-react";
 import { log } from "@/lib/log";
 import VendorNav from "@/components/vendor/VendorNav";
 
@@ -41,9 +41,11 @@ export default function VendorDashboard() {
   const [sales, setSales] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ name: "", price: 0, image_url: "", description: "", stock: 0, brand: "", category: "", is_published: true });
-  const [creating, setCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null); // null = create mode, id = edit mode
+  const emptyForm = { name: "", price: 0, image_url: "", description: "", stock: 0, brand: "", category: "", is_published: true };
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -75,18 +77,49 @@ export default function VendorDashboard() {
     r.readAsDataURL(f);
   };
 
-  const createProduct = async () => {
-    setCreating(true);
+  const openNew = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowForm(true);
+  };
+  const openEdit = (p) => {
+    setEditingId(p.id);
+    setForm({
+      name: p.name || "",
+      price: p.price ?? 0,
+      image_url: p.image_url || "",
+      description: p.description || "",
+      stock: p.stock ?? 0,
+      brand: p.brand || "",
+      category: p.category || "",
+      is_published: p.is_published !== false,
+    });
+    setShowForm(true);
+  };
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  };
+
+  const submitProduct = async () => {
+    setSaving(true);
     try {
-      await api.post("/vendor/me/products", { ...form, price: Number(form.price), stock: Number(form.stock) });
-      setShowNew(false);
-      setForm({ name: "", price: 0, image_url: "", description: "", stock: 0, brand: "", category: "", is_published: true });
+      const payload = { ...form, price: Number(form.price), stock: Number(form.stock) };
+      if (editingId) {
+        // PATCH updates only the sent fields — backend already exposes this
+        // route (used by the POS to decrement stock).
+        await api.patch(`/vendor/me/products/${editingId}`, payload);
+      } else {
+        await api.post("/vendor/me/products", payload);
+      }
+      closeForm();
       loadAll();
     } catch (error) {
-      log.error("VendorDashboard.create failed", error);
-      alert(error?.response?.data?.detail || "Failed to create");
+      log.error("VendorDashboard.save failed", error);
+      alert(error?.response?.data?.detail || (editingId ? "Failed to update" : "Failed to create"));
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
@@ -126,7 +159,7 @@ export default function VendorDashboard() {
       {tab === "products" && (
         <>
           <div className="flex justify-end mb-2">
-            <button data-testid="vd-new" onClick={() => setShowNew(true)} className="sc-btn-primary inline-flex items-center gap-1.5 text-sm">
+            <button data-testid="vd-new" onClick={openNew} className="sc-btn-primary inline-flex items-center gap-1.5 text-sm">
               <Plus size={14} /> Add product
             </button>
           </div>
@@ -142,7 +175,22 @@ export default function VendorDashboard() {
                     <div className="text-xs text-[color:var(--sc-ink-muted)] mt-0.5">Stock: {p.stock ?? "—"}</div>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="font-extrabold">{formatINR(p.price)}</span>
-                      <button onClick={() => del(p.id)} data-testid={`vd-del-${p.id}`} className="text-[color:var(--sc-error)] text-xs font-semibold">Delete</button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => openEdit(p)}
+                        data-testid={`vd-edit-${p.id}`}
+                        className="inline-flex items-center justify-center gap-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-[color:var(--sc-border)] text-[color:var(--sc-primary-700)] hover:bg-[color:var(--sc-accent-light)] transition-colors"
+                      >
+                        <Pencil size={12} /> Edit
+                      </button>
+                      <button
+                        onClick={() => del(p.id)}
+                        data-testid={`vd-del-${p.id}`}
+                        className="inline-flex items-center justify-center gap-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                      >
+                        <Trash2 size={12} /> Delete
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -191,26 +239,36 @@ export default function VendorDashboard() {
           )
       )}
 
-      {showNew && (
+      {showForm && (
         <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg p-5 sc-fade-in" data-testid="vd-new-modal">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-5 sc-fade-in" data-testid="vd-form-modal">
             <div className="flex justify-between items-center mb-3">
-              <div className="font-extrabold">New product</div>
-              <button onClick={() => setShowNew(false)}><X size={18} /></button>
+              <div className="font-extrabold">{editingId ? "Edit product" : "New product"}</div>
+              <button onClick={closeForm} aria-label="Close" data-testid="vd-form-close"><X size={18} /></button>
             </div>
             <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
-              <input className="sc-input" data-testid="vd-new-name" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input className="sc-input" data-testid="vd-form-name" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               <div className="grid grid-cols-2 gap-2">
-                <input className="sc-input" data-testid="vd-new-price" type="number" placeholder="Price (₹)" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-                <input className="sc-input" data-testid="vd-new-stock" type="number" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+                <input className="sc-input" data-testid="vd-form-price" type="number" placeholder="Price (₹)" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
+                <input className="sc-input" data-testid="vd-form-stock" type="number" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
               </div>
-              <input className="sc-input" data-testid="vd-new-brand" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-              <input className="sc-input" data-testid="vd-new-category" placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-              <textarea className="sc-input min-h-[80px]" data-testid="vd-new-desc" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-              <input type="file" accept="image/*" onChange={onImg} data-testid="vd-new-img" className="block text-sm" />
+              <input className="sc-input" data-testid="vd-form-brand" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+              <input className="sc-input" data-testid="vd-form-category" placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+              <textarea className="sc-input min-h-[80px]" data-testid="vd-form-desc" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <input type="file" accept="image/*" onChange={onImg} data-testid="vd-form-img" className="block text-sm" />
               {form.image_url && <img alt="" src={form.image_url} className="h-20 rounded-lg border border-[color:var(--sc-border)]" />}
-              <button data-testid="vd-new-save" onClick={createProduct} disabled={creating || !form.name || !form.price} className="sc-btn-primary inline-flex items-center gap-1.5 w-full justify-center">
-                {creating && <Loader2 size={14} className="animate-spin" />} Create
+              <label className="flex items-center gap-2 text-sm text-[color:var(--sc-ink)]">
+                <input
+                  type="checkbox"
+                  checked={form.is_published}
+                  onChange={(e) => setForm({ ...form, is_published: e.target.checked })}
+                  data-testid="vd-form-published"
+                />
+                Published (visible in Shop)
+              </label>
+              <button data-testid="vd-form-save" onClick={submitProduct} disabled={saving || !form.name || !form.price} className="sc-btn-primary inline-flex items-center gap-1.5 w-full justify-center">
+                {saving && <Loader2 size={14} className="animate-spin" />}
+                {editingId ? "Save changes" : "Create"}
               </button>
             </div>
           </div>
