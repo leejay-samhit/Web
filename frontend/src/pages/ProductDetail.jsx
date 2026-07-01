@@ -44,9 +44,9 @@ function Gallery({ images, name }) {
   };
 
   return (
-    <div className="lg:sticky lg:top-24 space-y-3" data-testid="pd-gallery">
+    <div className="lg:sticky lg:top-24 max-w-md mx-auto lg:mx-0 space-y-3 w-full" data-testid="pd-gallery">
       <div
-        className="relative aspect-square rounded-3xl overflow-hidden bg-gradient-to-br from-[color:var(--sc-accent-light)] to-white border border-[color:var(--sc-border)] group"
+        className="relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-[color:var(--sc-accent-light)] to-white border border-[color:var(--sc-border)]"
         onMouseEnter={() => setZoom((z) => ({ ...z, on: true }))}
         onMouseLeave={() => setZoom((z) => ({ ...z, on: false }))}
         onMouseMove={onMove}
@@ -55,16 +55,16 @@ function Gallery({ images, name }) {
           <img
             alt={name}
             src={src}
-            className="w-full h-full object-contain p-6 transition-transform duration-300"
+            className="w-full h-full object-contain p-3 transition-transform duration-300"
             style={{
-              transform: zoom.on ? `scale(1.6)` : "scale(1)",
+              transform: zoom.on ? `scale(1.5)` : "scale(1)",
               transformOrigin: `${zoom.x}% ${zoom.y}%`,
             }}
             data-testid="pd-image"
           />
         ) : (
           <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]/40">
-            <ShoppingBag size={80} />
+            <ShoppingBag size={72} />
           </div>
         )}
         {zoom.on && src && (
@@ -525,22 +525,26 @@ export default function ProductDetail() {
       {!loading && (error || !product) && <ProductErrorCard error={error} />}
       {!loading && product && (
         <div className="sc-fade-in" data-testid="pd-page">
-          <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-start">
-            <Gallery images={images} name={product.name} />
-            <ProductInfo
-              product={product}
-              busy={busy}
-              inCart={inCart}
-              saved={saved}
-              interested={interested}
-              qty={qty}
-              setQty={setQty}
-              onAdd={handleAdd}
-              onBuyNow={buyNow}
-              onToggleSave={toggleSave}
-              onToggleInterested={toggleInterested}
-              onShare={onShare}
-            />
+          <div className="grid lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-5">
+              <Gallery images={images} name={product.name} />
+            </div>
+            <div className="lg:col-span-7">
+              <ProductInfo
+                product={product}
+                busy={busy}
+                inCart={inCart}
+                saved={saved}
+                interested={interested}
+                qty={qty}
+                setQty={setQty}
+                onAdd={handleAdd}
+                onBuyNow={buyNow}
+                onToggleSave={toggleSave}
+                onToggleInterested={toggleInterested}
+                onShare={onShare}
+              />
+            </div>
           </div>
           <DetailsTabs product={product} />
         </div>
