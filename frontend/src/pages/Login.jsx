@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff, Loader2, Info } from "lucide-react";
+import { Eye, EyeOff, Loader2, Info, Download } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
@@ -97,16 +97,18 @@ export default function Login() {
 
       {/* Right login form */}
       <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
-        <div className="w-full max-w-md sc-fade-in">
+        <div className="w-full max-w-lg sc-fade-in">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-[color:var(--sc-primary)] text-white grid place-items-center font-extrabold">
+            <Link to="/" className="w-10 h-10 rounded-xl bg-[color:var(--sc-primary)] text-white grid place-items-center font-extrabold">
               S
-            </div>
+            </Link>
             <div>
               <div className="font-extrabold text-[color:var(--sc-ink)]">Slangcart</div>
               <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Shop · Service · Connect</div>
             </div>
           </div>
+          {/* Glass login card — increased padding and softer shadow. */}
+          <div className="rounded-3xl bg-white/80 backdrop-blur-xl border border-white shadow-[0_30px_80px_-30px_rgba(15,110,79,0.35)] p-8 sm:p-10">
           <h1 className="text-3xl font-extrabold text-[color:var(--sc-ink)]">Welcome back</h1>
           <p className="text-[color:var(--sc-ink-muted)] mt-1">Sign in to your Slangcart account.</p>
 
@@ -162,20 +164,46 @@ export default function Login() {
                 {error}
               </div>
             )}
+            <div className="flex items-center justify-between">
+              <div />
+              <Link
+                to="/legal/forgot-password"
+                data-testid="login-forgot"
+                className="text-xs font-semibold text-[color:var(--sc-primary)] hover:text-[color:var(--sc-primary-700)]"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <button
               data-testid="login-submit"
               disabled={loading}
-              className="sc-btn-primary w-full justify-center flex items-center gap-2"
+              className="sc-btn-primary w-full justify-center flex items-center gap-2 py-3"
             >
               {loading && <Loader2 size={16} className="animate-spin" />}
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
 
-          <div className="mt-6 text-sm text-[color:var(--sc-ink-muted)]">
-            New to Slangcart?{" "}
-            <Link data-testid="login-go-register" to="/register" className="font-semibold text-[color:var(--sc-primary)]">
-              Create an account
+          {/* Register / Create Account link intentionally removed —
+              new users must download the app to register. */}
+          <div className="mt-6 pt-6 border-t border-[color:var(--sc-border)]">
+            <div className="text-xs text-[color:var(--sc-ink-muted)] mb-2 text-center">
+              New to Slangcart? Register through the app.
+            </div>
+            <a
+              href="https://play.google.com/store/apps/details?id=com.slangcart.app"
+              target="_blank"
+              rel="noreferrer"
+              data-testid="login-download-app"
+              className="sc-btn-outline w-full justify-center flex items-center gap-2 py-3 bg-white"
+            >
+              <Download size={16} /> Download App
+            </a>
+          </div>
+          </div>
+          <div className="mt-6 text-center text-xs text-[color:var(--sc-ink-muted)]">
+            <Link to="/" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="login-back-home">
+              ← Back to slangcart.com
             </Link>
           </div>
         </div>

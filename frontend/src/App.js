@@ -5,6 +5,7 @@ import { CartProvider } from "@/context/CartContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Shop from "@/pages/Shop";
 import ProductDetail from "@/pages/ProductDetail";
@@ -49,8 +50,9 @@ function App() {
               {/* Public legal pages */}
               <Route path="/legal/:kind" element={<Legal />} />
 
-              {/* User area */}
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              {/* Public marketing landing page — authenticated users are
+                  auto-forwarded to /dashboard inside <Landing/>. */}
+              <Route path="/" element={<Landing />} />
               <Route path="/dashboard" element={userGuard(<Dashboard />)} />
               <Route path="/shop" element={userGuard(<Shop />)} />
               <Route path="/product/:id" element={userGuard(<ProductDetail />)} />
