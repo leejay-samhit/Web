@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { getCmsSync, loadCms } from "@/lib/landingCms";
 import {
   Menu, X, ArrowRight, Download, Store, ShoppingBag, Wrench, LogIn,
   Zap, ScanLine, Package, Users, BarChart3, FileText, Boxes, UsersRound, Cloud,
@@ -9,7 +10,7 @@ import {
   Shield, Clock3, CreditCard, Bell, Layers, TrendingUp,
   Phone, Mail, MessageCircle, Send, Instagram, Facebook, Youtube, Twitter,
   Briefcase, GraduationCap, Rocket, Coffee, Award,
-  ChevronDown, CheckCircle2, QrCode, Play,
+  ChevronDown, CheckCircle2,
 } from "lucide-react";
 
 /* ---------- Small utility components ------------------------------- */
@@ -67,7 +68,27 @@ const NAV_LINKS = [
   { href: "#contact", label: "Contact" },
 ];
 
-function TopNav() {
+/** Shared "Download App" anchor — real APK download via HTML5 download attr. */
+function DownloadBtn({ cms, size = "sm", testid, children }) {
+  return (
+    <a
+      href={cms.apk_url}
+      download={cms.apk_filename || ""}
+      className={
+        size === "lg"
+          ? "sc-btn-primary inline-flex items-center gap-2 text-base px-5 py-3 shadow-[0_10px_30px_-10px_rgba(15,110,79,0.55)]"
+          : "sc-btn-primary inline-flex items-center gap-1.5 text-sm py-2 px-3.5"
+      }
+      data-testid={testid}
+    >
+      <Download size={size === "lg" ? 18 : 15} />
+      {children || "Download App"}
+      {size === "lg" && <ArrowRight size={16} />}
+    </a>
+  );
+}
+
+function TopNav({ cms }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -93,7 +114,7 @@ function TopNav() {
           </div>
           <div className="leading-tight">
             <div className="font-extrabold text-[color:var(--sc-ink)]">Slangcart</div>
-            <div className="text-[10px] text-[color:var(--sc-ink-muted)] tracking-wider uppercase">Shop · Service · Connect</div>
+            <div className="text-[10px] text-[color:var(--sc-ink-muted)] tracking-wider uppercase">{cms.brand_tagline}</div>
           </div>
         </Link>
 
@@ -119,7 +140,8 @@ function TopNav() {
             <LogIn size={15} /> Sign in
           </Link>
           <a
-            href="#download"
+            href={cms.apk_url}
+            download={cms.apk_filename || ""}
             className="hidden sm:inline-flex items-center gap-1.5 sc-btn-primary text-sm py-2 px-3.5"
             data-testid="nav-download"
           >
@@ -153,7 +175,13 @@ function TopNav() {
               <Link to="/login" className="flex-1 sc-btn-outline text-sm" onClick={() => setOpen(false)} data-testid="nav-signin-mobile">
                 Sign in
               </Link>
-              <a href="#download" className="flex-1 sc-btn-primary text-sm text-center" onClick={() => setOpen(false)} data-testid="nav-download-mobile">
+              <a
+                href={cms.apk_url}
+                download={cms.apk_filename || ""}
+                className="flex-1 sc-btn-primary text-sm text-center"
+                onClick={() => setOpen(false)}
+                data-testid="nav-download-mobile"
+              >
                 Download
               </a>
             </div>
@@ -166,7 +194,7 @@ function TopNav() {
 
 /* ---------- Hero --------------------------------------------------- */
 
-function Hero() {
+function Hero({ cms }) {
   return (
     <section className="relative pt-28 sm:pt-32 pb-16 overflow-hidden" data-testid="hero">
       {/* soft radial background */}
@@ -176,40 +204,34 @@ function Hero() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-10 items-center">
         <div className="lg:col-span-6 sc-fade-in">
-          <SectionTag>All-in-one commerce platform</SectionTag>
+          <SectionTag>{cms.hero_eyebrow}</SectionTag>
           <h1 className="mt-5 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-[color:var(--sc-ink)] leading-[1.02]">
-            Run your <span className="text-[color:var(--sc-primary)]">shop</span>,
+            {cms.hero_title_line1}
             <br />
-            book <span className="text-[color:var(--sc-primary)]">services</span>,
+            {cms.hero_title_line2}
             <br />
-            grow your <span className="text-[color:var(--sc-primary)]">network</span>.
+            {cms.hero_title_line3}
           </h1>
           <p className="mt-6 text-lg text-[color:var(--sc-ink-muted)] max-w-xl leading-relaxed">
-            Slangcart brings GST billing, an online shop, a local service marketplace,
-            and a referral wallet into a single app — trusted by retailers, technicians and
-            customers across India.
+            {cms.hero_subtitle}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a
-              href="#download"
-              className="sc-btn-primary inline-flex items-center gap-2 text-base px-5 py-3 shadow-[0_10px_30px_-10px_rgba(15,110,79,0.55)]"
-              data-testid="hero-download"
-            >
-              <Download size={18} /> Download App <ArrowRight size={16} />
-            </a>
+            <DownloadBtn cms={cms} size="lg" testid="hero-download">
+              {cms.hero_cta_primary}
+            </DownloadBtn>
             <Link
               to="/login"
               className="sc-btn-outline inline-flex items-center gap-2 text-base px-5 py-3 bg-white"
               data-testid="hero-signin"
             >
-              <LogIn size={16} /> Sign in
+              <LogIn size={16} /> {cms.hero_cta_secondary}
             </Link>
           </div>
           <div className="mt-8 grid grid-cols-3 max-w-md gap-3">
             {[
-              { k: "10k+", v: "Retail bills / day" },
-              { k: "50+", v: "Service categories" },
-              { k: "4.7★", v: "In-app rating" },
+              { k: cms.stat_1_k, v: cms.stat_1_v },
+              { k: cms.stat_2_k, v: cms.stat_2_v },
+              { k: cms.stat_3_k, v: cms.stat_3_v },
             ].map((s) => (
               <div key={s.v} className="rounded-xl bg-white/70 backdrop-blur border border-[color:var(--sc-border)] px-3 py-2.5">
                 <div className="text-xl font-extrabold text-[color:var(--sc-ink)]">{s.k}</div>
@@ -312,7 +334,7 @@ function FlowStrip({ steps }) {
 
 /* ---------- Billing section --------------------------------------- */
 
-function BillingSection() {
+function BillingSection({ cms }) {
   const flow = [
     { icon: Store, label: "Retailer" },
     { icon: ScanLine, label: "Billing" },
@@ -335,9 +357,9 @@ function BillingSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-12 items-start">
         <div className="lg:col-span-5">
           <SectionHeading
-            eyebrow="Slangcart Billing Software"
-            title="A retail POS that actually feels modern."
-            sub="Ring up a bill in seconds, print a GST-ready invoice, keep stock accurate on every device — online or offline."
+            eyebrow={cms.billing_eyebrow}
+            title={cms.billing_title}
+            sub={cms.billing_sub}
           />
           <FlowStrip steps={flow} />
         </div>
@@ -364,7 +386,7 @@ function BillingSection() {
 
 /* ---------- Shop section ------------------------------------------ */
 
-function ShopSection() {
+function ShopSection({ cms }) {
   const flow = [
     { icon: Store, label: "Vendor" },
     { icon: ShoppingBag, label: "Products" },
@@ -407,9 +429,9 @@ function ShopSection() {
         </div>
         <div className="lg:col-span-5 order-1 lg:order-2">
           <SectionHeading
-            eyebrow="Online Shop"
-            title="A neighbourhood marketplace, curated for you."
-            sub="Discover local vendors and national brands side-by-side, add to cart, checkout with UPI or wallet, and track every order end-to-end."
+            eyebrow={cms.shop_eyebrow}
+            title={cms.shop_title}
+            sub={cms.shop_sub}
           />
           <FlowStrip steps={flow} />
         </div>
@@ -435,7 +457,7 @@ const SERVICE_CATS = [
   { icon: WrenchAlt, label: "Local Professionals" },
 ];
 
-function ServicesSection() {
+function ServicesSection({ cms }) {
   const flow = [
     { icon: UsersRound, label: "Customer" },
     { icon: Wrench, label: "Technician" },
@@ -445,9 +467,9 @@ function ServicesSection() {
     <section id="services" className="py-20 sm:py-28" data-testid="section-services">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeading
-          eyebrow="Service Marketplace"
-          title="Find a trusted professional in your area, fast."
-          sub="Verified technicians. Transparent pricing. Chat + call directly. Book electricians, plumbers, carpenters, cleaners and more — all under one roof."
+          eyebrow={cms.services_eyebrow}
+          title={cms.services_title}
+          sub={cms.services_sub}
           align="center"
         />
         <FlowStrip steps={flow} />
@@ -474,7 +496,7 @@ function ServicesSection() {
 
 /* ---------- How it works ------------------------------------------ */
 
-function HowItWorks() {
+function HowItWorks({ cms }) {
   const steps = [
     { icon: Download, title: "Download App", desc: "Get Slangcart from Play Store or App Store." },
     { icon: LogIn, title: "Login", desc: "Register once and access every feature." },
@@ -484,7 +506,7 @@ function HowItWorks() {
   return (
     <section id="how" className="py-20 sm:py-28 bg-gradient-to-b from-[color:var(--sc-accent-light)]/60 to-white" data-testid="section-how">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeading eyebrow="How it works" title="Four steps. That's the whole thing." align="center" />
+        <SectionHeading eyebrow={cms.how_eyebrow} title={cms.how_title} align="center" />
         <div className="mt-12 relative">
           <div className="hidden lg:block absolute top-8 left-[7%] right-[7%] h-0.5 bg-gradient-to-r from-transparent via-[color:var(--sc-primary)]/40 to-transparent" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -526,11 +548,11 @@ const PREMIUM_FEATURES = [
   { icon: Bell, title: "Notifications", desc: "Real-time order, payment and service alerts." },
 ];
 
-function FeatureGrid() {
+function FeatureGrid({ cms }) {
   return (
     <section className="py-20 sm:py-28" data-testid="section-features">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeading eyebrow="What's inside" title="Everything you need to sell, serve and grow." align="center" />
+        <SectionHeading eyebrow={cms.features_eyebrow} title={cms.features_title} align="center" />
         <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {PREMIUM_FEATURES.map((f, i) => (
             <div
@@ -554,124 +576,6 @@ function FeatureGrid() {
   );
 }
 
-/* ---------- Download section -------------------------------------- */
-
-function DownloadSection() {
-  return (
-    <section id="download" className="py-20 sm:py-28 relative overflow-hidden" data-testid="section-download">
-      <div className="absolute inset-0 -z-10 bg-gradient-to-br from-[color:var(--sc-primary)] to-[color:var(--sc-primary-700)]" />
-      <div className="absolute -right-20 -top-20 w-[420px] h-[420px] rounded-full bg-white/10 -z-10" />
-      <div className="absolute -left-20 -bottom-20 w-[420px] h-[420px] rounded-full bg-white/5 -z-10" />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-10 items-center">
-        <div className="lg:col-span-7 text-white">
-          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.14em] bg-white/15 border border-white/20 text-white">
-            <Download size={12} /> Get the app
-          </span>
-          <h2 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-tight">Download Slangcart App</h2>
-          <p className="mt-4 text-white/85 max-w-xl leading-relaxed">
-            Download the Slangcart App to register and access every feature — billing, shop, service marketplace and referral wallet.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <a
-              href="https://play.google.com/store/apps/details?id=com.slangcart.app"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-3 rounded-2xl bg-black text-white px-5 py-3 hover:bg-black/85 transition-colors"
-              data-testid="dl-play"
-            >
-              <Play size={22} />
-              <span className="text-left leading-tight">
-                <div className="text-[10px] uppercase tracking-widest opacity-70">Get it on</div>
-                <div className="font-bold">Google Play</div>
-              </span>
-            </a>
-            <button
-              type="button"
-              className="inline-flex items-center gap-3 rounded-2xl bg-white/10 border border-white/25 text-white px-5 py-3 backdrop-blur cursor-not-allowed"
-              data-testid="dl-appstore"
-              disabled
-            >
-              <Smartphone size={22} />
-              <span className="text-left leading-tight">
-                <div className="text-[10px] uppercase tracking-widest opacity-70">Coming soon</div>
-                <div className="font-bold">App Store</div>
-              </span>
-            </button>
-            <div className="rounded-2xl bg-white p-3 flex items-center gap-3">
-              <div className="w-16 h-16 grid place-items-center rounded-lg bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]">
-                <QrCode size={44} />
-              </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Scan to install</div>
-                <div className="font-bold text-[color:var(--sc-ink)] text-sm">slangcart.com/app</div>
-              </div>
-            </div>
-          </div>
-          <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl">
-            {[
-              { icon: Shield, label: "Secure by design" },
-              { icon: Clock3, label: "Works offline" },
-              { icon: TrendingUp, label: "Grows with you" },
-              { icon: Award, label: "4.7★ user rating" },
-            ].map((h) => (
-              <div key={h.label} className="rounded-xl bg-white/10 border border-white/15 px-3 py-2.5 text-white/95 text-sm font-semibold flex items-center gap-2">
-                <h.icon size={16} /> {h.label}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Phone mockup */}
-        <div className="lg:col-span-5">
-          <div className="relative mx-auto w-[280px] h-[560px]">
-            <div className="absolute inset-0 rounded-[42px] bg-black shadow-[0_40px_80px_-30px_rgba(0,0,0,0.6)]" />
-            <div className="absolute inset-2 rounded-[36px] bg-[color:var(--sc-bg)] overflow-hidden">
-              <div className="h-10 bg-[color:var(--sc-primary)] text-white flex items-center justify-between px-5 text-[10px] font-semibold">
-                <span>9:41</span>
-                <span>Slangcart</span>
-                <span>●●●</span>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="rounded-xl bg-white p-3">
-                  <div className="text-[10px] text-[color:var(--sc-ink-muted)]">Wallet balance</div>
-                  <div className="mt-0.5 font-extrabold text-[color:var(--sc-ink)] text-xl">₹ 4,820.50</div>
-                  <div className="mt-2 flex gap-1.5">
-                    <div className="flex-1 h-7 rounded-md bg-[color:var(--sc-primary)] text-white text-[10px] font-semibold grid place-items-center">Add</div>
-                    <div className="flex-1 h-7 rounded-md bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)] text-[10px] font-semibold grid place-items-center">Send</div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { icon: ScanLine, label: "POS" },
-                    { icon: ShoppingBag, label: "Shop" },
-                    { icon: Wrench, label: "Services" },
-                    { icon: Users, label: "Network" },
-                    { icon: Bell, label: "Alerts" },
-                    { icon: FileText, label: "Bills" },
-                  ].map((t) => (
-                    <div key={t.label} className="rounded-xl bg-white p-2.5 flex flex-col items-center gap-1">
-                      <t.icon size={16} className="text-[color:var(--sc-primary)]" />
-                      <div className="text-[9px] font-semibold text-[color:var(--sc-ink)]">{t.label}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="rounded-xl bg-white p-3">
-                  <div className="text-[10px] text-[color:var(--sc-ink-muted)]">Latest order</div>
-                  <div className="mt-0.5 font-bold text-[color:var(--sc-ink)] text-sm">Order #SC-2610</div>
-                  <div className="mt-1 h-1.5 rounded-full bg-[color:var(--sc-border)] overflow-hidden">
-                    <div className="h-full w-4/5 bg-[color:var(--sc-primary)] rounded-full" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ---------- Terms accordion --------------------------------------- */
 
 const TERMS = [
@@ -687,12 +591,12 @@ const TERMS = [
   { icon: Award, title: "Platform Rules", body: "Fraud, spam, unauthorized reselling and mis-representation of location/identity will lead to permanent suspension without notice." },
 ];
 
-function TermsSection() {
+function TermsSection({ cms }) {
   const [open, setOpen] = useState(0);
   return (
     <section id="terms" className="py-20 sm:py-28 bg-gradient-to-b from-white to-[color:var(--sc-accent-light)]/40" data-testid="section-terms">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <SectionHeading eyebrow="Terms & Conditions" title="Clear rules. No surprises." align="center" />
+        <SectionHeading eyebrow={cms.terms_eyebrow} title={cms.terms_title} align="center" />
         <div className="mt-10 space-y-3">
           {TERMS.map((t, i) => {
             const isOpen = open === i;
@@ -735,7 +639,7 @@ function TermsSection() {
 
 /* ---------- Contact section --------------------------------------- */
 
-function ContactSection() {
+function ContactSection({ cms }) {
   const [sent, setSent] = useState(false);
   const submit = (e) => {
     e.preventDefault();
@@ -747,16 +651,16 @@ function ContactSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-10 items-start">
         <div className="lg:col-span-5">
           <SectionHeading
-            eyebrow="Contact us"
-            title="Real humans, quick replies."
-            sub="Chat with us on WhatsApp for the fastest response, or drop a message and we'll get back within one business day."
+            eyebrow={cms.contact_eyebrow}
+            title={cms.contact_title}
+            sub={cms.contact_sub}
           />
           <div className="mt-8 space-y-3">
             {[
-              { icon: Phone, label: "Phone", value: "+91 90000 12345", href: "tel:+919000012345" },
-              { icon: Mail, label: "Email", value: "support@networkrupay.com", href: "mailto:support@networkrupay.com" },
-              { icon: MapPin, label: "Office", value: "Bengaluru, Karnataka, India" },
-              { icon: Clock3, label: "Business hours", value: "Mon – Sat · 10 AM – 7 PM IST" },
+              { icon: Phone, label: "Phone", value: cms.contact_phone, href: cms.contact_phone_href },
+              { icon: Mail, label: "Email", value: cms.contact_email, href: `mailto:${cms.contact_email}` },
+              { icon: MapPin, label: "Office", value: cms.contact_address },
+              { icon: Clock3, label: "Business hours", value: cms.contact_hours },
             ].map((c) => (
               <a
                 key={c.label}
@@ -774,7 +678,7 @@ function ContactSection() {
               </a>
             ))}
             <a
-              href="https://wa.me/919000012345"
+              href={cms.contact_whatsapp_url}
               target="_blank"
               rel="noreferrer"
               className="w-full flex items-center gap-3 rounded-2xl bg-[#25D366] text-white p-4 hover:brightness-105 transition-all"
@@ -847,16 +751,16 @@ const ROLES = [
   { icon: Briefcase, title: "Business Development" },
 ];
 
-function CareersSection() {
+function CareersSection({ cms }) {
   return (
     <section id="careers" className="py-20 sm:py-28 bg-gradient-to-b from-[color:var(--sc-accent-light)]/40 to-white" data-testid="section-careers">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-12 gap-10 items-start">
           <div className="lg:col-span-5">
             <SectionHeading
-              eyebrow="Careers"
-              title="Build the future of local commerce with us."
-              sub="We're a small, mission-driven team building tools for millions of Indian retailers, service providers and shoppers. Come help us grow."
+              eyebrow={cms.careers_eyebrow}
+              title={cms.careers_title}
+              sub={cms.careers_sub}
             />
             <div className="mt-8 grid grid-cols-2 gap-3">
               {[
@@ -885,7 +789,7 @@ function CareersSection() {
                     </div>
                   </div>
                   <a
-                    href={`mailto:careers@networkrupay.com?subject=${encodeURIComponent(`Application: ${r.title}`)}`}
+                    href={`mailto:${cms.careers_email}?subject=${encodeURIComponent(`Application: ${r.title}`)}`}
                     className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--sc-primary)] hover:text-[color:var(--sc-primary-700)]"
                   >
                     Apply now <ArrowRight size={14} />
@@ -900,7 +804,7 @@ function CareersSection() {
                 <div className="text-sm text-[color:var(--sc-ink-muted)]">Email your resume — we&apos;re always looking for great people.</div>
               </div>
               <a
-                href="mailto:careers@networkrupay.com?subject=Open%20application"
+                href={`mailto:${cms.careers_email}?subject=Open%20application`}
                 className="sc-btn-primary inline-flex items-center gap-2"
                 data-testid="careers-open-application"
               >
@@ -916,7 +820,7 @@ function CareersSection() {
 
 /* ---------- Footer ------------------------------------------------- */
 
-function Footer() {
+function Footer({ cms }) {
   return (
     <footer className="relative overflow-hidden" data-testid="landing-footer">
       <div className="absolute inset-0 -z-10 bg-[color:var(--sc-ink)]" />
@@ -927,11 +831,11 @@ function Footer() {
             <div className="w-10 h-10 rounded-xl bg-white text-[color:var(--sc-primary)] grid place-items-center font-extrabold">S</div>
             <div>
               <div className="font-extrabold">Slangcart</div>
-              <div className="text-[10px] uppercase tracking-widest text-white/60">Shop · Service · Connect</div>
+              <div className="text-[10px] uppercase tracking-widest text-white/60">{cms.brand_tagline}</div>
             </div>
           </div>
           <p className="mt-4 text-sm text-white/70 max-w-sm leading-relaxed">
-            An all-in-one platform for retail billing, an online shop, a service marketplace and a referral wallet — built for India&apos;s local businesses.
+            {cms.footer_about}
           </p>
           <div className="mt-5 flex items-center gap-2">
             {[
@@ -958,7 +862,7 @@ function Footer() {
             <li><a href="#billing" className="hover:text-[color:var(--sc-accent-light)]">Billing</a></li>
             <li><a href="#shop" className="hover:text-[color:var(--sc-accent-light)]">Shop</a></li>
             <li><a href="#services" className="hover:text-[color:var(--sc-accent-light)]">Services</a></li>
-            <li><a href="#download" className="hover:text-[color:var(--sc-accent-light)]">Download</a></li>
+            <li><a href={cms.apk_url} download={cms.apk_filename || ""} className="hover:text-[color:var(--sc-accent-light)]">Download</a></li>
           </ul>
         </div>
         <div>
@@ -974,7 +878,7 @@ function Footer() {
           <div className="text-xs uppercase tracking-widest text-white/60">Account</div>
           <ul className="mt-3 space-y-2 text-sm">
             <li><Link to="/login" className="hover:text-[color:var(--sc-accent-light)]">Sign in</Link></li>
-            <li><a href="#download" className="hover:text-[color:var(--sc-accent-light)]">Get the app</a></li>
+            <li><a href={cms.apk_url} download={cms.apk_filename || ""} className="hover:text-[color:var(--sc-accent-light)]">Get the app</a></li>
             <li><a href="mailto:support@networkrupay.com" className="hover:text-[color:var(--sc-accent-light)]">Support</a></li>
           </ul>
         </div>
@@ -998,27 +902,34 @@ function Footer() {
 export default function Landing() {
   const { user } = useAuth();
   const nav = useNavigate();
+  const [cms, setCms] = useState(() => getCmsSync());
   // Authenticated users landing here jump straight into their dashboard.
   useEffect(() => {
     if (user) nav("/dashboard", { replace: true });
   }, [user, nav]);
+  // Load CMS content from backend / localStorage; fall back to defaults.
+  useEffect(() => {
+    let cancelled = false;
+    loadCms().then((c) => { if (!cancelled) setCms(c); });
+    return () => { cancelled = true; };
+  }, []);
+  const memoCms = useMemo(() => cms, [cms]);
 
   return (
     <div className="min-h-screen bg-[color:var(--sc-bg)] text-[color:var(--sc-ink)]" data-testid="landing-page">
-      <TopNav />
+      <TopNav cms={memoCms} />
       <main>
-        <Hero />
-        <BillingSection />
-        <ShopSection />
-        <ServicesSection />
-        <HowItWorks />
-        <FeatureGrid />
-        <DownloadSection />
-        <TermsSection />
-        <ContactSection />
-        <CareersSection />
+        <Hero cms={memoCms} />
+        <BillingSection cms={memoCms} />
+        <ShopSection cms={memoCms} />
+        <ServicesSection cms={memoCms} />
+        <HowItWorks cms={memoCms} />
+        <FeatureGrid cms={memoCms} />
+        <TermsSection cms={memoCms} />
+        <ContactSection cms={memoCms} />
+        <CareersSection cms={memoCms} />
       </main>
-      <Footer />
+      <Footer cms={memoCms} />
     </div>
   );
 }

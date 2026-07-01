@@ -36,6 +36,7 @@ import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminUPIPayments from "@/pages/admin/AdminUPIPayments";
 import AdminLegalPages from "@/pages/admin/AdminLegalPages";
 import AdminExports from "@/pages/admin/AdminExports";
+import AdminLanding from "@/pages/admin/AdminLanding";
 
 const g = (el) => <ProtectedRoute adminOnly>{el}</ProtectedRoute>;
 
@@ -77,6 +78,7 @@ export const adminRoutes = [
   { path: "/admin/settings", element: g(<AdminSettings />) },
   { path: "/admin/upi-payments", element: g(<AdminUPIPayments />) },
   { path: "/admin/legal-pages", element: g(<AdminLegalPages />) },
+  { path: "/admin/landing", element: g(<AdminLanding />) },
 
   // Export
   { path: "/admin/exports", element: g(<AdminExports />) },
