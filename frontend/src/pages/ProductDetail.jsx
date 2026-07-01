@@ -44,7 +44,7 @@ function Gallery({ images, name }) {
   };
 
   return (
-    <div className="lg:sticky lg:top-24 max-w-md mx-auto lg:mx-0 space-y-3 w-full" data-testid="pd-gallery">
+    <div className="md:sticky md:top-24 w-full max-w-sm mx-auto md:mx-0 space-y-3" data-testid="pd-gallery">
       <div
         className="relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-[color:var(--sc-accent-light)] to-white border border-[color:var(--sc-border)]"
         onMouseEnter={() => setZoom((z) => ({ ...z, on: true }))}
@@ -106,26 +106,26 @@ function PriceBlock({ price, mrp }) {
   const showMrp = mrp && mrp > price;
   const off = showMrp ? Math.round(((mrp - price) / mrp) * 100) : 0;
   return (
-    <div className="mt-4">
+    <div>
       <div className="flex items-baseline gap-3 flex-wrap">
-        <div className="text-4xl font-extrabold text-[color:var(--sc-ink)]" data-testid="pd-price">
+        <div className="text-3xl sm:text-4xl font-extrabold text-[color:var(--sc-ink)]" data-testid="pd-price">
           {formatINR(price)}
         </div>
         {showMrp && (
           <>
-            <div className="text-lg font-semibold text-[color:var(--sc-ink-muted)] line-through" data-testid="pd-mrp">
+            <div className="text-base font-semibold text-[color:var(--sc-ink-muted)] line-through" data-testid="pd-mrp">
               {formatINR(mrp)}
             </div>
             <span
-              className="inline-flex items-center gap-1 text-sm font-extrabold px-2.5 py-1 rounded-full bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]"
+              className="inline-flex items-center gap-1 text-xs font-extrabold px-2 py-1 rounded-full bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]"
               data-testid="pd-discount"
             >
-              <Zap size={12} /> {off}% OFF
+              <Zap size={11} /> {off}% OFF
             </span>
           </>
         )}
       </div>
-      <div className="mt-1 text-[11px] text-[color:var(--sc-ink-muted)]">Inclusive of all taxes</div>
+      <div className="mt-0.5 text-[11px] text-[color:var(--sc-ink-muted)]">Inclusive of all taxes</div>
     </div>
   );
 }
@@ -136,20 +136,20 @@ function StockStrip({ stock }) {
   const s = Number(stock ?? 0);
   if (s <= 0) {
     return (
-      <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 text-rose-700 text-xs font-bold border border-rose-200" data-testid="pd-stock">
+      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 text-[11px] font-bold border border-rose-200" data-testid="pd-stock">
         <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Out of stock
       </div>
     );
   }
   if (s <= 5) {
     return (
-      <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200" data-testid="pd-stock">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Only {s} left in stock — order soon
+      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-[11px] font-bold border border-amber-200" data-testid="pd-stock">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Only {s} left — order soon
       </div>
     );
   }
   return (
-    <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200" data-testid="pd-stock">
+    <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200" data-testid="pd-stock">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> In stock
     </div>
   );
@@ -184,12 +184,12 @@ const TRUST = [
 
 function TrustGrid() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-6" data-testid="pd-trust">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="pd-trust">
       {TRUST.map((t) => (
-        <div key={t.title} className="rounded-xl bg-white border border-[color:var(--sc-border)] p-3 hover:border-[color:var(--sc-primary)] transition-colors">
-          <t.icon size={18} className="text-[color:var(--sc-primary)]" />
-          <div className="mt-2 text-[13px] font-extrabold text-[color:var(--sc-ink)] leading-tight">{t.title}</div>
-          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-0.5">{t.sub}</div>
+        <div key={t.title} className="rounded-xl bg-white border border-[color:var(--sc-border)] p-2.5 hover:border-[color:var(--sc-primary)] transition-colors">
+          <t.icon size={16} className="text-[color:var(--sc-primary)]" />
+          <div className="mt-1.5 text-xs font-extrabold text-[color:var(--sc-ink)] leading-tight">{t.title}</div>
+          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-0.5 leading-tight">{t.sub}</div>
         </div>
       ))}
     </div>
@@ -307,7 +307,7 @@ function ProductInfo({ product, busy, inCart, saved, interested, qty, setQty, on
   const outOfStock = Number(product.stock ?? 1) <= 0;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4" data-testid="pd-info">
       <div>
         <div className="flex items-center gap-2 flex-wrap">
           {product.brand && (
@@ -323,17 +323,17 @@ function ProductInfo({ product, busy, inCart, saved, interested, qty, setQty, on
         </div>
         <h1
           data-testid="pd-name"
-          className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[color:var(--sc-ink)] mt-3 leading-tight"
+          className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[color:var(--sc-ink)] mt-2 leading-tight"
         >
           {product.name}
         </h1>
         {rating > 0 && (
           <div className="mt-2 flex items-center gap-3" data-testid="pd-rating">
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[color:var(--sc-primary)] text-white text-sm font-bold">
-              <Star size={13} fill="currentColor" /> {rating.toFixed(1)}
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-[color:var(--sc-primary)] text-white text-xs font-bold">
+              <Star size={12} fill="currentColor" /> {rating.toFixed(1)}
             </div>
             {reviewCount > 0 && (
-              <div className="text-sm font-semibold text-[color:var(--sc-ink-muted)]">
+              <div className="text-xs font-semibold text-[color:var(--sc-ink-muted)]">
                 {reviewCount.toLocaleString("en-IN")} ratings
               </div>
             )}
@@ -345,13 +345,13 @@ function ProductInfo({ product, busy, inCart, saved, interested, qty, setQty, on
       <StockStrip stock={product.stock} />
 
       {/* Delivery estimator */}
-      <div className="rounded-2xl bg-white border border-[color:var(--sc-border)] p-4 flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)] shrink-0">
-          <MapPin size={18} />
+      <div className="rounded-xl bg-white border border-[color:var(--sc-border)] p-3 flex items-start gap-3">
+        <div className="w-9 h-9 rounded-lg bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)] shrink-0">
+          <MapPin size={16} />
         </div>
         <div className="flex-1 text-sm">
-          <div className="font-extrabold text-[color:var(--sc-ink)]">Delivery to your area</div>
-          <div className="text-[color:var(--sc-ink-muted)] mt-0.5">
+          <div className="font-extrabold text-[color:var(--sc-ink)] text-[13px]">Delivery to your area</div>
+          <div className="text-[color:var(--sc-ink-muted)] text-xs mt-0.5">
             Free delivery · Get it in <span className="font-bold text-[color:var(--sc-primary-700)]">2–4 business days</span>
           </div>
         </div>
@@ -359,62 +359,62 @@ function ProductInfo({ product, busy, inCart, saved, interested, qty, setQty, on
 
       {/* Qty + CTAs */}
       <div>
-        <div className="text-xs font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] mb-2">Quantity</div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] mb-1.5">Quantity</div>
+        <div className="flex flex-wrap items-center gap-2">
           <QtyPicker qty={qty} setQty={setQty} max={Number(product.stock) || undefined} />
           <button
             data-testid="pd-add-cart"
             onClick={onAdd}
             disabled={busy || inCart || outOfStock}
             className={
-              "inline-flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all disabled:opacity-60 " +
+              "inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-60 " +
               (inCart
                 ? "bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)] border border-[color:var(--sc-primary)]/30"
                 : "bg-white border border-[color:var(--sc-primary)] text-[color:var(--sc-primary-700)] hover:bg-[color:var(--sc-accent-light)]")
             }
           >
-            {inCart ? <><Check size={16} /> In cart</> : <><Plus size={16} /> Add to cart</>}
+            {inCart ? <><Check size={14} /> In cart</> : <><Plus size={14} /> Add to cart</>}
           </button>
           <button
             data-testid="pd-buy-now"
             onClick={onBuyNow}
             disabled={busy || outOfStock}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm bg-[color:var(--sc-primary)] text-white shadow-[0_10px_25px_-10px_rgba(15,110,79,0.7)] hover:bg-[color:var(--sc-primary-700)] transition-colors disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-sm bg-[color:var(--sc-primary)] text-white shadow-[0_8px_20px_-10px_rgba(15,110,79,0.7)] hover:bg-[color:var(--sc-primary-700)] transition-colors disabled:opacity-60"
           >
-            <Zap size={16} /> Buy now
+            <Zap size={14} /> Buy now
           </button>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <button
             data-testid="pd-save"
             onClick={onToggleSave}
             className={
-              "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors " +
+              "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors " +
               (saved
                 ? "bg-rose-50 border-rose-200 text-rose-600"
                 : "border-[color:var(--sc-border)] text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)]")
             }
           >
-            <Heart size={14} fill={saved ? "currentColor" : "none"} /> {saved ? "Saved" : "Wishlist"}
+            <Heart size={12} fill={saved ? "currentColor" : "none"} /> {saved ? "Saved" : "Wishlist"}
           </button>
           <button
             data-testid="pd-interested"
             onClick={onToggleInterested}
             className={
-              "inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors " +
+              "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors " +
               (interested
                 ? "bg-amber-50 border-amber-200 text-amber-700"
                 : "border-[color:var(--sc-border)] text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)]")
             }
           >
-            <Hand size={14} /> {interested ? "Interested" : "I'm interested"}
+            <Hand size={12} /> {interested ? "Interested" : "I'm interested"}
           </button>
           <button
             data-testid="pd-share"
             onClick={onShare}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[color:var(--sc-border)] text-xs font-bold text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)] transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[color:var(--sc-border)] text-[11px] font-bold text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)] transition-colors"
           >
-            <Share2 size={14} /> Share
+            <Share2 size={12} /> Share
           </button>
         </div>
       </div>
@@ -525,11 +525,11 @@ export default function ProductDetail() {
       {!loading && (error || !product) && <ProductErrorCard error={error} />}
       {!loading && product && (
         <div className="sc-fade-in" data-testid="pd-page">
-          <div className="grid lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-5">
+          <div className="grid md:grid-cols-12 gap-6 lg:gap-8 items-start">
+            <div className="md:col-span-5 lg:col-span-5">
               <Gallery images={images} name={product.name} />
             </div>
-            <div className="lg:col-span-7">
+            <div className="md:col-span-7 lg:col-span-7">
               <ProductInfo
                 product={product}
                 busy={busy}
