@@ -9,6 +9,7 @@ import ShopBlock from "@/components/shop/ShopBlock";
 import { formatINR } from "@/lib/utils";
 import { Search, ShoppingBag, Plus, Check } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import { useUserLocation } from "@/hooks/useUserLocation";
 import { log } from "@/lib/log";
 
@@ -56,6 +57,7 @@ function productMatchesCat(p, cat) {
 
 export default function Shop() {
   const { cart, add } = useCart();
+  const { user } = useAuth();
   const { location } = useUserLocation();
   const [products, setProducts] = useState([]);
   const [cats, setCats] = useState([]);
@@ -99,14 +101,22 @@ export default function Shop() {
 
   const cartIds = useMemo(() => new Set((cart.items || []).map((i) => i.product_id)), [cart.items]);
 
+  // First layer: vendors don't see their own products anywhere in Shop
+  // (not in category grid, not in home-page blocks). Admins/users see all.
+  const visibleProducts = useMemo(() => {
+    const hideOwn = user?.role === "vendor" && user?.id;
+    if (!hideOwn) return products;
+    return products.filter((p) => !(p.vendor_id && p.vendor_id === user.id));
+  }, [products, user?.id, user?.role]);
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
-    return products.filter((p) => {
+    return visibleProducts.filter((p) => {
       if (!productMatchesCat(p, activeCat)) return false;
       if (!qq) return true;
       return ((p.name || "").toLowerCase().includes(qq) || (p.brand || "").toLowerCase().includes(qq) || (p.description || "").toLowerCase().includes(qq));
     });
-  }, [products, q, activeCat]);
+  }, [visibleProducts, q, activeCat]);
 
   const addToCart = async (p) => {
     setBusyId(p.id);
@@ -133,7 +143,7 @@ export default function Shop() {
         {/* Shop layout blocks — only when not filtering */}
         {!q && !activeCat && blocks.length > 0 && (
           <div data-testid="shop-blocks">
-            {blocks.map((b) => <ShopBlock key={b.id} block={b} allProducts={products} />)}
+            {blocks.map((b) => <ShopBlock key={b.id} block={b} allProducts={visibleProducts} />)}
           </div>
         )}
 

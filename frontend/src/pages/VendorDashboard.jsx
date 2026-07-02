@@ -43,7 +43,10 @@ export default function VendorDashboard() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null); // null = create mode, id = edit mode
-  const emptyForm = { name: "", price: 0, image_url: "", description: "", stock: 0, brand: "", category: "", is_published: true };
+  // Vendors don't control the publish state — only admins can publish a
+  // vendor's product to the public Shop. So `is_published` is intentionally
+  // NOT part of the vendor-editable form.
+  const emptyForm = { name: "", price: 0, image_url: "", description: "", stock: 0, brand: "", category: "" };
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
 
@@ -92,7 +95,6 @@ export default function VendorDashboard() {
       stock: p.stock ?? 0,
       brand: p.brand || "",
       category: p.category || "",
-      is_published: p.is_published !== false,
     });
     setShowForm(true);
   };
@@ -105,13 +107,14 @@ export default function VendorDashboard() {
   const submitProduct = async () => {
     setSaving(true);
     try {
+      // Vendor create/edit payload never touches is_published — only admins
+      // can publish a product to the public Shop. New vendor products are
+      // implicitly unpublished until an admin approves them.
       const payload = { ...form, price: Number(form.price), stock: Number(form.stock) };
       if (editingId) {
-        // PATCH updates only the sent fields — backend already exposes this
-        // route (used by the POS to decrement stock).
         await api.patch(`/vendor/me/products/${editingId}`, payload);
       } else {
-        await api.post("/vendor/me/products", payload);
+        await api.post("/vendor/me/products", { ...payload, is_published: false });
       }
       closeForm();
       loadAll();
@@ -257,15 +260,9 @@ export default function VendorDashboard() {
               <textarea className="sc-input min-h-[80px]" data-testid="vd-form-desc" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               <input type="file" accept="image/*" onChange={onImg} data-testid="vd-form-img" className="block text-sm" />
               {form.image_url && <img alt="" src={form.image_url} className="h-20 rounded-lg border border-[color:var(--sc-border)]" />}
-              <label className="flex items-center gap-2 text-sm text-[color:var(--sc-ink)]">
-                <input
-                  type="checkbox"
-                  checked={form.is_published}
-                  onChange={(e) => setForm({ ...form, is_published: e.target.checked })}
-                  data-testid="vd-form-published"
-                />
-                Published (visible in Shop)
-              </label>
+              <div className="rounded-lg bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)] text-[11px] px-3 py-2 leading-relaxed">
+                Products you add are reviewed by our admin team and published to Slangcart Shop after approval. Publish state is managed by admins — you focus on the product details.
+              </div>
               <button data-testid="vd-form-save" onClick={submitProduct} disabled={saving || !form.name || !form.price} className="sc-btn-primary inline-flex items-center gap-1.5 w-full justify-center">
                 {saving && <Loader2 size={14} className="animate-spin" />}
                 {editingId ? "Save changes" : "Create"}
