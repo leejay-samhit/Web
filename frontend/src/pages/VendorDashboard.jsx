@@ -4,11 +4,16 @@ import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import { formatINR, formatDateTime } from "@/lib/utils";
-import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2, Search, Sparkles, Check, Info } from "lucide-react";
+import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2, Search, Sparkles, Check, Info, Strikethrough } from "lucide-react";
 import { log } from "@/lib/log";
 import VendorNav from "@/components/vendor/VendorNav";
 import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
 import { searchMaster, getMaster, reportMasterHit } from "@/lib/productMaster";
+import {
+  parseLines, linesFromArray, parseExtraAttrs, extraAttrsToText,
+  toStyled, fromStyled, parseSpecTabs, specTabsToText, specsDictToSpecTabsText,
+  flattenMasterImages,
+} from "@/lib/productForm";
 
 const CONDITIONS = [
   { key: "new", label: "New" },
@@ -65,17 +70,28 @@ export default function VendorDashboard() {
     // link to /product_master document — set when vendor picked an
     // autocomplete suggestion. Backend defaults it to null (manual entry).
     master_id: null,
-    // Master-derived fields (still editable so vendors can override safely
-    // when the endpoint isn't shipped yet)
-    name: "", brand: "", category: "", description: "", image_url: "", mrp: 0,
+    // Master-derived fields (still editable so vendors can override)
+    name: "", brand: "", category: "", sub_category: "",
+    description: "", image_url: "", mrp: 0,
     // Vendor-only pricing + inventory
     price: 0, offer_price: 0, stock: 0,
     // Vendor-only fulfilment / condition
     store_location: "", condition: "new",
     cash_on_delivery: true, delivery_available: true,
     warranty_months_override: 0, store_notes: "",
-    // Vendor-only serialised-item tracking (only visible for eligible categories)
+    // Device-identity (Luhn-validated at submit)
     imei_1: "", imei_2: "", serial_number: "", batch_number: "",
+    // — Rich detail fields (parity with admin form; auto-populated by smart search)
+    sub_features: "",     // newline-separated
+    images: [],           // array of image data-urls or master URLs (up to 10)
+    attrs_brand: "", attrs_os: "", attrs_ram: "",
+    attrs_cpu_model: "", attrs_cpu_speed: "", attrs_storage: "",
+    clothing_size: "",
+    extra_attrs: "",      // free-form key:value textarea
+    price_summary: "", protection_summary: "",
+    warranty_summary: "", delivery_summary: "",
+    whats_in_box: "",     // newline-separated
+    spec_tabs: "",        // "Tab | k:v; k:v" per line
   };
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -85,6 +101,48 @@ export default function VendorDashboard() {
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const debounceRef = useRef(null);
+  // Categories dropdown (admin-managed). Falls back to a text input when
+  // the /categories endpoint isn't shipped or returns [].
+  const [categories, setCategories] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Try the admin catalogue first, then a public alias, then give up
+      // silently — vendors can still type a category by hand.
+      for (const path of ["/admin/categories", "/categories"]) {
+        try {
+          const { data } = await api.get(path);
+          const list = Array.isArray(data) ? data : (data?.items || []);
+          const names = list
+            .map((c) => (typeof c === "string" ? c : (c?.name || c?.title || c?.slug)))
+            .filter(Boolean);
+          if (!cancelled && names.length) { setCategories(names); return; }
+        } catch { /* try next */ }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  // Strikethrough tool for Price Summary — wraps the current textarea
+  // selection with `~~ ~~` markers that the product detail page renders.
+  const priceSummaryRef = useRef(null);
+  const applyStrikethrough = () => {
+    const el = priceSummaryRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const cur = form.price_summary || "";
+    const sel = cur.slice(start, end);
+    if (!sel) {
+      // No selection — insert a template with placeholder text.
+      const next = cur.slice(0, start) + "~~old price~~" + cur.slice(end);
+      setForm({ ...form, price_summary: next });
+      requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + 2, start + 11); });
+      return;
+    }
+    const next = cur.slice(0, start) + `~~${sel}~~` + cur.slice(end);
+    setForm({ ...form, price_summary: next });
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start, end + 4); });
+  };
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -116,6 +174,27 @@ export default function VendorDashboard() {
     r.readAsDataURL(f);
   };
 
+  // Multi-image upload for the Gallery. Preserves original quality — we just
+  // convert to data-URL and stash. NEVER compress or downscale, so the
+  // gallery reflects the exact quality the vendor uploaded (matches spec:
+  // "without compress and without low quality images").
+  const onExtraImgs = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 10);
+    const urls = await Promise.all(
+      files.map(
+        (f) =>
+          new Promise((res) => {
+            const r = new FileReader();
+            r.onload = () => res(r.result?.toString() || "");
+            r.readAsDataURL(f);
+          })
+      )
+    );
+    setForm((s) => ({ ...s, images: [...(s.images || []), ...urls].slice(0, 10) }));
+  };
+  const removeImage = (i) =>
+    setForm((s) => ({ ...s, images: (s.images || []).filter((_, idx) => idx !== i) }));
+
   const openNew = () => {
     setEditingId(null);
     setForm(emptyForm);
@@ -132,6 +211,7 @@ export default function VendorDashboard() {
       name: p.name || "",
       brand: p.brand || "",
       category: p.category || "",
+      sub_category: p.sub_category || "",
       description: p.description || "",
       image_url: p.image_url || "",
       mrp: p.mrp ?? 0,
@@ -148,6 +228,25 @@ export default function VendorDashboard() {
       imei_2: p.imei_2 || "",
       serial_number: p.serial_number || "",
       batch_number: p.batch_number || "",
+      // Rich detail hydration (edit-mode)
+      sub_features: linesFromArray(p.sub_features),
+      images: Array.isArray(p.images) ? p.images.filter(Boolean) : [],
+      attrs_brand: p.attrs_brand || "",
+      attrs_os: p.attrs_os || "",
+      attrs_ram: p.attrs_ram || "",
+      attrs_cpu_model: p.attrs_cpu_model || "",
+      attrs_cpu_speed: p.attrs_cpu_speed || "",
+      attrs_storage: p.attrs_storage || "",
+      clothing_size: p.clothing_size || "",
+      extra_attrs: extraAttrsToText(p.extra_attrs),
+      price_summary: fromStyled(p.price_summary),
+      protection_summary: fromStyled(p.protection_summary),
+      warranty_summary: fromStyled(p.warranty_summary),
+      delivery_summary: fromStyled(p.delivery_summary),
+      whats_in_box: linesFromArray(
+        Array.isArray(p.whats_in_box) ? p.whats_in_box.map((it) => it?.name || it) : []
+      ),
+      spec_tabs: specTabsToText(p.spec_tabs),
     });
     setQuery(p.name || "");
     setSuggestions([]);
@@ -202,18 +301,55 @@ export default function VendorDashboard() {
     setQuery(m.name || "");
     const full = await getMaster(m.id);
     if (full) {
+      // Preserve original quality of gallery images — no client-side
+      // compression, no resizing: just take the URLs as the backend
+      // returned them.
+      const galleryFromMaster = flattenMasterImages(full.images).slice(0, 10);
+      const primary =
+        full.image_url ||
+        (full.images && (full.images[0]?.url || full.images[0])) ||
+        galleryFromMaster[0] ||
+        "";
+      // Convert master.specs (flat dict) → spec_tabs textarea text.
+      const specTabsText =
+        specTabsToText(full.spec_tabs) || specsDictToSpecTabsText(full.specs);
+      // Build extra_attrs from any spec that doesn't map to a first-class
+      // attribute above.
+      const specs = full.specs || {};
+      const claimed = new Set([
+        "brand", "os", "operating_system", "ram", "cpu", "cpu_model",
+        "cpu_speed", "storage", "processor",
+      ]);
+      const extras = Object.fromEntries(
+        Object.entries(specs).filter(([k]) => !claimed.has(k.toLowerCase()))
+      );
       setForm((prev) => ({
         ...prev,
         master_id: full.id,
         name: full.name || prev.name,
         brand: full.brand || prev.brand,
         category: full.category || prev.category,
+        sub_category: full.sub_category || prev.sub_category,
         description: full.description || prev.description,
-        image_url:
-          (full.images && (full.images[0]?.url || full.images[0])) ||
-          full.image_url || prev.image_url,
+        image_url: primary || prev.image_url,
+        images: galleryFromMaster.length ? galleryFromMaster : prev.images,
         mrp: full.mrp ?? prev.mrp,
         warranty_months_override: full.warranty_months ?? prev.warranty_months_override,
+        // Key attributes — pull directly from master.specs when present
+        attrs_brand: full.brand || specs.brand || prev.attrs_brand,
+        attrs_os: specs.operating_system || specs.os || prev.attrs_os,
+        attrs_ram: specs.ram || prev.attrs_ram,
+        attrs_cpu_model: specs.processor || specs.cpu_model || specs.cpu || prev.attrs_cpu_model,
+        attrs_cpu_speed: specs.cpu_speed || prev.attrs_cpu_speed,
+        attrs_storage: specs.storage || prev.attrs_storage,
+        extra_attrs: extraAttrsToText(extras) || prev.extra_attrs,
+        sub_features: linesFromArray(full.key_features || full.sub_features) || prev.sub_features,
+        whats_in_box: linesFromArray(
+          Array.isArray(full.whats_in_box)
+            ? full.whats_in_box.map((it) => it?.name || it)
+            : []
+        ) || prev.whats_in_box,
+        spec_tabs: specTabsText || prev.spec_tabs,
       }));
     }
   };
@@ -232,11 +368,26 @@ export default function VendorDashboard() {
         stock: Number(form.stock) || 0,
         mrp: Number(form.mrp) || 0,
         warranty_months_override: Number(form.warranty_months_override) || 0,
+        // Serialise the rich detail fields into the shapes the backend
+        // (same as the admin flow) expects.
+        sub_features: parseLines(form.sub_features),
+        images: Array.isArray(form.images) ? form.images.slice(0, 10) : [],
+        extra_attrs: parseExtraAttrs(form.extra_attrs),
+        price_summary: toStyled(form.price_summary),
+        protection_summary: toStyled(form.protection_summary),
+        warranty_summary: toStyled(form.warranty_summary),
+        delivery_summary: toStyled(form.delivery_summary),
+        whats_in_box: parseLines(form.whats_in_box).map((name) => ({ name, image_data_url: "" })),
+        spec_tabs: parseSpecTabs(form.spec_tabs),
       };
       // Drop empty strings so backend receives explicit nulls / omits them.
-      ["imei_1", "imei_2", "serial_number", "batch_number", "store_location", "store_notes"].forEach((k) => {
-        if (!payload[k]) delete payload[k];
-      });
+      [
+        "imei_1", "imei_2", "serial_number", "batch_number",
+        "store_location", "store_notes",
+        "attrs_brand", "attrs_os", "attrs_ram",
+        "attrs_cpu_model", "attrs_cpu_speed", "attrs_storage",
+        "clothing_size", "sub_category",
+      ].forEach((k) => { if (!payload[k]) delete payload[k]; });
       if (editingId) {
         await api.patch(`/vendor/me/products/${editingId}`, payload);
       } else {
@@ -454,12 +605,69 @@ export default function VendorDashboard() {
                   )}
                   <div className="grid grid-cols-2 gap-2">
                     <input className="sc-input" data-testid="vd-form-brand" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-                    <input className="sc-input" data-testid="vd-form-category" placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+                    {categories.length > 0 ? (
+                      <select
+                        className="sc-input"
+                        data-testid="vd-form-category"
+                        value={form.category}
+                        onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      >
+                        <option value="">Select category…</option>
+                        {categories.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="sc-input"
+                        data-testid="vd-form-category"
+                        placeholder="Category"
+                        value={form.category}
+                        onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      />
+                    )}
                   </div>
+                  <input className="sc-input" data-testid="vd-form-sub-category" placeholder="Sub-category" value={form.sub_category} onChange={(e) => setForm({ ...form, sub_category: e.target.value })} />
                   <textarea className="sc-input min-h-[70px]" data-testid="vd-form-desc" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                   <div className="flex items-center gap-3">
                     <input type="file" accept="image/*" onChange={onImg} data-testid="vd-form-img" className="block text-sm flex-1" />
                     {form.image_url && <img alt="" src={form.image_url} className="h-14 w-14 rounded-lg border border-[color:var(--sc-border)] object-cover" />}
+                  </div>
+
+                  {/* Gallery — up to 10 images. Hydrated from Product Master
+                      when the vendor picks a smart-search suggestion; also
+                      accepts vendor-uploaded images. No compression applied. */}
+                  <div>
+                    <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
+                      Gallery (up to 10)
+                      <span className="ml-1 font-normal text-[color:var(--sc-ink-muted)] text-[11px]">
+                        auto-filled from smart-search master (no compression)
+                      </span>
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={onExtraImgs}
+                      className="block mt-1 text-sm"
+                      data-testid="vd-form-gallery"
+                    />
+                    {form.images?.length > 0 && (
+                      <div className="flex gap-1.5 mt-2 flex-wrap" data-testid="vd-form-gallery-preview">
+                        {form.images.map((u, i) => (
+                          <div key={`${String(u).slice(-16)}-${i}`} className="relative">
+                            <img alt="" src={u} className="h-14 w-14 rounded border border-[color:var(--sc-border)] object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeImage(i)}
+                              aria-label={`Remove image ${i + 1}`}
+                              className="absolute -top-1 -right-1 bg-[color:var(--sc-error)] text-white rounded-full w-4 h-4 grid place-items-center text-[10px]"
+                              data-testid={`vd-form-gallery-remove-${i}`}
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -518,7 +726,114 @@ export default function VendorDashboard() {
                 </div>
               </div>
 
-              {/* ---- Section 5: Device identity (always visible, collapsed by default) ---- */}
+              {/* ---- Section 4.5: Brand & Sub-Features ---- */}
+              <details open>
+                <summary className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] cursor-pointer py-1">Brand & Sub-Features</summary>
+                <div className="space-y-2 mt-2">
+                  <textarea
+                    className="sc-input min-h-[70px]"
+                    data-testid="vd-form-sub-features"
+                    placeholder={"Key features (one per line)\nExample:\n8 GB RAM · 256 GB storage\n120 Hz AMOLED display"}
+                    value={form.sub_features}
+                    onChange={(e) => setForm({ ...form, sub_features: e.target.value })}
+                  />
+                  <textarea
+                    className="sc-input min-h-[60px]"
+                    data-testid="vd-form-whats-in-box"
+                    placeholder="What's in the box (one item per line)"
+                    value={form.whats_in_box}
+                    onChange={(e) => setForm({ ...form, whats_in_box: e.target.value })}
+                  />
+                </div>
+              </details>
+
+              {/* ---- Section 4.6: Key Attributes ---- */}
+              <details>
+                <summary className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] cursor-pointer py-1">Key Attributes</summary>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <input className="sc-input" data-testid="vd-form-attrs-brand" placeholder="Brand" value={form.attrs_brand} onChange={(e) => setForm({ ...form, attrs_brand: e.target.value })} />
+                  <input className="sc-input" data-testid="vd-form-attrs-os" placeholder="OS" value={form.attrs_os} onChange={(e) => setForm({ ...form, attrs_os: e.target.value })} />
+                  <input className="sc-input" data-testid="vd-form-attrs-ram" placeholder="RAM" value={form.attrs_ram} onChange={(e) => setForm({ ...form, attrs_ram: e.target.value })} />
+                  <input className="sc-input" data-testid="vd-form-attrs-cpu" placeholder="CPU model" value={form.attrs_cpu_model} onChange={(e) => setForm({ ...form, attrs_cpu_model: e.target.value })} />
+                  <input className="sc-input" data-testid="vd-form-attrs-speed" placeholder="CPU speed" value={form.attrs_cpu_speed} onChange={(e) => setForm({ ...form, attrs_cpu_speed: e.target.value })} />
+                  <input className="sc-input" data-testid="vd-form-attrs-storage" placeholder="Storage" value={form.attrs_storage} onChange={(e) => setForm({ ...form, attrs_storage: e.target.value })} />
+                  <input className="sc-input col-span-2" data-testid="vd-form-clothing" placeholder="Clothing size (if apparel)" value={form.clothing_size} onChange={(e) => setForm({ ...form, clothing_size: e.target.value })} />
+                  <textarea
+                    className="sc-input col-span-2 min-h-[60px]"
+                    data-testid="vd-form-extra-attrs"
+                    placeholder={"Extra attributes (one key:value per line)\nExample:\nColor: Black\nWeight: 250g"}
+                    value={form.extra_attrs}
+                    onChange={(e) => setForm({ ...form, extra_attrs: e.target.value })}
+                  />
+                </div>
+              </details>
+
+              {/* ---- Section 4.7: Specification Tabs ---- */}
+              <details>
+                <summary className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] cursor-pointer py-1">Specification Tabs</summary>
+                <div className="space-y-1 mt-2">
+                  <textarea
+                    className="sc-input min-h-[80px] font-mono text-xs"
+                    data-testid="vd-form-spec-tabs"
+                    placeholder={"One tab per line.\nFormat: Tab Name | Label1:Value1; Label2:Value2\nExample:\nGeneral | Color:Black; Weight:250g\nDisplay | Size:6.5; Refresh:120Hz"}
+                    value={form.spec_tabs}
+                    onChange={(e) => setForm({ ...form, spec_tabs: e.target.value })}
+                  />
+                  <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Each tab becomes a section on the product detail page. Auto-populated from smart search.</div>
+                </div>
+              </details>
+
+              {/* ---- Section 4.8: Styled Summaries ---- */}
+              <details>
+                <summary className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] cursor-pointer py-1">Styled Summaries</summary>
+                <div className="space-y-2 mt-2">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-[color:var(--sc-ink)]">Price Summary</label>
+                      <button
+                        type="button"
+                        onClick={applyStrikethrough}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-[color:var(--sc-primary-700)] hover:bg-[color:var(--sc-accent-light)] px-2 py-1 rounded"
+                        data-testid="vd-form-strike"
+                        title="Wrap selected text with ~~strikethrough~~ markers"
+                      >
+                        <Strikethrough size={12} /> Strike selected
+                      </button>
+                    </div>
+                    <textarea
+                      ref={priceSummaryRef}
+                      className="sc-input mt-1 min-h-[50px]"
+                      data-testid="vd-form-price-summary"
+                      placeholder={"e.g. Was ~~₹49,999~~ now ₹32,999 · Extra ₹2,000 off on card"}
+                      value={form.price_summary}
+                      onChange={(e) => setForm({ ...form, price_summary: e.target.value })}
+                    />
+                  </div>
+                  <input
+                    className="sc-input"
+                    data-testid="vd-form-protection-summary"
+                    placeholder="Protection Summary"
+                    value={form.protection_summary}
+                    onChange={(e) => setForm({ ...form, protection_summary: e.target.value })}
+                  />
+                  <input
+                    className="sc-input"
+                    data-testid="vd-form-warranty-summary"
+                    placeholder="Warranty Summary"
+                    value={form.warranty_summary}
+                    onChange={(e) => setForm({ ...form, warranty_summary: e.target.value })}
+                  />
+                  <input
+                    className="sc-input"
+                    data-testid="vd-form-delivery-summary"
+                    placeholder="Delivery Summary"
+                    value={form.delivery_summary}
+                    onChange={(e) => setForm({ ...form, delivery_summary: e.target.value })}
+                  />
+                </div>
+              </details>
+
+              {/* ---- Section 5: Device identity ---- */}
               <DeviceIdentitySection form={form} setForm={setForm} testIdPrefix="vd-form" />
 
               {/* ---- Section 6: Store notes ---- */}
