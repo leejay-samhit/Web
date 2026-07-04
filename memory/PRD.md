@@ -115,6 +115,18 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - **P2** — Web push registration (`/register-push`).
 - **P3** — i18n, offline cart cache.
 
+## Latest updates (04-Jul-2026)
+- **DONE — ProductDetail rich fields shipped.** Vendor-authored "Styled Summaries" (Price / Protection / Warranty / Delivery) now render as a beautiful 2-col gradient tile grid under the delivery estimator, with a tiny inline markdown renderer that handles `~~strike~~`, `**bold**`, and `*italic*` from the backend's `StyledText` shape. A new **Key Attributes** section (Brand / OS / RAM / Storage / Processor / CPU speed / Size / Colour + any `extra_attrs`) renders as icon-chips between the main grid and the tab strip. `DetailsTabs` was reworked to:
+  - Consume structured `spec_tabs` (`[{name, rows:[{label,value}]}]`) *and* the legacy flat `product.specs` dict.
+  - Reorder the tab strip per user directive: **Specification(s) → Highlights → Description → What's in the box → Sold by**.
+  - Accept the correct `whats_in_box` shape (`[{name, image_data_url}]`) with optional per-item image thumbnail.
+- **DONE — Social/meta assets generated.** `/app/frontend/public/og-image.png` (1200×630 branded card) and `/app/frontend/public/apple-touch-icon.png` (180×180 Slangcart tile) shipped so `<meta property="og:image">` and `<link rel="apple-touch-icon">` resolve. Script kept at `/tmp/make_assets.py` for future regeneration.
+- **DONE — DRY refactor.** `AdminProducts.jsx` no longer duplicates `parseLines / parseExtraAttrs / toStyled / parseSpecTabs`; they now come from `@/lib/productForm` (same helpers the Vendor form uses).
+- CI build stays green (`CI=true yarn build` → `Compiled successfully`).
+
+## Verification status
+- Manual visual test of ProductDetail deferred: test credentials in the handoff (`support@networkrupay.com`, `test_alice_73dc7f@test.com`) were reported as rotated/failing by the previous agent, and the login form rejects them on this preview URL. Code paths are conditional-render (`return null` when the new fields are absent) so **legacy products remain unaffected**. Please validate on a product that has the new fields populated and report back.
+
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).
 - See `/app/test_reports/iteration_1.json`.

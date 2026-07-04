@@ -6,6 +6,7 @@ import { formatINR } from "@/lib/utils";
 import { Plus, Trash2, X, Loader2 } from "lucide-react";
 import { log } from "@/lib/log";
 import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
+import { parseLines, parseExtraAttrs, toStyled, parseSpecTabs } from "@/lib/productForm";
 
 const initial = {
   name: "",
@@ -87,36 +88,8 @@ export default function AdminProducts() {
   };
 
   // Helpers: convert UI text fields into the API's structured shapes.
-  const parseLines = (txt) => (txt || "").split("\n").map((s) => s.trim()).filter(Boolean);
-  const parseExtraAttrs = (txt) => {
-    const out = {};
-    for (const line of parseLines(txt)) {
-      const [k, ...rest] = line.split(":");
-      if (k && rest.length) out[k.trim()] = rest.join(":").trim();
-    }
-    return out;
-  };
-  const toStyled = (txt) => txt ? { text: txt } : null;
-  // Parse the spec_tabs textarea into the backend's SpecTab[] shape.
-  // Format per line: "Tab Name | label1:value1; label2:value2"
-  // (separators are flexible — "|" splits tab name from rows, ";" separates rows).
-  const parseSpecTabs = (txt) => {
-    const out = [];
-    for (const line of parseLines(txt)) {
-      const [name, rowsRaw = ""] = line.split("|").map((s) => s.trim());
-      const rows = rowsRaw
-        .split(";")
-        .map((p) => p.trim())
-        .filter(Boolean)
-        .map((p) => {
-          const [label, ...vv] = p.split(":");
-          return { label: (label || "").trim(), value: vv.join(":").trim() };
-        })
-        .filter((r) => r.label || r.value);
-      if (name || rows.length) out.push({ name: name || "", rows });
-    }
-    return out;
-  };
+  // (parseLines / parseExtraAttrs / toStyled / parseSpecTabs are imported from
+  // @/lib/productForm — same helpers used by the Vendor form.)
 
   const create = async () => {
     // Device identity block — enforce Luhn + no duplicates before hitting the API.

@@ -7,9 +7,48 @@ import { formatINR } from "@/lib/utils";
 import {
   ArrowLeft, Check, Heart, Hand, Plus, Minus, ShoppingBag, Tag, Truck, ShieldCheck,
   Star, MapPin, RotateCcw, Award, Zap, ChevronRight, Store, Share2,
+  BadgePercent, Package, Cpu, HardDrive, MonitorSmartphone, Ruler, Palette, Layers,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { log } from "@/lib/log";
+
+/* ---------- Styled-text renderer -------------------------------------
+ * The backend stores summary/description fields as `StyledText` objects
+ * (`{ text: "..." }`) with lightweight markdown tokens:
+ *   ~~strike~~   →   <s>strike</s>
+ *   **bold**     →   <strong>bold</strong>
+ *   *italic*     →   <em>italic</em>
+ * Line-breaks are preserved. Kept intentionally tiny — no full MD engine.
+ */
+function renderStyled(input) {
+  const raw = typeof input === "string" ? input : (input && input.text) || "";
+  if (!raw) return null;
+  const lines = String(raw).split(/\r?\n/);
+  const inlineToNodes = (line, keyPrefix) => {
+    // token pattern: ~~...~~  |  **...**  |  *...*
+    const re = /(~~[^~]+~~|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+    const parts = line.split(re).filter((p) => p !== "");
+    return parts.map((seg, i) => {
+      const k = `${keyPrefix}-${i}`;
+      if (/^~~[^~]+~~$/.test(seg)) return <s key={k} className="opacity-60">{seg.slice(2, -2)}</s>;
+      if (/^\*\*[^*]+\*\*$/.test(seg)) return <strong key={k}>{seg.slice(2, -2)}</strong>;
+      if (/^\*[^*]+\*$/.test(seg)) return <em key={k}>{seg.slice(1, -1)}</em>;
+      return <span key={k}>{seg}</span>;
+    });
+  };
+  return lines.map((ln, i) => (
+    <span key={i}>
+      {inlineToNodes(ln, `l${i}`)}
+      {i < lines.length - 1 && <br />}
+    </span>
+  ));
+}
+
+const hasStyled = (v) => {
+  if (!v) return false;
+  const t = typeof v === "string" ? v : v.text;
+  return !!(t && String(t).trim());
+};
 
 /* ---------- Error card ------------------------------------------------ */
 
@@ -196,10 +235,128 @@ function TrustGrid() {
   );
 }
 
+/* ---------- Styled summaries (Price / Protection / Warranty / Delivery) ----
+ * These are the vendor-authored "why buy this" cards. Renders as a 2x2 grid
+ * with soft-gradient tiles, icons on the left, styled markdown copy right.
+ */
+const SUMMARY_META = {
+  price:      { icon: BadgePercent, title: "Best Price",   accent: "from-emerald-50 to-white",   ring: "ring-emerald-200",   ic: "bg-emerald-600" },
+  protection: { icon: ShieldCheck,  title: "Protection",   accent: "from-indigo-50 to-white",    ring: "ring-indigo-200",    ic: "bg-indigo-600" },
+  warranty:   { icon: Award,        title: "Warranty",     accent: "from-amber-50 to-white",     ring: "ring-amber-200",     ic: "bg-amber-500" },
+  delivery:   { icon: Truck,        title: "Delivery",     accent: "from-sky-50 to-white",       ring: "ring-sky-200",       ic: "bg-sky-600" },
+};
+
+function StyledSummaries({ product }) {
+  const items = [
+    { key: "price",      value: product.price_summary },
+    { key: "protection", value: product.protection_summary },
+    { key: "warranty",   value: product.warranty_summary },
+    { key: "delivery",   value: product.delivery_summary },
+  ].filter((it) => hasStyled(it.value));
+  if (!items.length) return null;
+  return (
+    <div className="grid sm:grid-cols-2 gap-2.5" data-testid="pd-styled-summaries">
+      {items.map(({ key, value }) => {
+        const meta = SUMMARY_META[key];
+        const Icon = meta.icon;
+        return (
+          <div
+            key={key}
+            className={`relative rounded-2xl border border-[color:var(--sc-border)] bg-gradient-to-br ${meta.accent} p-3.5 ring-1 ${meta.ring} hover:-translate-y-0.5 hover:shadow-[0_10px_28px_-16px_rgba(15,23,42,0.35)] transition-all`}
+            data-testid={`pd-summary-${key}`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`w-10 h-10 rounded-xl ${meta.ic} text-white grid place-items-center shrink-0 shadow-sm`}>
+                <Icon size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">
+                  {meta.title}
+                </div>
+                <div className="mt-0.5 text-[13.5px] leading-snug font-semibold text-[color:var(--sc-ink)] break-words">
+                  {renderStyled(value)}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- Key Attributes (Brand / OS / RAM / CPU / Storage / Size) ------
+ * The backend stores these as top-level scalar fields (attrs_*, clothing_size)
+ * plus a free-form `extra_attrs` object. We surface up-to N as pill cards.
+ */
+const ATTR_META = [
+  { key: "attrs_brand",     label: "Brand",     Icon: Tag },
+  { key: "attrs_os",        label: "OS",        Icon: MonitorSmartphone },
+  { key: "attrs_ram",       label: "RAM",       Icon: Layers },
+  { key: "attrs_storage",   label: "Storage",   Icon: HardDrive },
+  { key: "attrs_cpu_model", label: "Processor", Icon: Cpu },
+  { key: "attrs_cpu_speed", label: "CPU Speed", Icon: Zap },
+  { key: "clothing_size",   label: "Size",      Icon: Ruler },
+  { key: "color",           label: "Colour",    Icon: Palette },
+];
+
+function KeyAttributes({ product }) {
+  const items = ATTR_META
+    .map((m) => ({ ...m, value: product?.[m.key] }))
+    .filter((m) => m.value && String(m.value).trim());
+
+  // fold `extra_attrs` (object OR array-of-pairs) into extra chips
+  const extras = [];
+  const ea = product?.extra_attrs;
+  if (ea && typeof ea === "object" && !Array.isArray(ea)) {
+    for (const [k, v] of Object.entries(ea)) {
+      if (k && v !== null && v !== undefined && String(v).trim()) {
+        extras.push({ label: k, value: String(v), Icon: Package });
+      }
+    }
+  } else if (Array.isArray(ea)) {
+    for (const row of ea) {
+      const label = row?.label || row?.key;
+      const value = row?.value ?? row?.val;
+      if (label && value) extras.push({ label, value: String(value), Icon: Package });
+    }
+  }
+
+  const all = [...items, ...extras];
+  if (!all.length) return null;
+
+  return (
+    <section className="mt-8 rounded-3xl bg-white border border-[color:var(--sc-border)] p-5 sm:p-6" data-testid="pd-key-attrs">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-1 h-6 rounded-full bg-[color:var(--sc-primary)]" />
+        <h2 className="text-base sm:text-lg font-extrabold text-[color:var(--sc-ink)]">Key attributes</h2>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+        {all.map((a, i) => (
+          <div
+            key={`${a.label}-${i}`}
+            className="group flex items-center gap-3 rounded-xl border border-[color:var(--sc-border)] bg-[color:var(--sc-accent-light)]/50 hover:bg-[color:var(--sc-accent-light)] hover:border-[color:var(--sc-primary)]/40 p-3 transition-all"
+            data-testid={`pd-attr-${(a.label || "attr").toString().toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            <div className="w-9 h-9 rounded-lg bg-white border border-[color:var(--sc-border)] grid place-items-center text-[color:var(--sc-primary)] shrink-0 group-hover:scale-105 transition-transform">
+              <a.Icon size={15} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] truncate">{a.label}</div>
+              <div className="text-sm font-extrabold text-[color:var(--sc-ink)] truncate">{a.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /* ---------- Tabs (Description / Specs / Box / Vendor) ---------------- */
 
 function DetailsTabs({ product }) {
-  const specs = useMemo(() => {
+  // Legacy specs fallback (product.specs as dict or array)
+  const legacySpecs = useMemo(() => {
     if (Array.isArray(product.specs)) return product.specs;
     if (product.specs && typeof product.specs === "object") {
       return Object.entries(product.specs).map(([k, v]) => ({ label: k, value: String(v) }));
@@ -207,17 +364,53 @@ function DetailsTabs({ product }) {
     return [];
   }, [product.specs]);
 
+  // Structured spec_tabs from admin/vendor form.
+  const specTabs = useMemo(() => {
+    if (!Array.isArray(product.spec_tabs)) return [];
+    return product.spec_tabs
+      .filter(Boolean)
+      .map((t) => ({
+        name: t?.name || "Specifications",
+        rows: Array.isArray(t?.rows) ? t.rows.filter((r) => r && (r.label || r.value)) : [],
+      }))
+      .filter((t) => t.rows.length > 0);
+  }, [product.spec_tabs]);
+
+  // Sub-features (vendor-authored highlights)
+  const subFeatures = useMemo(() => {
+    if (!Array.isArray(product.sub_features)) return [];
+    return product.sub_features.map((s) => (typeof s === "string" ? s : s?.text)).filter(Boolean);
+  }, [product.sub_features]);
+
+  // What's in the box — supports `[string]` and `[{name, image_data_url}]`
+  const boxItems = useMemo(() => {
+    if (!Array.isArray(product.whats_in_box)) return [];
+    return product.whats_in_box
+      .map((x) => (typeof x === "string" ? { name: x } : { name: x?.name, image: x?.image_data_url }))
+      .filter((x) => x.name);
+  }, [product.whats_in_box]);
+
+  // Tab ordering as requested by product: Specification → Description → Sold by
+  const hasSpecs = specTabs.length > 0 || legacySpecs.length > 0;
+
   const tabs = [
-    { key: "desc", label: "Description", show: !!product.description },
-    { key: "specs", label: "Specifications", show: specs.length > 0 },
-    { key: "box", label: "What's in the box", show: Array.isArray(product.whats_in_box) && product.whats_in_box.length > 0 },
-    { key: "vendor", label: "Sold by", show: !!(product.vendor_name || product.shop_name || product.vendor_id) },
+    { key: "specs",  label: specTabs[0]?.name || "Specifications", show: hasSpecs },
+    ...specTabs.slice(1).map((t, i) => ({ key: `spec-${i + 1}`, label: t.name || `Spec ${i + 2}`, show: true, _tabIndex: i + 1 })),
+    { key: "features", label: "Highlights", show: subFeatures.length > 0 },
+    { key: "desc",   label: "Description",  show: !!product.description },
+    { key: "box",    label: "What's in the box", show: boxItems.length > 0 },
+    { key: "vendor", label: "Sold by",      show: !!(product.vendor_name || product.shop_name || product.vendor_id) },
   ].filter((t) => t.show);
 
-  const [tab, setTab] = useState(tabs[0]?.key || "desc");
+  const [tab, setTab] = useState(tabs[0]?.key || "specs");
   useEffect(() => { if (tabs.length && !tabs.find((t) => t.key === tab)) setTab(tabs[0].key); }, [tabs, tab]);
 
   if (!tabs.length) return null;
+
+  const activeSpecTab =
+    tab === "specs"
+      ? (specTabs[0] || { name: "Specifications", rows: legacySpecs })
+      : (tab.startsWith("spec-") ? specTabs[Number(tab.slice(5))] : null);
 
   return (
     <div className="mt-10 rounded-3xl bg-white border border-[color:var(--sc-border)] overflow-hidden" data-testid="pd-tabs">
@@ -241,17 +434,9 @@ function DetailsTabs({ product }) {
       </div>
 
       <div className="p-6 sm:p-8">
-        {tab === "desc" && (
-          <div className="prose max-w-none">
-            <p className="text-[15px] text-[color:var(--sc-ink)] leading-relaxed whitespace-pre-line" data-testid="pd-desc">
-              {product.description}
-            </p>
-          </div>
-        )}
-
-        {tab === "specs" && (
+        {activeSpecTab && (
           <dl className="grid sm:grid-cols-2 gap-x-8 gap-y-3" data-testid="pd-specs">
-            {specs.map((s, i) => (
+            {activeSpecTab.rows.map((s, i) => (
               <div key={`${s.label}-${i}`} className="flex items-start justify-between gap-4 py-2 border-b border-dashed border-[color:var(--sc-border)] last:border-0">
                 <dt className="text-sm font-semibold text-[color:var(--sc-ink-muted)]">{s.label}</dt>
                 <dd className="text-sm font-bold text-[color:var(--sc-ink)] text-right">{s.value}</dd>
@@ -260,12 +445,35 @@ function DetailsTabs({ product }) {
           </dl>
         )}
 
+        {tab === "features" && (
+          <ul className="grid sm:grid-cols-2 gap-2" data-testid="pd-features">
+            {subFeatures.map((f, i) => (
+              <li key={`${f}-${i}`} className="flex items-start gap-2 rounded-lg bg-[color:var(--sc-accent-light)] p-3">
+                <Check size={16} className="text-[color:var(--sc-primary)] mt-0.5 shrink-0" />
+                <span className="text-sm font-semibold text-[color:var(--sc-ink)]">{f}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {tab === "desc" && (
+          <div className="prose max-w-none">
+            <p className="text-[15px] text-[color:var(--sc-ink)] leading-relaxed whitespace-pre-line" data-testid="pd-desc">
+              {product.description}
+            </p>
+          </div>
+        )}
+
         {tab === "box" && (
           <ul className="grid sm:grid-cols-2 gap-2" data-testid="pd-box">
-            {product.whats_in_box.map((x, i) => (
-              <li key={`${x}-${i}`} className="flex items-start gap-2 rounded-lg bg-[color:var(--sc-accent-light)] p-3">
-                <Check size={16} className="text-[color:var(--sc-primary)] mt-0.5 shrink-0" />
-                <span className="text-sm font-semibold text-[color:var(--sc-ink)]">{x}</span>
+            {boxItems.map((x, i) => (
+              <li key={`${x.name}-${i}`} className="flex items-center gap-3 rounded-lg bg-[color:var(--sc-accent-light)] p-3">
+                {x.image ? (
+                  <img alt="" src={x.image} className="w-10 h-10 rounded-lg object-cover bg-white border border-[color:var(--sc-border)] shrink-0" />
+                ) : (
+                  <Check size={16} className="text-[color:var(--sc-primary)] mt-0.5 shrink-0" />
+                )}
+                <span className="text-sm font-semibold text-[color:var(--sc-ink)]">{x.name}</span>
               </li>
             ))}
           </ul>
@@ -356,6 +564,9 @@ function ProductInfo({ product, busy, inCart, saved, interested, qty, setQty, on
           </div>
         </div>
       </div>
+
+      {/* Vendor-authored styled summaries (price / protection / warranty / delivery) */}
+      <StyledSummaries product={product} />
 
       {/* Qty + CTAs */}
       <div>
@@ -546,6 +757,7 @@ export default function ProductDetail() {
               />
             </div>
           </div>
+          <KeyAttributes product={product} />
           <DetailsTabs product={product} />
         </div>
       )}
