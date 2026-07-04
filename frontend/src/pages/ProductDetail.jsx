@@ -6,7 +6,7 @@ import Spinner from "@/components/Spinner";
 import { formatINR } from "@/lib/utils";
 import {
   ArrowLeft, Check, Heart, Hand, Plus, Minus, ShoppingBag, Tag, Truck, ShieldCheck,
-  Star, RotateCcw, Award, Zap, ChevronRight, Store, Share2,
+  Star, Award, Zap, ChevronRight, Store, Share2,
   BadgePercent, Package, Cpu, HardDrive, MonitorSmartphone, Ruler, Palette, Layers,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
@@ -208,29 +208,6 @@ function QtyPicker({ qty, setQty, max }) {
       <button onClick={inc} className="w-10 h-10 grid place-items-center hover:bg-[color:var(--sc-accent-light)]" data-testid="pd-qty-inc">
         <Plus size={14} />
       </button>
-    </div>
-  );
-}
-
-/* ---------- Trust chips ---------------------------------------------- */
-
-const TRUST = [
-  { icon: Truck, title: "Fast delivery", sub: "Ships within 24h" },
-  { icon: RotateCcw, title: "Easy returns", sub: "7-day window" },
-  { icon: ShieldCheck, title: "Secure payments", sub: "UPI · Cards · Wallet" },
-  { icon: Award, title: "Genuine product", sub: "Verified vendor" },
-];
-
-function TrustGrid() {
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="pd-trust">
-      {TRUST.map((t) => (
-        <div key={t.title} className="rounded-xl bg-white border border-[color:var(--sc-border)] p-2.5 hover:border-[color:var(--sc-primary)] transition-colors">
-          <t.icon size={16} className="text-[color:var(--sc-primary)]" />
-          <div className="mt-1.5 text-xs font-extrabold text-[color:var(--sc-ink)] leading-tight">{t.title}</div>
-          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-0.5 leading-tight">{t.sub}</div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -616,8 +593,6 @@ function ProductInfo({ product, busy, inCart, saved, interested, qty, setQty, on
           </button>
         </div>
       </div>
-
-      <TrustGrid />
     </div>
   );
 }
