@@ -24,15 +24,17 @@ const SectionTag = ({ children }) => (
 
 const SectionHeading = ({ eyebrow, title, sub, align = "left" }) => (
   <div className={align === "center" ? "text-center max-w-3xl mx-auto" : "max-w-3xl"}>
-    <SectionTag>{eyebrow}</SectionTag>
-    <h2 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-[color:var(--sc-ink)] leading-[1.05]">
-      {title}
-    </h2>
-    {sub && (
-      <p className="mt-4 text-base sm:text-lg text-[color:var(--sc-ink-muted)] leading-relaxed">
-        {sub}
-      </p>
-    )}
+      {/* Section-heading vertical margin was originally huge — tightened to
+          keep the whole page more scannable while preserving hierarchy. */}
+      <SectionTag>{eyebrow}</SectionTag>
+      <h2 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-[color:var(--sc-ink)] leading-[1.05]">
+        {title}
+      </h2>
+      {sub && (
+        <p className="mt-3 text-base sm:text-lg text-[color:var(--sc-ink-muted)] leading-relaxed">
+          {sub}
+        </p>
+      )}
   </div>
 );
 
@@ -196,7 +198,7 @@ function TopNav({ cms }) {
 
 function Hero({ cms }) {
   return (
-    <section className="relative pt-28 sm:pt-32 pb-16 overflow-hidden" data-testid="hero">
+    <section className="relative pt-24 sm:pt-28 pb-10 overflow-hidden" data-testid="hero">
       {/* soft radial background */}
       <div className="absolute inset-0 -z-10 bg-gradient-to-b from-[color:var(--sc-accent-light)] via-[color:var(--sc-bg)] to-[color:var(--sc-bg)]" />
       <div className="absolute -top-32 -left-40 w-[520px] h-[520px] rounded-full bg-[color:var(--sc-primary)]/10 blur-3xl -z-10" />
@@ -353,7 +355,7 @@ function BillingSection({ cms }) {
     { icon: Cloud, label: "Cloud sync" },
   ];
   return (
-    <section id="billing" className="py-20 sm:py-28" data-testid="section-billing">
+    <section id="billing" className="py-12 sm:py-16" data-testid="section-billing">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-12 items-start">
         <div className="lg:col-span-5">
           <SectionHeading
@@ -404,7 +406,7 @@ function ShopSection({ cms }) {
     { icon: Heart, label: "Wishlist" },
   ];
   return (
-    <section id="shop" className="py-20 sm:py-28 relative overflow-hidden" data-testid="section-shop">
+    <section id="shop" className="py-12 sm:py-16 relative overflow-hidden" data-testid="section-shop">
       <div className="absolute inset-0 -z-10 bg-gradient-to-b from-white to-[color:var(--sc-accent-light)]/50" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-12 items-start">
         <div className="lg:col-span-7 order-2 lg:order-1">
@@ -464,7 +466,7 @@ function ServicesSection({ cms }) {
     { icon: CheckCircle2, label: "Completed" },
   ];
   return (
-    <section id="services" className="py-20 sm:py-28" data-testid="section-services">
+    <section id="services" className="py-12 sm:py-16" data-testid="section-services">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeading
           eyebrow={cms.services_eyebrow}
@@ -504,7 +506,7 @@ function HowItWorks({ cms }) {
     { icon: Rocket, title: "Use anywhere", desc: "Online, offline, at home or on the go." },
   ];
   return (
-    <section id="how" className="py-20 sm:py-28 bg-gradient-to-b from-[color:var(--sc-accent-light)]/60 to-white" data-testid="section-how">
+    <section id="how" className="py-12 sm:py-16 bg-gradient-to-b from-[color:var(--sc-accent-light)]/60 to-white" data-testid="section-how">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeading eyebrow={cms.how_eyebrow} title={cms.how_title} align="center" />
         <div className="mt-12 relative">
@@ -550,7 +552,7 @@ const PREMIUM_FEATURES = [
 
 function FeatureGrid({ cms }) {
   return (
-    <section className="py-20 sm:py-28" data-testid="section-features">
+    <section className="py-12 sm:py-16" data-testid="section-features">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeading eyebrow={cms.features_eyebrow} title={cms.features_title} align="center" />
         <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -594,7 +596,7 @@ const TERMS = [
 function TermsSection({ cms }) {
   const [open, setOpen] = useState(0);
   return (
-    <section id="terms" className="py-20 sm:py-28 bg-gradient-to-b from-white to-[color:var(--sc-accent-light)]/40" data-testid="section-terms">
+    <section id="terms" className="py-12 sm:py-16 bg-gradient-to-b from-white to-[color:var(--sc-accent-light)]/40" data-testid="section-terms">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <SectionHeading eyebrow={cms.terms_eyebrow} title={cms.terms_title} align="center" />
         <div className="mt-10 space-y-3">
@@ -647,7 +649,7 @@ function ContactSection({ cms }) {
     setTimeout(() => setSent(false), 4000);
   };
   return (
-    <section id="contact" className="py-20 sm:py-28" data-testid="section-contact">
+    <section id="contact" className="py-12 sm:py-16" data-testid="section-contact">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-12 gap-10 items-start">
         <div className="lg:col-span-5">
           <SectionHeading
@@ -740,20 +742,26 @@ function ContactSection({ cms }) {
 
 /* ---------- Careers section --------------------------------------- */
 
-const ROLES = [
-  { icon: GraduationCap, title: "Software Developer" },
-  { icon: Sparkles, title: "UI/UX Designer" },
-  { icon: TrendingUp, title: "Sales Executive" },
-  { icon: Rocket, title: "Marketing Executive" },
-  { icon: MessageCircle, title: "Customer Support" },
-  { icon: Wrench, title: "Service Coordinator" },
-  { icon: Truck, title: "Delivery Partner" },
-  { icon: Briefcase, title: "Business Development" },
-];
+const ROLE_ICON = {
+  sales: TrendingUp,
+  service: Wrench,
+  support: MessageCircle,
+  marketing: Rocket,
+  developer: GraduationCap,
+  design: Sparkles,
+  delivery: Truck,
+  business: Briefcase,
+};
+function iconForRole(title = "") {
+  const t = title.toLowerCase();
+  for (const key of Object.keys(ROLE_ICON)) if (t.includes(key)) return ROLE_ICON[key];
+  return Briefcase;
+}
 
 function CareersSection({ cms }) {
+  const roles = Array.isArray(cms.careers_roles) ? cms.careers_roles : [];
   return (
-    <section id="careers" className="py-20 sm:py-28 bg-gradient-to-b from-[color:var(--sc-accent-light)]/40 to-white" data-testid="section-careers">
+    <section id="careers" className="py-12 sm:py-16 bg-gradient-to-b from-[color:var(--sc-accent-light)]/40 to-white" data-testid="section-careers">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-12 gap-10 items-start">
           <div className="lg:col-span-5">
@@ -776,32 +784,41 @@ function CareersSection({ cms }) {
             </div>
           </div>
           <div className="lg:col-span-7">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {ROLES.map((r) => (
-                <div key={r.title} className="group rounded-2xl bg-white border border-[color:var(--sc-border)] p-5 hover:border-[color:var(--sc-primary)] transition-all" data-testid={`role-${r.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)] group-hover:bg-[color:var(--sc-primary)] group-hover:text-white transition-colors">
-                      <r.icon size={20} />
+            {roles.length === 0 ? (
+              <div className="rounded-2xl bg-white border border-dashed border-[color:var(--sc-border)] p-8 text-center text-sm text-[color:var(--sc-ink-muted)]">
+                No open roles right now — check back soon!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {roles.map((r, i) => {
+                  const Icon = iconForRole(r.title || "");
+                  return (
+                    <div key={`${r.title}-${i}`} className="group rounded-2xl bg-white border border-[color:var(--sc-border)] p-5 hover:border-[color:var(--sc-primary)] transition-all" data-testid={`role-${(r.title || `role-${i}`).toLowerCase().replace(/\s+/g, "-")}`}>
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-xl bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)] group-hover:bg-[color:var(--sc-primary)] group-hover:text-white transition-colors">
+                          <Icon size={20} />
+                        </div>
+                        <div>
+                          <div className="font-extrabold text-[color:var(--sc-ink)]">{r.title}</div>
+                          <div className="text-xs text-[color:var(--sc-ink-muted)]">{r.subtitle || ""}</div>
+                        </div>
+                      </div>
+                      <a
+                        href={`mailto:${cms.careers_email}?subject=${encodeURIComponent(`Application: ${r.title}`)}`}
+                        className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--sc-primary)] hover:text-[color:var(--sc-primary-700)]"
+                      >
+                        Apply now <ArrowRight size={14} />
+                      </a>
                     </div>
-                    <div>
-                      <div className="font-extrabold text-[color:var(--sc-ink)]">{r.title}</div>
-                      <div className="text-xs text-[color:var(--sc-ink-muted)]">Full-time · Bengaluru / Remote</div>
-                    </div>
-                  </div>
-                  <a
-                    href={`mailto:${cms.careers_email}?subject=${encodeURIComponent(`Application: ${r.title}`)}`}
-                    className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--sc-primary)] hover:text-[color:var(--sc-primary-700)]"
-                  >
-                    Apply now <ArrowRight size={14} />
-                  </a>
-                </div>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            )}
             <div className="mt-6 rounded-2xl bg-white border border-dashed border-[color:var(--sc-primary)]/40 p-5 flex flex-wrap items-center gap-4">
               <Briefcase size={22} className="text-[color:var(--sc-primary)]" />
               <div className="flex-1 min-w-[220px]">
-                <div className="font-extrabold text-[color:var(--sc-ink)]">Don&apos;t see your role?</div>
-                <div className="text-sm text-[color:var(--sc-ink-muted)]">Email your resume — we&apos;re always looking for great people.</div>
+                <div className="font-extrabold text-[color:var(--sc-ink)]">{cms.careers_bottom_title}</div>
+                <div className="text-sm text-[color:var(--sc-ink-muted)]">{cms.careers_bottom_desc}</div>
               </div>
               <a
                 href={`mailto:${cms.careers_email}?subject=Open%20application`}

@@ -80,7 +80,15 @@ export const DEFAULT_CMS = {
   careers_title: "Build the future of local commerce with us.",
   careers_sub:
     "We're a small, mission-driven team building tools for millions of Indian retailers, service providers and shoppers. Come help us grow.",
-  careers_email: "careers@networkrupay.com",
+  careers_email: "Support@slangcart.com",
+  // Editable list of open roles. Each entry: { title, subtitle }.
+  // Add/remove/rename from /admin/landing → "Careers · open roles".
+  careers_roles: [
+    { title: "Sales Executive", subtitle: "Full-time · Bengaluru / Remote" },
+    { title: "Service Executive", subtitle: "Full-time · Bengaluru / Remote" },
+  ],
+  careers_bottom_title: "Don't see your role?",
+  careers_bottom_desc: "Email your resume — we're always looking for great people.",
 
   footer_about:
     "An all-in-one platform for retail billing, an online shop, a service marketplace and a referral wallet — built for India's local businesses.",

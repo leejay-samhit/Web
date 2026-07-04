@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import { DEFAULT_CMS, loadCms, saveCmsLocal, publishCms, resetCmsLocal } from "@/lib/landingCms";
-import { Save, Loader2, RotateCcw, CheckCircle2, AlertCircle, ExternalLink, Eye } from "lucide-react";
+import { Save, Loader2, RotateCcw, CheckCircle2, AlertCircle, ExternalLink, Eye, Plus, Trash2, GripVertical } from "lucide-react";
 import { Link } from "react-router-dom";
 
 /**
@@ -101,8 +101,15 @@ const SECTIONS = [
       { key: "careers_eyebrow", label: "Eyebrow" },
       { key: "careers_title", label: "Section title" },
       { key: "careers_sub", label: "Description", type: "textarea" },
-      { key: "careers_email", label: "Applications email" },
+      { key: "careers_email", label: "Default apply-email (all Apply buttons)", placeholder: "support@slangcart.com" },
+      { key: "careers_bottom_title", label: "Bottom card · title" },
+      { key: "careers_bottom_desc", label: "Bottom card · description", type: "textarea" },
     ],
+  },
+  {
+    title: "Careers · open roles",
+    help: "Add, rename or remove open roles. Each row becomes an Apply-Now card. Use the subtitle to describe location / type (e.g. \"Full-time · Bengaluru / Remote\"). Empty list = shows a friendly 'no open roles right now' message.",
+    roles_repeater: true, // rendered by a special component below
   },
   {
     title: "Footer",
@@ -111,6 +118,82 @@ const SECTIONS = [
     ],
   },
 ];
+
+/** Repeater UI for the editable Careers open-roles list. */
+function RolesRepeater({ roles, onChange }) {
+  const setRole = (i, patch) => {
+    const next = roles.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
+    onChange(next);
+  };
+  const remove = (i) => onChange(roles.filter((_, idx) => idx !== i));
+  const add = () =>
+    onChange([...roles, { title: "New role", subtitle: "Full-time · Bengaluru / Remote" }]);
+  const moveUp = (i) => {
+    if (i <= 0) return;
+    const next = roles.slice();
+    [next[i - 1], next[i]] = [next[i], next[i - 1]];
+    onChange(next);
+  };
+  return (
+    <div className="mt-4 space-y-2" data-testid="roles-repeater">
+      {roles.length === 0 && (
+        <div className="rounded-lg bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)] text-xs px-3 py-3">
+          No roles yet — click <b>Add role</b> below to create one.
+        </div>
+      )}
+      {roles.map((r, i) => (
+        <div
+          key={i}
+          className="rounded-xl border border-[color:var(--sc-border)] p-3 grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr_auto] gap-2 items-center"
+          data-testid={`role-row-${i}`}
+        >
+          <button
+            type="button"
+            onClick={() => moveUp(i)}
+            disabled={i === 0}
+            aria-label="Move up"
+            className="w-8 h-8 rounded-lg border border-[color:var(--sc-border)] grid place-items-center text-[color:var(--sc-ink-muted)] hover:bg-[color:var(--sc-accent-light)] disabled:opacity-30"
+            title="Move up"
+          >
+            <GripVertical size={14} />
+          </button>
+          <input
+            className="sc-input"
+            value={r.title || ""}
+            placeholder="Role title (e.g. Sales Executive)"
+            onChange={(e) => setRole(i, { title: e.target.value })}
+            data-testid={`role-title-${i}`}
+          />
+          <input
+            className="sc-input"
+            value={r.subtitle || ""}
+            placeholder="Full-time · Bengaluru / Remote"
+            onChange={(e) => setRole(i, { subtitle: e.target.value })}
+            data-testid={`role-subtitle-${i}`}
+          />
+          <button
+            type="button"
+            onClick={() => remove(i)}
+            aria-label="Remove role"
+            className="w-8 h-8 rounded-lg border border-rose-200 bg-rose-50 grid place-items-center text-rose-600 hover:bg-rose-100"
+            title="Remove"
+            data-testid={`role-remove-${i}`}
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        className="sc-btn-outline inline-flex items-center gap-1.5 text-sm bg-white"
+        data-testid="role-add"
+      >
+        <Plus size={14} /> Add role
+      </button>
+    </div>
+  );
+}
 
 export default function AdminLanding() {
   const [cms, setCms] = useState(DEFAULT_CMS);
@@ -234,32 +317,39 @@ export default function AdminLanding() {
                 {sec.help && (
                   <div className="mt-1 text-xs text-[color:var(--sc-ink-muted)]">{sec.help}</div>
                 )}
-                <div className="mt-4 grid sm:grid-cols-2 gap-4">
-                  {sec.fields.map((f) => (
-                    <div key={f.key} className={f.type === "textarea" ? "sm:col-span-2" : ""}>
-                      <label className="text-xs font-semibold text-[color:var(--sc-ink)]">{f.label}</label>
-                      {f.type === "textarea" ? (
-                        <textarea
-                          rows={3}
-                          value={cms[f.key] ?? ""}
-                          onChange={(e) => setField(f.key, e.target.value)}
-                          className="sc-input mt-1 resize-none"
-                          placeholder={f.placeholder}
-                          data-testid={`cms-${f.key}`}
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          value={cms[f.key] ?? ""}
-                          onChange={(e) => setField(f.key, e.target.value)}
-                          className="sc-input mt-1"
-                          placeholder={f.placeholder}
-                          data-testid={`cms-${f.key}`}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
+                {sec.roles_repeater ? (
+                  <RolesRepeater
+                    roles={Array.isArray(cms.careers_roles) ? cms.careers_roles : []}
+                    onChange={(next) => setField("careers_roles", next)}
+                  />
+                ) : (
+                  <div className="mt-4 grid sm:grid-cols-2 gap-4">
+                    {sec.fields.map((f) => (
+                      <div key={f.key} className={f.type === "textarea" ? "sm:col-span-2" : ""}>
+                        <label className="text-xs font-semibold text-[color:var(--sc-ink)]">{f.label}</label>
+                        {f.type === "textarea" ? (
+                          <textarea
+                            rows={3}
+                            value={cms[f.key] ?? ""}
+                            onChange={(e) => setField(f.key, e.target.value)}
+                            className="sc-input mt-1 resize-none"
+                            placeholder={f.placeholder}
+                            data-testid={`cms-${f.key}`}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={cms[f.key] ?? ""}
+                            onChange={(e) => setField(f.key, e.target.value)}
+                            className="sc-input mt-1"
+                            placeholder={f.placeholder}
+                            data-testid={`cms-${f.key}`}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </>
