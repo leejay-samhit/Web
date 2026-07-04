@@ -6,7 +6,7 @@ import Spinner from "@/components/Spinner";
 import { formatINR } from "@/lib/utils";
 import {
   ArrowLeft, Check, Heart, Hand, Plus, Minus, ShoppingBag, Tag, Truck, ShieldCheck,
-  Star, MapPin, RotateCcw, Award, Zap, ChevronRight, Store, Share2,
+  Star, RotateCcw, Award, Zap, ChevronRight, Store, Share2,
   BadgePercent, Package, Cpu, HardDrive, MonitorSmartphone, Ruler, Palette, Layers,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
@@ -240,7 +240,7 @@ function TrustGrid() {
  * with soft-gradient tiles, icons on the left, styled markdown copy right.
  */
 const SUMMARY_META = {
-  price:      { icon: BadgePercent, title: "Best Price",   accent: "from-emerald-50 to-white",   ring: "ring-emerald-200",   ic: "bg-emerald-600" },
+  price:      { icon: BadgePercent, title: "MRP Price",    accent: "from-emerald-50 to-white",   ring: "ring-emerald-200",   ic: "bg-emerald-600" },
   protection: { icon: ShieldCheck,  title: "Protection",   accent: "from-indigo-50 to-white",    ring: "ring-indigo-200",    ic: "bg-indigo-600" },
   warranty:   { icon: Award,        title: "Warranty",     accent: "from-amber-50 to-white",     ring: "ring-amber-200",     ic: "bg-amber-500" },
   delivery:   { icon: Truck,        title: "Delivery",     accent: "from-sky-50 to-white",       ring: "ring-sky-200",       ic: "bg-sky-600" },
@@ -551,19 +551,6 @@ function ProductInfo({ product, busy, inCart, saved, interested, qty, setQty, on
 
       <PriceBlock price={product.price} mrp={product.mrp || product.original_price} />
       <StockStrip stock={product.stock} />
-
-      {/* Delivery estimator */}
-      <div className="rounded-xl bg-white border border-[color:var(--sc-border)] p-3 flex items-start gap-3">
-        <div className="w-9 h-9 rounded-lg bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)] shrink-0">
-          <MapPin size={16} />
-        </div>
-        <div className="flex-1 text-sm">
-          <div className="font-extrabold text-[color:var(--sc-ink)] text-[13px]">Delivery to your area</div>
-          <div className="text-[color:var(--sc-ink-muted)] text-xs mt-0.5">
-            Free delivery · Get it in <span className="font-bold text-[color:var(--sc-primary-700)]">2–4 business days</span>
-          </div>
-        </div>
-      </div>
 
       {/* Vendor-authored styled summaries (price / protection / warranty / delivery) */}
       <StyledSummaries product={product} />
