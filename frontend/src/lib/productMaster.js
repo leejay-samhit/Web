@@ -67,9 +67,11 @@ export async function scanCode(code, kind = "barcode") {
 }
 
 /** Luhn checksum for 15-digit IMEI. Local UX-level validation only —
- *  the backend must still enforce uniqueness. */
+ *  the backend must still enforce uniqueness.
+ *  Empty / null / whitespace returns `true` (IMEI is an optional field). */
 export function isValidImei(str) {
   const s = String(str || "").replace(/\D/g, "");
+  if (s.length === 0) return true;
   if (s.length !== 15) return false;
   let sum = 0;
   for (let i = 0; i < s.length; i++) {

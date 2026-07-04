@@ -5,6 +5,7 @@ import Spinner from "@/components/Spinner";
 import { formatINR } from "@/lib/utils";
 import { Plus, Trash2, X, Loader2 } from "lucide-react";
 import { log } from "@/lib/log";
+import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
 
 const initial = {
   name: "",
@@ -16,6 +17,10 @@ const initial = {
   sub_category: "",
   brand: "",
   is_published: true,
+  // Device identity (optional; validated with Luhn if provided)
+  serial_number: "",
+  imei_1: "",
+  imei_2: "",
   // extended attributes (mobile app parity)
   sub_features: "",       // newline-separated bullet points
   images: [],             // array of additional image data-urls
@@ -114,6 +119,9 @@ export default function AdminProducts() {
   };
 
   const create = async () => {
+    // Device identity block — enforce Luhn + no duplicates before hitting the API.
+    const idErr = validateDeviceIdentity(form);
+    if (idErr) { setErr(idErr); return; }
     setSaving(true);
     setErr("");
     try {
@@ -127,6 +135,9 @@ export default function AdminProducts() {
         sub_category: form.sub_category || null,
         brand: form.brand || null,
         is_published: form.is_published,
+        serial_number: form.serial_number || null,
+        imei_1: form.imei_1 || null,
+        imei_2: form.imei_2 || null,
         sub_features: parseLines(form.sub_features),
         images: form.images || [],
         attrs_brand: form.attrs_brand || null,
@@ -276,6 +287,8 @@ export default function AdminProducts() {
                   <textarea className="sc-input col-span-2 min-h-[60px]" data-testid="ap-extra-attrs" placeholder={"Other specs (one per line, key:value)\nExample:\nColor: Black\nWeight: 250g"} value={form.extra_attrs} onChange={set("extra_attrs")} />
                 </div>
               </details>
+
+              <DeviceIdentitySection form={form} setForm={setForm} testIdPrefix="ap" />
 
               <details>
                 <summary className="text-xs font-bold uppercase text-[color:var(--sc-ink-muted)] cursor-pointer py-1">Price / Protection / Warranty / Delivery summaries</summary>

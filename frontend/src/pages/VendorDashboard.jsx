@@ -7,7 +7,8 @@ import { formatINR, formatDateTime } from "@/lib/utils";
 import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2, Search, Sparkles, Check, Info } from "lucide-react";
 import { log } from "@/lib/log";
 import VendorNav from "@/components/vendor/VendorNav";
-import { searchMaster, getMaster, reportMasterHit, isValidImei } from "@/lib/productMaster";
+import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
+import { searchMaster, getMaster, reportMasterHit } from "@/lib/productMaster";
 
 const CONDITIONS = [
   { key: "new", label: "New" },
@@ -217,19 +218,11 @@ export default function VendorDashboard() {
     }
   };
 
-  // Show serial/IMEI section for electronics-like categories only.
-  const needsSerial = /mobile|phone|smart|electronic|appliance|computer|laptop|tv|watch|tablet|camera|network|printer/i.test(form.category || "");
-
   const submitProduct = async () => {
-    // Local IMEI Luhn validation so we don't waste a round-trip.
-    if (form.imei_1 && !isValidImei(form.imei_1)) {
-      alert("IMEI 1 is not a valid 15-digit IMEI (Luhn check failed).");
-      return;
-    }
-    if (form.imei_2 && !isValidImei(form.imei_2)) {
-      alert("IMEI 2 is not a valid 15-digit IMEI (Luhn check failed).");
-      return;
-    }
+    // Device identity block — required for anyone who typed anything into
+    // the IMEI fields. See DeviceIdentitySection.validateDeviceIdentity.
+    const idErr = validateDeviceIdentity(form);
+    if (idErr) { alert(idErr); return; }
     setSaving(true);
     try {
       const payload = {
@@ -525,39 +518,8 @@ export default function VendorDashboard() {
                 </div>
               </div>
 
-              {/* ---- Section 5: Serial tracking (electronics only) ---- */}
-              {needsSerial && (
-                <div>
-                  <div className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] mb-1.5">
-                    Serial / IMEI tracking
-                    <span className="ml-1 font-normal text-[10px] normal-case tracking-normal">(required for phones · electronics)</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
-                      IMEI 1
-                      <input className="sc-input mt-1 font-mono" data-testid="vd-form-imei1" placeholder="15-digit" value={form.imei_1} onChange={(e) => setForm({ ...form, imei_1: e.target.value.replace(/\D/g, "").slice(0, 15) })} />
-                      {form.imei_1 && !isValidImei(form.imei_1) && (
-                        <span className="text-[10px] text-rose-600 font-semibold">Invalid IMEI (Luhn)</span>
-                      )}
-                    </label>
-                    <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
-                      IMEI 2
-                      <input className="sc-input mt-1 font-mono" data-testid="vd-form-imei2" placeholder="15-digit (optional)" value={form.imei_2} onChange={(e) => setForm({ ...form, imei_2: e.target.value.replace(/\D/g, "").slice(0, 15) })} />
-                      {form.imei_2 && !isValidImei(form.imei_2) && (
-                        <span className="text-[10px] text-rose-600 font-semibold">Invalid IMEI (Luhn)</span>
-                      )}
-                    </label>
-                    <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
-                      Serial number
-                      <input className="sc-input mt-1 font-mono" data-testid="vd-form-serial" placeholder="Optional" value={form.serial_number} onChange={(e) => setForm({ ...form, serial_number: e.target.value })} />
-                    </label>
-                    <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
-                      Batch number
-                      <input className="sc-input mt-1 font-mono" data-testid="vd-form-batch" placeholder="Optional" value={form.batch_number} onChange={(e) => setForm({ ...form, batch_number: e.target.value })} />
-                    </label>
-                  </div>
-                </div>
-              )}
+              {/* ---- Section 5: Device identity (always visible, collapsed by default) ---- */}
+              <DeviceIdentitySection form={form} setForm={setForm} testIdPrefix="vd-form" />
 
               {/* ---- Section 6: Store notes ---- */}
               <label className="block text-xs font-semibold text-[color:var(--sc-ink)]">
