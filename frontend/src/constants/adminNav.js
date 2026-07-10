@@ -50,6 +50,7 @@ export const adminGroups = [
       { to: "/admin/withdrawals", label: "Withdrawals", icon: ArrowDownToLine },
       { to: "/admin/upi-payments", label: "UPI payments (pending)", icon: QrCode },
       { to: "/admin/legal-pages", label: "Legal pages", icon: FileText },
+      { to: "/admin/onboarding-terms", label: "Onboarding T&C (Vendor / Service)", icon: FileText },
       { to: "/admin/landing", label: "Landing page (slangcart.com)", icon: LayoutIcon },
     ],
   },

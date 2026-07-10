@@ -116,6 +116,16 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - **P3** — i18n, offline cart cache.
 
 ## Latest updates (04-Jul-2026)
+- **DONE — Onboarding T&C compliance flow.** Two long-form legal texts (Vendor Declaration & GST Compliance Agreement, Service Provider Declaration & Compliance Agreement) are now enforced during onboarding:
+  - New shared component `src/components/TermsAcceptancePanel.jsx` renders the full text in a scrollable card, blocks the "I Agree" checkbox until the applicant has scrolled to the bottom, and displays the numbered clauses + declaration heading.
+  - `BecomeVendor.jsx` + `BecomeProvider.jsx` now embed the panel and disable the Apply button until it's checked. The applicant's acceptance (role + version + ISO timestamp) is included in the `/vendor/apply` and `/service/apply` payloads under `accepted_terms` so the backend can persist informed consent.
+  - Only shown for new applicants — existing vendors / providers loading their profile skip the gate.
+- **DONE — Admin CMS for onboarding T&C.** New route `/admin/onboarding-terms` with a dedicated editor:
+  - Side-by-side editors for Vendor + Service Provider agreements. Every field editable: Title, Intro, numbered Clauses (add / remove / reorder with up-down arrows), Declaration heading & body, "I Agree" checkbox label.
+  - Same persistence pattern as `landingCms`: **Save (my browser)** for local preview + **Publish live** which PUTs `/admin/settings { onboarding_terms }`.
+  - Backend upgrade path: `SettingsUpdate` Pydantic model just needs to accept `onboarding_terms: dict | None = None` (parity with the existing `landing_cms` field).
+  - "Reset to defaults" restores the exact wording provided by product on 04-Jul-2026.
+  - Sidebar link added under Operations → **Onboarding T&C (Vendor / Service)**.
 - **DONE — Checkout flow rebuild.** `src/pages/Checkout.jsx` was rewritten to:
   - Collect the fields the backend actually needs: `name`, `phone`, `line1`, `line2`, `city`, `state`, `pincode` (with client-side validation for 10-digit phone + 6-digit PIN). The previous form only sent `address/city/state/pincode`, which produced the FastAPI 422 "Shipping address missing: name, phone, line1".
   - Show product thumbnails in the Order Summary (kills the "blank product visual" the user reported).
@@ -127,22 +137,15 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
   - Recomputes Company Net Worth as `bank_net + pending − user_wallet − pending_withdrawals − gst_payable` (drops the `service_margin` add-back).
   - Filters `shop`/`service` sources from User-source accountability.
   - Backend still reports the old (larger) figure; UI surfaces "Backend reports X — includes shop+service which we exclude on web" until the backend team ships the matching change.
-- **DONE — Vendor "My Shop" Sales dashboard v2.** `src/pages/vendor/VendorSales.jsx` rewritten with:
-  - Retains the POS/offline KPIs + payment strip.
-  - New **Online Shop Sales** block: **3 KPI cards** (COD collected, UPI/online paid, Credit sale pending – Slangcart a/c) + **donut chart** (Payment mix) + **recent-orders table** with COD / UPI pending chips per row.
-  - `classifyOnlineOrder()` normalises the payment_method field (falls back to a status heuristic if the backend doesn't return `payment_method` yet).
-- **DOC — `/app/memory/MONEY_FLOW_BACKEND_SPEC.md`** lists everything the backend team must ship to make the reset complete (stop crediting user wallet on shop purchases, stop counting shop+service revenue, add `payment_method` to `/vendor/me/sales`, switch Razorpay to live keys, etc.).
-- **DONE — ProductDetail rich fields shipped.** Vendor-authored "Styled Summaries" (MRP Price / Protection / Warranty / Delivery) now render as a beautiful 2-col gradient tile grid with a tiny inline markdown renderer that handles `~~strike~~`, `**bold**`, and `*italic*` from the backend's `StyledText` shape. A new **Key Attributes** section (Brand / OS / RAM / Storage / Processor / CPU speed / Size / Colour + any `extra_attrs`) renders as icon-chips between the main grid and the tab strip. `DetailsTabs` was reworked to:
-  - Consume structured `spec_tabs` (`[{name, rows:[{label,value}]}]`) *and* the legacy flat `product.specs` dict.
-  - Reorder the tab strip per user directive: **Specification(s) → Highlights → Description → What's in the box → Sold by**.
-  - Accept the correct `whats_in_box` shape (`[{name, image_data_url}]`) with optional per-item image thumbnail.
-  - Removed the generic hard-coded "Delivery to your area" block AND the "Fast delivery / Easy returns / Secure payments / Genuine product" trust grid — the page is now 100 % driven by vendor/admin-authored content.
-- **DONE — Social/meta assets generated.** `/app/frontend/public/og-image.png` (1200×630) + `apple-touch-icon.png` (180×180) shipped.
-- **DONE — DRY refactor.** `AdminProducts.jsx` reuses `parseLines / parseExtraAttrs / toStyled / parseSpecTabs` from `@/lib/productForm`.
-- CI build green (`CI=true yarn build` → `Compiled successfully`).
+- **DONE — Vendor "My Shop" Sales dashboard v2.** New Online Shop Sales block with 3 KPI cards (COD collected, UPI/online paid, Credit sale pending – Slangcart a/c) + donut chart + recent-orders table with COD / UPI pending chips per row.
+- **DOC — `/app/memory/MONEY_FLOW_BACKEND_SPEC.md`** lists everything the backend team must ship to make the reset complete.
+- **DONE — ProductDetail rich fields shipped.** Vendor-authored "Styled Summaries" + "Key Attributes" + reordered spec tabs. Hardcoded "Delivery to your area" + "Fast delivery / Easy returns / Secure payments / Genuine product" trust grid removed — page is now 100% driven by vendor/admin content.
+- **DONE — Social/meta assets generated.** `/app/frontend/public/og-image.png` + `apple-touch-icon.png`.
+- **DONE — DRY refactor.** `AdminProducts.jsx` reuses helpers from `@/lib/productForm`.
+- CI build green (`CI=true yarn build` → `Compiled successfully`, zero warnings).
 
 ## Verification status
-- Manual visual test deferred: test credentials in the handoff (`support@networkrupay.com`, `test_alice_73dc7f@test.com`) rejected by the live backend. Please validate the new Checkout + VendorSales + AdminSystemWallet screens against a fresh account.
+- Manual visual test deferred: test credentials in the handoff (`support@networkrupay.com`, `test_alice_73dc7f@test.com`) rejected by the live backend. Please validate the new Checkout + VendorSales + AdminSystemWallet + Onboarding T&C screens against a fresh account.
 
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).
