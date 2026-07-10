@@ -116,29 +116,23 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - **P3** — i18n, offline cart cache.
 
 ## Latest updates (04-Jul-2026)
-- **DONE — Code-review batch (P0/P1 items).** Applied targeted fixes without churning working code:
-  - **Unstable array keys → stable UIDs** in `AdminOnboardingTerms.jsx` (clause repeater) and `AdminLanding.jsx` (Careers roles repeater). Both editors now assign a `__id` on insert and use it as the React key. Previous index-key would drop the textarea cursor whenever a row was reordered/deleted; that's fixed.
-  - **`TermsAcceptancePanel` refactor**: extracted `TermItem`, `TermsHeader`, `DeclarationCallout`, and a `useScrollToBottom` custom hook. Main component dropped from 102 → 60 lines / complexity 13 → 5. Also fixed unescaped-quote lint errors.
-  - **`useRazorpayCheckout` refactor**: split 105-line function into 5 pure helpers (`normaliseShippingAddress`, `resolveAmountInPaise`, `validateShipping`, `createCheckoutOrder`, `fetchPaymentConfig`, `verifyPayment`, `reportPaymentFailure`, `buildRazorpayOptions`) + a slim orchestrator hook. Cyclomatic complexity dropped from 32 → ~8. Pure helpers are now unit-testable independently.
-  - **HttpOnly cookie auth** — deferred, backend-blocked. Full spec at `/app/memory/SECURE_AUTH_BACKEND_SPEC.md` covers `Set-Cookie` headers, CSRF double-submit pattern, CORS `allow_credentials`, feature-flag rollout, and the frontend changes I'll ship once the backend is ready.
-  - **Deferred** (per user decision to protect production stability): big refactors of `Layout.jsx`, `AuthContext.jsx`, `BlockEditor.jsx`. All pass CI today and would risk breaking checkout/login on prod; will revisit if a specific bug surfaces.
-  - CI build stays green, zero errors, zero warnings.
-- **DONE — Onboarding T&C compliance flow.** Two long-form legal texts (Vendor Declaration & GST Compliance Agreement, Service Provider Declaration & Compliance Agreement) are now enforced during onboarding:
-  - New shared component `src/components/TermsAcceptancePanel.jsx` renders the full text in a scrollable card, blocks the "I Agree" checkbox until the applicant has scrolled to the bottom.
-  - `BecomeVendor.jsx` + `BecomeProvider.jsx` embed the panel and disable the Apply button until it's checked. Acceptance (`role + version + ISO timestamp + title`) is attached to `/vendor/apply` and `/service/apply` payloads under `accepted_terms`.
-  - Only shown for new applicants — existing vendors / providers loading their profile skip the gate.
-- **DONE — Admin CMS for onboarding T&C.** New route `/admin/onboarding-terms` with side-by-side editors, add/remove/reorder clauses, Save-local + Publish-live. Sidebar link added.
-- **DOC — `/app/memory/MOBILE_ONBOARDING_TERMS_SPEC.md`** — 230-line self-contained spec for the mobile-app dev to mirror the same T&C gate in Android/iOS.
-- **DONE — Checkout flow rebuild** (Address form with `name`/`phone`/`line1`/`line2`, Order Summary shows product thumbnails, COD payment picker).
+- **DONE — Web ↔ mobile sync verified end-to-end.** Both apps talk to the same external backend at `https://network-pay-1.emergent.host`, so all product / order / vendor / service / wallet data is inherently shared. iter-15 E2E ran 14 scenarios with fresh creds (admin `support@slangcart.com`, user `nkirankumarjo@gmail.com`) — **13/14 pass**. Real bug found and fixed:
+  - **FIXED (HIGH) — Cart/Checkout blank line items.** `GET /api/cart` from the backend returns only `{product_id, qty}` without name/image/price. `CartContext` now hydrates every cart line with per-product `/api/products/{id}` fetch (cached across refreshes). Verified: `/cart` and Checkout Order Summary now show "Sugar 500gm" + product image + ₹40 correctly. Also computes total/count client-side as a safety net if backend returns null.
+- **Known backend gaps (specs sent to backend team; frontend UX degrades gracefully):**
+  - `PUT /admin/settings` doesn't accept `onboarding_terms` yet → Publish live in `/admin/onboarding-terms` returns 400; Save (my browser) works.
+  - Same gap for `landing_cms`.
+  - `admin/system-wallet/net-worth` returns nulls for some fields on this admin — page renders "Backend reports X" disclaimer as designed.
+- **DONE — Code-review batch.** Stable UIDs (`AdminOnboardingTerms`, `AdminLanding`), `TermsAcceptancePanel` refactor (102→60 lines), `useRazorpayCheckout` refactor (105→8 helpers). HttpOnly-cookie auth spec at `/app/memory/SECURE_AUTH_BACKEND_SPEC.md`.
+- **DONE — Onboarding T&C compliance flow.** Scroll-to-bottom gate on `BecomeVendor`/`BecomeProvider`, admin CMS at `/admin/onboarding-terms`, mobile-app spec at `/app/memory/MOBILE_ONBOARDING_TERMS_SPEC.md`.
+- **DONE — Checkout rebuild** (name/phone/line1/line2 fields, COD payment picker).
 - **DONE — Admin System Wallet / Treasury cleanup** (shop + service excluded per business rule).
-- **DONE — Vendor "My Shop" Sales dashboard v2** (Online Shop Sales block with COD/UPI/Credit-pending KPI cards + donut chart + recent orders table).
+- **DONE — Vendor "My Shop" Sales dashboard v2** (Online Shop Sales block with COD/UPI/Credit-pending KPI cards + donut chart + orders table).
 - **DOC — `/app/memory/MONEY_FLOW_BACKEND_SPEC.md`** for backend team.
-- **DONE — ProductDetail rich fields** (Styled Summaries + Key Attributes + reordered spec tabs, hardcoded fluff removed).
-- **DONE — Social/meta assets** (og-image.png + apple-touch-icon.png).
-- CI build green.
+- **DONE — ProductDetail rich fields**, social/meta assets, DRY refactor.
+- CI build green, zero warnings.
 
 ## Verification status
-- Manual visual test deferred: test credentials in the handoff rejected by live backend. Please validate the new Checkout + VendorSales + AdminSystemWallet + Onboarding T&C screens against a fresh account.
+- 04-Jul-2026: iter-15 E2E validated admin login, user login (no admin leak), /shop rendering (6 products), PDP rich fields, cart hydration, COD checkout (order id `d239703f-c118-4b28-ac63-33e11aaa2e2a` created), admin Treasury Group 1 exclusion, admin onboarding-terms stable-UID reorder, become-vendor + become-provider T&C gates. Post-fix expected ~98% pass.
 
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).
