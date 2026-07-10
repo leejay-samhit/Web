@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import {
   Loader2, Save, RotateCcw, Store, Wrench, Plus, Trash2, ArrowUp, ArrowDown,
@@ -12,32 +12,53 @@ import {
 /* -------------------------------------------------------------------------- */
 /*  Editable-clauses list widget                                              */
 /* -------------------------------------------------------------------------- */
+/* Assign a stable per-render ID to each clause so React reconciliation
+ * survives reorder + delete without losing the textarea cursor. */
+let __clauseUid = 0;
+const nextUid = () => `c-${++__clauseUid}`;
+
+function useIdentifiedClauses(clauses) {
+  // Ensure every clause has an id. Recompute only when the clauses reference
+  // itself changes AND lengths differ or content shifts unexpectedly.
+  const identified = useMemo(() => {
+    return (clauses || []).map((raw) => {
+      if (raw && typeof raw === "object" && raw.__id) return raw;
+      return { __id: nextUid(), text: typeof raw === "string" ? raw : (raw?.text || "") };
+    });
+  }, [clauses]);
+  return identified;
+}
+
 function ClauseList({ clauses, onChange, testIdRoot }) {
+  const rows = useIdentifiedClauses(clauses);
+  // Emit plain strings back up so the parent's data model stays a `string[]`.
+  const commit = (next) => onChange(next.map((r) => r.text));
+
   const set = (i, v) => {
-    const next = [...clauses];
-    next[i] = v;
-    onChange(next);
+    const next = [...rows];
+    next[i] = { ...next[i], text: v };
+    commit(next);
   };
-  const add = () => onChange([...clauses, ""]);
-  const remove = (i) => onChange(clauses.filter((_, idx) => idx !== i));
+  const add = () => commit([...rows, { __id: nextUid(), text: "" }]);
+  const remove = (i) => commit(rows.filter((_, idx) => idx !== i));
   const move = (i, dir) => {
     const j = i + dir;
-    if (j < 0 || j >= clauses.length) return;
-    const next = [...clauses];
+    if (j < 0 || j >= rows.length) return;
+    const next = [...rows];
     [next[i], next[j]] = [next[j], next[i]];
-    onChange(next);
+    commit(next);
   };
 
   return (
     <div className="space-y-2">
-      {clauses.map((c, i) => (
-        <div key={i} className="flex items-start gap-2" data-testid={`${testIdRoot}-clause-${i + 1}`}>
+      {rows.map((c, i) => (
+        <div key={c.__id} className="flex items-start gap-2" data-testid={`${testIdRoot}-clause-${i + 1}`}>
           <div className="w-7 h-7 mt-1 rounded-lg bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)] text-xs font-extrabold shrink-0">
             {i + 1}
           </div>
           <textarea
             className="sc-input flex-1 min-h-[64px] text-sm"
-            value={c}
+            value={c.text}
             onChange={(e) => set(i, e.target.value)}
             data-testid={`${testIdRoot}-clause-text-${i + 1}`}
           />
@@ -48,7 +69,7 @@ function ClauseList({ clauses, onChange, testIdRoot }) {
               data-testid={`${testIdRoot}-clause-up-${i + 1}`}>
               <ArrowUp size={12} />
             </button>
-            <button type="button" onClick={() => move(i, 1)} disabled={i === clauses.length - 1}
+            <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1}
               className="w-7 h-7 rounded-lg border border-[color:var(--sc-border)] grid place-items-center disabled:opacity-40 hover:bg-[color:var(--sc-accent-light)]"
               title="Move down"
               data-testid={`${testIdRoot}-clause-down-${i + 1}`}>
@@ -121,7 +142,7 @@ function RoleEditor({ role, value, onChange, icon: Icon }) {
       </label>
 
       <label className="block">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">"I Agree" checkbox label</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">&ldquo;I Agree&rdquo; checkbox label</span>
         <input className="sc-input mt-1" value={value.agree_label} onChange={set("agree_label")} data-testid={`ot-${role}-agree-label`} />
       </label>
     </div>

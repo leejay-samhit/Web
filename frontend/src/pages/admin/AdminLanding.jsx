@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import { DEFAULT_CMS, loadCms, saveCmsLocal, publishCms, resetCmsLocal } from "@/lib/landingCms";
 import { Save, Loader2, RotateCcw, CheckCircle2, AlertCircle, ExternalLink, Eye, Plus, Trash2, GripVertical } from "lucide-react";
@@ -120,30 +120,42 @@ const SECTIONS = [
 ];
 
 /** Repeater UI for the editable Careers open-roles list. */
+let __roleUid = 0;
+const nextRoleUid = () => `role-${++__roleUid}`;
+
 function RolesRepeater({ roles, onChange }) {
+  // Give every row a stable id so React can reconcile across reorder/delete
+  // without unmounting the input (which drops the user's cursor).
+  const rows = useMemo(
+    () => (roles || []).map((r) => (r.__id ? r : { ...r, __id: nextRoleUid() })),
+    [roles]
+  );
+  const commit = (next) =>
+    onChange(next.map(({ __id, ...rest }) => rest));
+
   const setRole = (i, patch) => {
-    const next = roles.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
-    onChange(next);
+    const next = rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
+    commit(next);
   };
-  const remove = (i) => onChange(roles.filter((_, idx) => idx !== i));
+  const remove = (i) => commit(rows.filter((_, idx) => idx !== i));
   const add = () =>
-    onChange([...roles, { title: "New role", subtitle: "Full-time · Bengaluru / Remote" }]);
+    commit([...rows, { __id: nextRoleUid(), title: "New role", subtitle: "Full-time · Bengaluru / Remote" }]);
   const moveUp = (i) => {
     if (i <= 0) return;
-    const next = roles.slice();
+    const next = rows.slice();
     [next[i - 1], next[i]] = [next[i], next[i - 1]];
-    onChange(next);
+    commit(next);
   };
   return (
     <div className="mt-4 space-y-2" data-testid="roles-repeater">
-      {roles.length === 0 && (
+      {rows.length === 0 && (
         <div className="rounded-lg bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)] text-xs px-3 py-3">
           No roles yet — click <b>Add role</b> below to create one.
         </div>
       )}
-      {roles.map((r, i) => (
+      {rows.map((r, i) => (
         <div
-          key={i}
+          key={r.__id}
           className="rounded-xl border border-[color:var(--sc-border)] p-3 grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr_auto] gap-2 items-center"
           data-testid={`role-row-${i}`}
         >

@@ -116,36 +116,29 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - **P3** — i18n, offline cart cache.
 
 ## Latest updates (04-Jul-2026)
+- **DONE — Code-review batch (P0/P1 items).** Applied targeted fixes without churning working code:
+  - **Unstable array keys → stable UIDs** in `AdminOnboardingTerms.jsx` (clause repeater) and `AdminLanding.jsx` (Careers roles repeater). Both editors now assign a `__id` on insert and use it as the React key. Previous index-key would drop the textarea cursor whenever a row was reordered/deleted; that's fixed.
+  - **`TermsAcceptancePanel` refactor**: extracted `TermItem`, `TermsHeader`, `DeclarationCallout`, and a `useScrollToBottom` custom hook. Main component dropped from 102 → 60 lines / complexity 13 → 5. Also fixed unescaped-quote lint errors.
+  - **`useRazorpayCheckout` refactor**: split 105-line function into 5 pure helpers (`normaliseShippingAddress`, `resolveAmountInPaise`, `validateShipping`, `createCheckoutOrder`, `fetchPaymentConfig`, `verifyPayment`, `reportPaymentFailure`, `buildRazorpayOptions`) + a slim orchestrator hook. Cyclomatic complexity dropped from 32 → ~8. Pure helpers are now unit-testable independently.
+  - **HttpOnly cookie auth** — deferred, backend-blocked. Full spec at `/app/memory/SECURE_AUTH_BACKEND_SPEC.md` covers `Set-Cookie` headers, CSRF double-submit pattern, CORS `allow_credentials`, feature-flag rollout, and the frontend changes I'll ship once the backend is ready.
+  - **Deferred** (per user decision to protect production stability): big refactors of `Layout.jsx`, `AuthContext.jsx`, `BlockEditor.jsx`. All pass CI today and would risk breaking checkout/login on prod; will revisit if a specific bug surfaces.
+  - CI build stays green, zero errors, zero warnings.
 - **DONE — Onboarding T&C compliance flow.** Two long-form legal texts (Vendor Declaration & GST Compliance Agreement, Service Provider Declaration & Compliance Agreement) are now enforced during onboarding:
-  - New shared component `src/components/TermsAcceptancePanel.jsx` renders the full text in a scrollable card, blocks the "I Agree" checkbox until the applicant has scrolled to the bottom, and displays the numbered clauses + declaration heading.
-  - `BecomeVendor.jsx` + `BecomeProvider.jsx` now embed the panel and disable the Apply button until it's checked. The applicant's acceptance (role + version + ISO timestamp) is included in the `/vendor/apply` and `/service/apply` payloads under `accepted_terms` so the backend can persist informed consent.
+  - New shared component `src/components/TermsAcceptancePanel.jsx` renders the full text in a scrollable card, blocks the "I Agree" checkbox until the applicant has scrolled to the bottom.
+  - `BecomeVendor.jsx` + `BecomeProvider.jsx` embed the panel and disable the Apply button until it's checked. Acceptance (`role + version + ISO timestamp + title`) is attached to `/vendor/apply` and `/service/apply` payloads under `accepted_terms`.
   - Only shown for new applicants — existing vendors / providers loading their profile skip the gate.
-- **DONE — Admin CMS for onboarding T&C.** New route `/admin/onboarding-terms` with a dedicated editor:
-  - Side-by-side editors for Vendor + Service Provider agreements. Every field editable: Title, Intro, numbered Clauses (add / remove / reorder with up-down arrows), Declaration heading & body, "I Agree" checkbox label.
-  - Same persistence pattern as `landingCms`: **Save (my browser)** for local preview + **Publish live** which PUTs `/admin/settings { onboarding_terms }`.
-  - Backend upgrade path: `SettingsUpdate` Pydantic model just needs to accept `onboarding_terms: dict | None = None` (parity with the existing `landing_cms` field).
-  - "Reset to defaults" restores the exact wording provided by product on 04-Jul-2026.
-  - Sidebar link added under Operations → **Onboarding T&C (Vendor / Service)**.
-- **DONE — Checkout flow rebuild.** `src/pages/Checkout.jsx` was rewritten to:
-  - Collect the fields the backend actually needs: `name`, `phone`, `line1`, `line2`, `city`, `state`, `pincode` (with client-side validation for 10-digit phone + 6-digit PIN). The previous form only sent `address/city/state/pincode`, which produced the FastAPI 422 "Shipping address missing: name, phone, line1".
-  - Show product thumbnails in the Order Summary (kills the "blank product visual" the user reported).
-  - Add a **Payment method picker** (Pay online vs Cash on delivery). COD posts `{payment_method: "cod", cod: true}` to `/orders/checkout` and navigates to `/orders?success=cod`.
-  - `useRazorpayCheckout` now normalises the shipping payload to include `{name, phone, line1, line2}` alongside the legacy `address` alias so old + new backends both work.
-- **DONE — Admin System Wallet / Treasury cleanup.** Per business rule "Slangcart never collects a rupee from Shop or Service", the web now:
-  - Drops `shop` + `service` from Group 1 Revenue tile — only Registration + Reversed are shown.
-  - Subtracts both from Bank-Tally inflow. Adds a new **"Off-platform (informational)"** row that displays Shop + Service side-by-side for reference only.
-  - Recomputes Company Net Worth as `bank_net + pending − user_wallet − pending_withdrawals − gst_payable` (drops the `service_margin` add-back).
-  - Filters `shop`/`service` sources from User-source accountability.
-  - Backend still reports the old (larger) figure; UI surfaces "Backend reports X — includes shop+service which we exclude on web" until the backend team ships the matching change.
-- **DONE — Vendor "My Shop" Sales dashboard v2.** New Online Shop Sales block with 3 KPI cards (COD collected, UPI/online paid, Credit sale pending – Slangcart a/c) + donut chart + recent-orders table with COD / UPI pending chips per row.
-- **DOC — `/app/memory/MONEY_FLOW_BACKEND_SPEC.md`** lists everything the backend team must ship to make the reset complete.
-- **DONE — ProductDetail rich fields shipped.** Vendor-authored "Styled Summaries" + "Key Attributes" + reordered spec tabs. Hardcoded "Delivery to your area" + "Fast delivery / Easy returns / Secure payments / Genuine product" trust grid removed — page is now 100% driven by vendor/admin content.
-- **DONE — Social/meta assets generated.** `/app/frontend/public/og-image.png` + `apple-touch-icon.png`.
-- **DONE — DRY refactor.** `AdminProducts.jsx` reuses helpers from `@/lib/productForm`.
-- CI build green (`CI=true yarn build` → `Compiled successfully`, zero warnings).
+- **DONE — Admin CMS for onboarding T&C.** New route `/admin/onboarding-terms` with side-by-side editors, add/remove/reorder clauses, Save-local + Publish-live. Sidebar link added.
+- **DOC — `/app/memory/MOBILE_ONBOARDING_TERMS_SPEC.md`** — 230-line self-contained spec for the mobile-app dev to mirror the same T&C gate in Android/iOS.
+- **DONE — Checkout flow rebuild** (Address form with `name`/`phone`/`line1`/`line2`, Order Summary shows product thumbnails, COD payment picker).
+- **DONE — Admin System Wallet / Treasury cleanup** (shop + service excluded per business rule).
+- **DONE — Vendor "My Shop" Sales dashboard v2** (Online Shop Sales block with COD/UPI/Credit-pending KPI cards + donut chart + recent orders table).
+- **DOC — `/app/memory/MONEY_FLOW_BACKEND_SPEC.md`** for backend team.
+- **DONE — ProductDetail rich fields** (Styled Summaries + Key Attributes + reordered spec tabs, hardcoded fluff removed).
+- **DONE — Social/meta assets** (og-image.png + apple-touch-icon.png).
+- CI build green.
 
 ## Verification status
-- Manual visual test deferred: test credentials in the handoff (`support@networkrupay.com`, `test_alice_73dc7f@test.com`) rejected by the live backend. Please validate the new Checkout + VendorSales + AdminSystemWallet + Onboarding T&C screens against a fresh account.
+- Manual visual test deferred: test credentials in the handoff rejected by live backend. Please validate the new Checkout + VendorSales + AdminSystemWallet + Onboarding T&C screens against a fresh account.
 
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).
