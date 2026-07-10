@@ -9,8 +9,98 @@ import api from "@/lib/api";
 import { log } from "@/lib/log";
 import {
   CreditCard, Loader2, ShieldCheck, AlertCircle, ShoppingBag,
-  Banknote, User, Phone, MapPin, Home,
+  Banknote, User, Phone, MapPin, Home, Package, Tag,
 } from "lucide-react";
+
+/* -------------------------------------------------------------------------- */
+/*  Big product-detail list — the "review your order" block on the main pane  */
+/* -------------------------------------------------------------------------- */
+function ItemsPanel({ cart }) {
+  const items = Array.isArray(cart?.items) ? cart.items : [];
+  if (items.length === 0) return null;
+  return (
+    <div className="sc-card p-5 space-y-3" data-testid="checkout-items-panel">
+      <div className="flex items-center gap-2">
+        <div className="w-9 h-9 rounded-xl bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)]">
+          <Package size={16} />
+        </div>
+        <div className="flex-1">
+          <div className="font-extrabold text-[color:var(--sc-ink)]">
+            Review your order · {items.length} {items.length === 1 ? "item" : "items"}
+          </div>
+          <div className="text-[11px] text-[color:var(--sc-ink-muted)]">
+            Confirm the products, quantities and prices below before placing your order.
+          </div>
+        </div>
+      </div>
+
+      <ul className="divide-y divide-[color:var(--sc-border)] -mx-1" data-testid="checkout-items-list">
+        {items.map((it) => {
+          const qty = Number(it.qty) || 1;
+          const price = Number(it.price) || 0;
+          const mrp = it.mrp && Number(it.mrp) > price ? Number(it.mrp) : null;
+          const rowTotal = price * qty;
+          return (
+            <li
+              key={it.product_id}
+              className="py-3 px-1 flex flex-col sm:flex-row sm:items-center gap-3"
+              data-testid={`checkout-panel-item-${it.product_id}`}
+            >
+              {/* Thumbnail */}
+              <div className="w-20 h-20 rounded-xl bg-[color:var(--sc-accent-light)] overflow-hidden shrink-0 border border-[color:var(--sc-border)] grid place-items-center">
+                {it.image_url ? (
+                  <img alt="" src={it.image_url} className="w-full h-full object-cover" />
+                ) : (
+                  <ShoppingBag size={22} className="text-[color:var(--sc-primary)]/60" />
+                )}
+              </div>
+
+              {/* Name + meta */}
+              <div className="min-w-0 flex-1">
+                <div className="font-extrabold text-[color:var(--sc-ink)] leading-snug text-[14px] truncate">
+                  {it.name || it.product_name || "Product"}
+                </div>
+                {(it.brand || it.category) && (
+                  <div className="text-[11px] text-[color:var(--sc-ink-muted)] mt-0.5 flex items-center gap-1 truncate">
+                    <Tag size={10} /> {[it.brand, it.category].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+                <div className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-[13px] font-extrabold text-[color:var(--sc-primary)]">{formatINR(price)}</span>
+                  {mrp && <span className="text-[11px] text-[color:var(--sc-ink-muted)] line-through">{formatINR(mrp)}</span>}
+                  {mrp && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">
+                      {Math.round(((mrp - price) / mrp) * 100)}% off
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Qty */}
+              <div className="flex flex-col items-end shrink-0 min-w-[90px]">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Qty</div>
+                <div className="text-lg font-extrabold text-[color:var(--sc-ink)] leading-none">× {qty}</div>
+              </div>
+
+              {/* Line total */}
+              <div className="flex flex-col items-end shrink-0 min-w-[100px]">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Subtotal</div>
+                <div className="text-base font-extrabold text-[color:var(--sc-ink)]">{formatINR(rowTotal)}</div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="rounded-xl bg-[color:var(--sc-accent-light)] border border-[color:var(--sc-border)] p-3 flex items-center justify-between text-sm">
+        <div className="font-extrabold text-[color:var(--sc-ink)]">Items subtotal</div>
+        <div className="text-lg font-extrabold text-[color:var(--sc-primary)]" data-testid="checkout-panel-subtotal">
+          {formatINR(cart.total || 0)}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Address form — matches backend schema (`name`, `phone`, `line1`, …)        */
@@ -282,6 +372,7 @@ export default function Checkout() {
     <Layout title="Checkout">
       <div className="grid lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-4">
+          <ItemsPanel cart={cart} />
           <AddressForm addr={addr} onChange={setAddr} error={error} />
           <PaymentMethodPicker method={method} onChange={setMethod} />
         </div>

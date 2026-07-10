@@ -116,15 +116,17 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - **P3** — i18n, offline cart cache.
 
 ## Latest updates (04-Jul-2026)
-- **DONE — Web ↔ mobile sync verified end-to-end.** Both apps talk to the same external backend at `https://network-pay-1.emergent.host`, so all product / order / vendor / service / wallet data is inherently shared. iter-15 E2E ran 14 scenarios with fresh creds (admin `support@slangcart.com`, user `nkirankumarjo@gmail.com`) — **13/14 pass**. Real bug found and fixed:
-  - **FIXED (HIGH) — Cart/Checkout blank line items.** `GET /api/cart` from the backend returns only `{product_id, qty}` without name/image/price. `CartContext` now hydrates every cart line with per-product `/api/products/{id}` fetch (cached across refreshes). Verified: `/cart` and Checkout Order Summary now show "Sugar 500gm" + product image + ₹40 correctly. Also computes total/count client-side as a safety net if backend returns null.
-- **Known backend gaps (specs sent to backend team; frontend UX degrades gracefully):**
-  - `PUT /admin/settings` doesn't accept `onboarding_terms` yet → Publish live in `/admin/onboarding-terms` returns 400; Save (my browser) works.
-  - Same gap for `landing_cms`.
-  - `admin/system-wallet/net-worth` returns nulls for some fields on this admin — page renders "Backend reports X" disclaimer as designed.
-- **DONE — Code-review batch.** Stable UIDs (`AdminOnboardingTerms`, `AdminLanding`), `TermsAcceptancePanel` refactor (102→60 lines), `useRazorpayCheckout` refactor (105→8 helpers). HttpOnly-cookie auth spec at `/app/memory/SECURE_AUTH_BACKEND_SPEC.md`.
-- **DONE — Onboarding T&C compliance flow.** Scroll-to-bottom gate on `BecomeVendor`/`BecomeProvider`, admin CMS at `/admin/onboarding-terms`, mobile-app spec at `/app/memory/MOBILE_ONBOARDING_TERMS_SPEC.md`.
-- **DONE — Checkout rebuild** (name/phone/line1/line2 fields, COD payment picker).
+- **DONE — Vendor Order Management + Admin read-only + Excel export.**
+  - **New `/vendor/orders` page** (`src/pages/vendor/VendorOrders.jsx`): vendor's inbox of orders that contain their products. Each order card shows customer name/phone/address (always visible per business rule), item list with thumbnails, and tap-to-advance stage buttons. Filters by stage (Placed → Confirmed → Paid → Processing → Packed → Shipped → Out for delivery → Delivered / Cancelled / Returned), search, Excel download.
+  - **`/admin/orders` rewritten to READ-ONLY**: removed the "Update status" dropdown; added search, stage chip filter, `View` detail modal (shows customer + vendor + address + items + timeline), and Excel download. A "Read-only · vendors own order stages" chip explains the change.
+  - **Shared helpers `src/lib/orders.js`**: `ORDER_STAGES`, `stageChipClass`, `nextStages`, order-field extractors (`orderCustomerName/Phone`, `orderVendorName/Email/Mobile`, `orderAmount`, `orderProductName`), and `exportOrdersToExcel()` using the newly-added `xlsx` npm package. Excel columns fixed to product spec: **User Name · User Mobile · Product Name · Product Amount · Order Stage · Vendor Name · Vendor Email · Vendor Mobile**. Filenames: `slangcart-vendor-{shop-slug}-orders-YYYY-MM-DD.xlsx` and `slangcart-admin-orders-YYYY-MM-DD.xlsx`.
+  - **Vendor nav** updated with a new "Orders" tab between Products and Sales dashboard.
+  - **Route registration** added at `/vendor/orders`.
+  - **Backend spec at `/app/memory/ORDER_MANAGEMENT_BACKEND_SPEC.md`** for the backend team: `GET /vendor/me/orders`, `PATCH /vendor/orders/{id}/status`, enriched `GET /admin/orders`, transition catalogue, deprecation of admin edit. Frontend degrades gracefully when endpoints return 404/405/501.
+- **DONE — Checkout "Review your order" product-detail panel.** Big card at the top of `/checkout` above the address form: large product thumbnail (80×80), name, price (with optional MRP strike + % off if backend supplies mrp), Qty pill, per-line Subtotal, plus an "Items subtotal" highlight band. Sticky compact sidebar summary retained as a secondary view.
+- **DONE — Web ↔ mobile sync verified.** Both apps share the same backend. iter-15 E2E validated login, shop, PDP, cart, COD checkout, admin Treasury, onboarding-terms, T&C gates. Cart line hydration bug fixed via per-product `/products/{id}` lookup in CartContext with a persistent Map cache.
+- **DONE — Code-review batch.** Stable UIDs (`AdminOnboardingTerms`, `AdminLanding`), `TermsAcceptancePanel` refactor, `useRazorpayCheckout` refactor (8 pure helpers). HttpOnly-cookie spec at `/app/memory/SECURE_AUTH_BACKEND_SPEC.md`.
+- **DONE — Onboarding T&C compliance flow.** Scroll-to-bottom gate, admin CMS at `/admin/onboarding-terms`, mobile-app spec at `/app/memory/MOBILE_ONBOARDING_TERMS_SPEC.md`.
 - **DONE — Admin System Wallet / Treasury cleanup** (shop + service excluded per business rule).
 - **DONE — Vendor "My Shop" Sales dashboard v2** (Online Shop Sales block with COD/UPI/Credit-pending KPI cards + donut chart + orders table).
 - **DOC — `/app/memory/MONEY_FLOW_BACKEND_SPEC.md`** for backend team.
@@ -132,7 +134,7 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - CI build green, zero warnings.
 
 ## Verification status
-- 04-Jul-2026: iter-15 E2E validated admin login, user login (no admin leak), /shop rendering (6 products), PDP rich fields, cart hydration, COD checkout (order id `d239703f-c118-4b28-ac63-33e11aaa2e2a` created), admin Treasury Group 1 exclusion, admin onboarding-terms stable-UID reorder, become-vendor + become-provider T&C gates. Post-fix expected ~98% pass.
+- 04-Jul-2026: iter-15 E2E validated admin+user login, shop, PDP, cart hydration, COD checkout, admin Treasury Group 1 exclusion, admin onboarding-terms stable-UID reorder, become-vendor + become-provider T&C gates. Post-hydration-fix screenshot confirms Cart + Checkout Order Summary + new "Review your order" panel all render product name/image/price correctly. Vendor Orders page will populate once backend ships `/vendor/me/orders`.
 
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).

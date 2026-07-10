@@ -16,6 +16,7 @@ import ServiceBookings from "@/pages/ServiceBookings";
 import BecomeProvider from "@/pages/BecomeProvider";
 import BecomeVendor from "@/pages/BecomeVendor";
 import VendorDashboard from "@/pages/VendorDashboard";
+import VendorOrders from "@/pages/vendor/VendorOrders";
 import VendorSales from "@/pages/vendor/VendorSales";
 import VendorPOS from "@/pages/vendor/VendorPOS";
 import VendorInvoices from "@/pages/vendor/VendorInvoices";
@@ -65,6 +66,7 @@ function App() {
               <Route path="/become-provider" element={userGuard(<BecomeProvider />)} />
               <Route path="/become-vendor" element={userGuard(<BecomeVendor />)} />
               <Route path="/vendor" element={userGuard(<VendorDashboard />)} />
+              <Route path="/vendor/orders" element={userGuard(<VendorOrders />)} />
               <Route path="/vendor/sales" element={userGuard(<VendorSales />)} />
               <Route path="/vendor/pos" element={userGuard(<VendorPOS />)} />
               <Route path="/vendor/invoices" element={userGuard(<VendorInvoices />)} />
