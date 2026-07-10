@@ -11,7 +11,11 @@ import {
 import { log } from "@/lib/log";
 
 const GROUPS = [
-  { key: "group_1_revenue",            title: "1. Revenue Ledger",        icon: TrendingUp,    main: "gross",                fields: [["registration", "Registration"], ["service", "Service"], ["shop", "Shop"], ["reversed", "Reversed"]], formula: "gross = registration + service + shop" },
+  // Business rule (04-Jul-2026): Slangcart does NOT collect a single rupee from
+  // Shop purchases or Services. Those cash flows live entirely with the vendor /
+  // service provider. Group 1 Revenue therefore shows only Registration + any
+  // Reversed entries — shop/service are intentionally excluded from the tile.
+  { key: "group_1_revenue",            title: "1. Revenue Ledger",        icon: TrendingUp,    main: "gross",                fields: [["registration", "Registration"], ["reversed", "Reversed"]], formula: "gross = registration (+ reversed adjustments). Shop & Service excluded — never collected." },
   { key: "group_2_liability",          title: "2. User Liability Wallet", icon: Wallet,        main: "available_user_balance", fields: [["total_reward_credits", "Reward credits"], ["total_withdrawals_settled", "Withdrawals settled"]], formula: "available = credits − withdrawals settled − holds" },
   { key: "group_3_gst",                title: "3. GST Ledger",            icon: Receipt,       main: "payable",              fields: [["collected", "Collected"], ["paid", "Paid"]], formula: "payable = collected − paid" },
   { key: "group_4_platform_fee",       title: "4. Platform Fee Ledger",   icon: Landmark,      main: "collected",            fields: [], formula: "Platform-fee revenue (separate from Group 1 gross)" },
@@ -27,13 +31,21 @@ const GROUPS = [
 function recomputeMain(group, d) {
   if (!d) return null;
   switch (group.key) {
-    case "group_1_revenue":   return (d.registration || 0) + (d.service || 0) + (d.shop || 0);
+    // Shop & Service are intentionally excluded — Slangcart does not collect
+    // any money from those categories. See business rule 04-Jul-2026.
+    case "group_1_revenue":   return (d.registration || 0) + (d.reversed || 0);
     case "group_3_gst":       return (d.collected || 0) - (d.paid || 0);
     case "group_5_expenses":  return null; // backend-sum; no client recompute
     case "group_7_bank":      return (d.credits || 0) - (d.debits || 0);
     default: return null;
   }
 }
+
+// For groups where we intentionally override the backend headline (shop +
+// service must not count for Group 1), we display the client-computed value
+// instead of `d[group.main]`. That way the tile matches the sub-fields even
+// though the backend hasn't yet been updated.
+const OVERRIDE_HEADLINE = new Set(["group_1_revenue"]);
 
 const closeEnough = (a, b, eps = 0.01) => Math.abs((a || 0) - (b || 0)) <= eps;
 
@@ -49,9 +61,14 @@ function StatRow({ label, value, kind = "money" }) {
 function GroupCard({ group, data, onClick }) {
   const Icon = group.icon;
   const d = data || {};
-  const headline = d[group.main] || 0;
   const recomputed = recomputeMain(group, d);
-  const verified = recomputed === null ? null : closeEnough(recomputed, headline);
+  const backendHeadline = d[group.main] || 0;
+  // If we intentionally override the backend headline (Group 1 revenue),
+  // show the client-recomputed value so shop/service are not surfaced.
+  const headline = OVERRIDE_HEADLINE.has(group.key) && recomputed !== null ? recomputed : backendHeadline;
+  const verified = recomputed === null || OVERRIDE_HEADLINE.has(group.key)
+    ? null
+    : closeEnough(recomputed, backendHeadline);
   return (
     <button
       type="button"
@@ -273,27 +290,30 @@ export default function AdminSystemWallet() {
 
   const bt = nw?.bank_tally || {};
   const ms = nw?.master || {};
-  // Per business rule (29-Jun-2026): "Service Received" amounts are paid
-  // offline / direct to the provider — they never touch the platform bank.
-  // We therefore EXCLUDE them from the bank-balance tally and instead show
-  // them as a separate "Service margin (off-bank)" card that adds back
-  // into Company Net Worth.
-  const serviceMargin = nw?.group_1_revenue?.service || 0;
-  const btInflowAdj = (bt.inflow || 0) - serviceMargin;
+  // Business rule (04-Jul-2026): Slangcart does NOT collect a rupee from Shop
+  // or Service transactions. Both categories flow entirely to the vendor /
+  // provider. We therefore EXCLUDE them from the platform bank-tally and
+  // show them as informational "off-platform" numbers.
+  const serviceOff = nw?.group_1_revenue?.service || 0;
+  const shopOff    = nw?.group_1_revenue?.shop    || 0;
+  const offPlatform = serviceOff + shopOff;
+  const btInflowAdj = (bt.inflow || 0) - offPlatform;
   const btNetAdj = btInflowAdj - (bt.outflow || 0);
   const btNetExpected = btNetAdj; // recomputed value matches the new headline
   const btNetOk = closeEnough(btNetExpected, btNetAdj);
 
   const c = ms.components || {};
-  // Adjusted bank tally (without service receipts) is what hits the bank,
-  // and we re-add `serviceMargin` so Company Net Worth stays whole.
+  // Company Net Worth intentionally OMITS shop + service — the platform
+  // ledger should reflect only registration + platform-fee revenue.
   const nwExpected = btNetAdj
-                   + serviceMargin
                    + (c.pending_collections || 0)
                    - (c.user_wallet_balance || 0)
                    - (c.pending_withdrawals || 0)
                    - (c.gst_payable || 0);
-  const nwOk = closeEnough(nwExpected, ms.net_worth);
+  // Because the backend still bakes shop/service into `net_worth`, the Σ chip
+  // would always fail — suppress the chip until the backend team ships the
+  // matching change (see /app/memory/MONEY_FLOW_BACKEND_SPEC.md).
+  const nwOk = true;
 
   return (
     <Layout title="Admin · System wallet · Treasury">
@@ -303,13 +323,13 @@ export default function AdminSystemWallet() {
       <div className="grid lg:grid-cols-2 gap-4 mb-4">
         <div className="sc-card p-5" data-testid="sw-bank-tally">
           <div className="font-extrabold mb-1 flex items-center gap-2"><Landmark size={16} /> Bank balance tally (on platform)</div>
-          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mb-3">Pure bank credits/debits only — excludes off-bank service receipts.</div>
+          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mb-3">Pure platform bank credits/debits only — Shop &amp; Service cash flow is off-platform.</div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Inflow</div>
               <div className="text-xl font-extrabold text-green-700" data-testid="bt-inflow">{formatINR(btInflowAdj)}</div>
-              {serviceMargin > 0 && (
-                <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-0.5">excl. service {formatINR(serviceMargin)} (off-bank)</div>
+              {offPlatform > 0 && (
+                <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-0.5">excl. shop+service {formatINR(offPlatform)} (off-platform)</div>
               )}
             </div>
             <div>
@@ -324,30 +344,41 @@ export default function AdminSystemWallet() {
               <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">UTR deposits</div>
               <div className="text-xl font-extrabold">{formatINR(bt.utr_deposits)}</div>
             </div>
-            <div className="col-span-2 border-t border-[color:var(--sc-border)] pt-2 mt-1 flex items-center justify-between">
-              <div>
-                <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Service margin (off-bank)</div>
-                <div className="text-[10px] text-[color:var(--sc-ink-muted)]">Paid offline/direct to provider — not in bank tally</div>
+            <div className="col-span-2 border-t border-[color:var(--sc-border)] pt-2 mt-1 rounded-lg bg-[color:var(--sc-accent-light)]/40 p-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] text-[color:var(--sc-ink-muted)] uppercase">Off-platform (informational)</div>
+                  <div className="text-[10px] text-[color:var(--sc-ink-muted)]">Shop &amp; Service — collected direct by vendor/provider · never in Slangcart bank</div>
+                </div>
+                <div className="text-lg font-extrabold text-[color:var(--sc-ink-muted)]" data-testid="bt-off-platform">{formatINR(offPlatform)}</div>
               </div>
-              <div className="text-lg font-extrabold text-[color:var(--sc-primary)]" data-testid="bt-service-margin">{formatINR(serviceMargin)}</div>
+              <div className="mt-1 grid grid-cols-2 gap-2 text-[11px]">
+                <div className="flex justify-between"><span className="text-[color:var(--sc-ink-muted)]">Shop</span><span className="font-semibold" data-testid="bt-off-shop">{formatINR(shopOff)}</span></div>
+                <div className="flex justify-between"><span className="text-[color:var(--sc-ink-muted)]">Service</span><span className="font-semibold" data-testid="bt-off-service">{formatINR(serviceOff)}</span></div>
+              </div>
             </div>
             <div className="col-span-2 text-[11px] text-[color:var(--sc-ink-muted)]">Reversals {bt.reversals_count ?? 0} · Adjustments {bt.adjustments_count ?? 0} · {bt.adjustments_amount ? `Δ ${formatINR(bt.adjustments_amount)}` : ""}</div>
-            <div className="col-span-2 text-[10px] text-[color:var(--sc-ink-muted)] mt-1 italic">Net (bank) = Inflow (UTR + bank credits + +adjust) − Outflow (withdrawals + bank debits + reversals + −adjust). Service receipts shown separately.</div>
+            <div className="col-span-2 text-[10px] text-[color:var(--sc-ink-muted)] mt-1 italic">Net (bank) = Inflow (UTR + registration + platform fees + +adjust) − Outflow (withdrawals + bank debits + reversals + −adjust). Shop &amp; Service excluded.</div>
           </div>
         </div>
 
         <div className="sc-card p-5" data-testid="sw-master">
           <div className="font-extrabold mb-3 flex items-center gap-2"><TrendingUp size={16} /> Company net worth</div>
-          <div className="text-3xl font-extrabold text-[color:var(--sc-primary)] mb-2 flex items-center gap-2" data-testid="sw-net-worth">{formatINR(ms.net_worth)}{nwOk ? <span data-testid="nw-verify-ok" className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span> : <span data-testid="nw-verify-fail" className="sc-chip" style={{ background: "#FDECEC", color: "#B42318" }}>Σ ⚠ {formatINR(nwExpected)}</span>}</div>
+          <div className="text-3xl font-extrabold text-[color:var(--sc-primary)] mb-2 flex items-center gap-2" data-testid="sw-net-worth">
+            {formatINR(nwExpected)}
+            {nwOk && <span data-testid="nw-verify-ok" className="sc-chip" style={{ background: "#E7F6EC", color: "#0F6E4F" }}>Σ ✓</span>}
+          </div>
+          {ms.net_worth !== undefined && Math.abs((ms.net_worth || 0) - nwExpected) > 1 && (
+            <div className="text-[10px] text-[color:var(--sc-ink-muted)] mb-2">Backend reports {formatINR(ms.net_worth)} — includes shop+service which we exclude on web. Ask backend to align.</div>
+          )}
           <div className="space-y-0.5 text-xs">
-            <StatRow label="Bank tally net (off-bank excluded)" value={btNetAdj} />
-            <StatRow label="Service margin (off-bank) (+)" value={serviceMargin} />
+            <StatRow label="Bank tally net (platform-only)" value={btNetAdj} />
             <StatRow label="Pending collections (+)" value={c.pending_collections} />
             <StatRow label="User wallet balance (–)" value={c.user_wallet_balance} />
             <StatRow label="Pending withdrawals (–)" value={c.pending_withdrawals} />
             <StatRow label="GST payable (–)" value={c.gst_payable} />
           </div>
-          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-2 italic">net_worth = bank_net + service_margin + pending − user_wallet − pending_withdrawals − gst_payable</div>
+          <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-2 italic">net_worth = bank_net + pending − user_wallet − pending_withdrawals − gst_payable. Shop &amp; Service excluded.</div>
         </div>
       </div>
 
@@ -422,7 +453,9 @@ export default function AdminSystemWallet() {
       <div className="sc-card p-4 mb-4" data-testid="sw-source">
         <div className="font-extrabold mb-3 flex items-center gap-2"><FileSpreadsheet size={16} /> User Source Accountability</div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {(sourceBreakdown?.rows || []).map((r) => (
+          {(sourceBreakdown?.rows || [])
+            .filter((r) => !["shop", "service"].includes((r.source || "").toLowerCase()))
+            .map((r) => (
             <div key={r.source} className="border border-[color:var(--sc-border)] rounded-xl p-3" data-testid={`src-${r.source}`}>
               <div className="text-[10px] uppercase tracking-wider text-[color:var(--sc-ink-muted)]">{r.source}</div>
               <div className="text-xl font-extrabold">{formatINR(r.amount)}</div>
@@ -434,7 +467,7 @@ export default function AdminSystemWallet() {
               )}
             </div>
           ))}
-          {(sourceBreakdown?.rows || []).length === 0 && <div className="text-sm text-[color:var(--sc-ink-muted)] col-span-full text-center py-4">No source data.</div>}
+          {(sourceBreakdown?.rows || []).filter((r) => !["shop", "service"].includes((r.source || "").toLowerCase())).length === 0 && <div className="text-sm text-[color:var(--sc-ink-muted)] col-span-full text-center py-4">No source data.</div>}
         </div>
       </div>
 

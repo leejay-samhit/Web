@@ -33,8 +33,9 @@ export default function useRazorpayCheckout({ user, cart, onSuccess, refreshCart
         setError("Your cart is empty.");
         return false;
       }
-      if (!address.address || !address.city || !address.pincode) {
-        setError("Please enter a valid delivery address.");
+      const line1 = address.line1 || address.address;
+      if (!address.name || !address.phone || !line1 || !address.city || !address.pincode) {
+        setError("Please enter a valid delivery address (name, phone, address, city, PIN).");
         return false;
       }
       return true;
@@ -48,7 +49,22 @@ export default function useRazorpayCheckout({ user, cart, onSuccess, refreshCart
       if (!validate(address)) return;
       setPaying(true);
       try {
-        const checkoutRes = await api.post("/orders/checkout", { shipping_address: address, address });
+        // Normalise the payload so we speak whichever key the backend accepts.
+        const shipping_address = {
+          name: address.name,
+          phone: address.phone,
+          line1: address.line1 || address.address,
+          line2: address.line2 || "",
+          address: address.line1 || address.address, // legacy alias
+          city: address.city,
+          state: address.state,
+          pincode: address.pincode,
+        };
+        const checkoutRes = await api.post("/orders/checkout", {
+          shipping_address,
+          address: shipping_address,
+          payment_method: "online",
+        });
         const order = checkoutRes.data || {};
         const razorpayOrder = order.razorpay_order || order.order || order;
         const orderId = razorpayOrder.id || razorpayOrder.order_id || razorpayOrder.razorpay_order_id;
