@@ -1,8 +1,21 @@
 # Slangcart · Order Management (Vendor-owned) — Backend Spec
 
 **Author:** Slangcart web team · 04-Jul-2026
-**Status:** DRAFT — awaiting backend implementation
+**Status:** ✅ CONFIRMED by backend team (04-Jul-2026) — implementation in progress
 **Priority:** P0 for `/vendor/orders`, P1 for `/admin/orders` read-only
+
+## Confirmed backend deliverables (from backend team 04-Jul-2026)
+
+1. **`PATCH /api/vendor/orders/{order_id}/status`** — vendor-scoped equivalent of admin's status endpoint. Permissioned so a vendor can ONLY update orders they own. Mobile currently falls back to `/api/admin/orders/...` as a hack — this dedicated route removes that.
+2. **`GET /api/vendor/me/stats`** — extended to include:
+   - `today_shop_sales_amount`
+   - `today_shop_orders`
+   - `lifetime_shop_earnings`
+   Sourced from the `vendor_sales` collection.
+3. **Q&A router** — new questions on `/products/{id}/questions` should notify the **vendor (product owner)** via `_create_notification`. Admin can READ but should NOT receive the notification.
+4. **`GET /api/orders/me`** — response enriched with `vendor_name` on each order so the mobile "My orders" hero card + web `/orders` page can show the vendor per line-item.
+
+Web already consumes these fields opportunistically (falls back to display-friendly defaults when they're `null`). See the "Frontend already shipped" section below for the exact places.
 
 ## Business rule
 

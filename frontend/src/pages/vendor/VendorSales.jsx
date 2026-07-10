@@ -96,6 +96,25 @@ export default function VendorSales() {
   }, []);
   useEffect(() => { loadOnline(); }, [loadOnline]);
 
+  /* --- Backend-provided shop rollups from `/vendor/me/stats` --------------
+   *  Server truth (once backend ships ORDER_MANAGEMENT_BACKEND_SPEC.md
+   *  updates). Falls back to `null` while the fields aren't present. */
+  const [stats, setStats] = useState({ today_shop_sales_amount: null, today_shop_orders: null, lifetime_shop_earnings: null });
+  useEffect(() => {
+    let alive = true;
+    api.get("/vendor/me/stats")
+      .then(({ data }) => {
+        if (!alive || !data) return;
+        setStats({
+          today_shop_sales_amount: data.today_shop_sales_amount ?? null,
+          today_shop_orders: data.today_shop_orders ?? null,
+          lifetime_shop_earnings: data.lifetime_shop_earnings ?? null,
+        });
+      })
+      .catch(() => { /* stats missing — degrade silently */ });
+    return () => { alive = false; };
+  }, []);
+
   const onlineSummary = useMemo(() => {
     const out = { upi: 0, cod: 0, upi_count: 0, cod_count: 0, total: 0, count: 0, items: [] };
     for (const o of online.items || []) {
@@ -158,9 +177,33 @@ export default function VendorSales() {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3" data-testid="vs-online-kpis">
+        <Card
+          testId="online-today"
+          tone="cod"
+          icon={Banknote}
+          label="Today's shop sales"
+          value={formatINR(stats.today_shop_sales_amount ?? (onlineSummary.cod + onlineSummary.upi))}
+          hint={
+            stats.today_shop_orders != null
+              ? `${stats.today_shop_orders} orders today`
+              : `${onlineSummary.count} lifetime orders (backend total)`
+          }
+        />
         <Card testId="online-cod"    tone="cod"     icon={Banknote}   label="Cash on delivery"                   value={formatINR(onlineSummary.cod)} hint={`${onlineSummary.cod_count} orders — collected on delivery`} />
         <Card testId="online-upi"    tone="upi"     icon={IndianRupee} label="UPI / online paid"                  value={formatINR(onlineSummary.upi)} hint={`${onlineSummary.upi_count} orders — settled by Slangcart`} />
         <Card testId="online-pending" tone="pending" icon={Clock}      label="Credit sale pending · Slangcart a/c" value={formatINR(onlineSummary.upi)} hint={onlineSummary.upi > 0 ? "Awaiting payout to your account" : "No pending payout"} color="#B45309" />
+        <Card
+          testId="online-lifetime"
+          tone="upi"
+          icon={TrendingUp}
+          label="Lifetime shop earnings"
+          value={formatINR(stats.lifetime_shop_earnings ?? onlineSummary.total)}
+          hint={
+            stats.lifetime_shop_earnings != null
+              ? "From /vendor/me/stats"
+              : "Aggregated from /vendor/me/sales"
+          }
+        />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-3 mb-6">
