@@ -1,15 +1,16 @@
 import { NavLink } from "react-router-dom";
-import { Store, Package, ClipboardList, Receipt, IndianRupee, FileSpreadsheet, BarChart3, Settings as SettingsIcon, TrendingUp } from "lucide-react";
+import { Store, Package, ClipboardList, Receipt, IndianRupee, FileSpreadsheet, BarChart3, Settings as SettingsIcon, TrendingUp, Repeat } from "lucide-react";
 
 const ITEMS = [
-  { to: "/vendor",            label: "Products",        icon: Package },
-  { to: "/vendor/orders",     label: "Orders",          icon: ClipboardList },
-  { to: "/vendor/sales",      label: "Sales dashboard", icon: TrendingUp },
-  { to: "/vendor/pos",        label: "Billing (POS)",   icon: Receipt },
-  { to: "/vendor/invoices",   label: "Invoices",        icon: FileSpreadsheet },
-  { to: "/vendor/cash",       label: "Cash summary",    icon: IndianRupee },
-  { to: "/vendor/analytics",  label: "Analytics",       icon: BarChart3 },
-  { to: "/vendor/settings",   label: "Shop settings",   icon: SettingsIcon },
+  { to: "/vendor",            label: "Products",           icon: Package },
+  { to: "/vendor/orders",     label: "Orders",             icon: ClipboardList },
+  { to: "/vendor/sales",      label: "Sales dashboard",    icon: TrendingUp },
+  { to: "/vendor/pos",        label: "Billing (POS)",      icon: Receipt },
+  { to: "/vendor/invoices",   label: "Invoices",           icon: FileSpreadsheet },
+  { to: "/vendor/cash",       label: "Cash summary",       icon: IndianRupee },
+  { to: "/vendor/substore",   label: "Vendor → Substore",  icon: Repeat },
+  { to: "/vendor/analytics",  label: "Analytics",          icon: BarChart3 },
+  { to: "/vendor/settings",   label: "Shop settings",      icon: SettingsIcon },
 ];
 
 export default function VendorNav() {

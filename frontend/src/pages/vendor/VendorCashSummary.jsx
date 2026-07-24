@@ -6,11 +6,15 @@ import { formatINR } from "@/lib/utils";
 import { getCashSummary, getStatement, getSettings, toCSV } from "@/lib/vendorSales";
 import { Download, Calendar, Banknote } from "lucide-react";
 
-function Row({ label, value, sign = "" }) {
+function Row({ label, value, sign = "", isCount = false }) {
   return (
     <div className="flex justify-between py-1 text-sm border-b border-[color:var(--sc-border)] last:border-0">
       <span className="text-[color:var(--sc-ink-muted)]">{label}</span>
-      <span className="font-semibold">{sign}{formatINR(value || 0)}</span>
+      <span className="font-semibold">
+        {isCount
+          ? Number(value || 0).toLocaleString("en-IN")
+          : <>{sign}{formatINR(value || 0)}</>}
+      </span>
     </div>
   );
 }
@@ -64,7 +68,7 @@ export default function VendorCashSummary() {
           <div>
             <Row label="Credit sales (pending)" value={summary.credit_sales} />
             <Row label="Total collections" value={summary.total_collections} />
-            <Row label="Bills generated" value={summary.bills_count} />
+            <Row label="Bills generated" value={summary.bills_count} isCount />
             <Row label="Refunds (−)" value={summary.refunds} sign="-" />
             <div className="flex justify-between py-2 text-base border-t-2 border-[color:var(--sc-primary)] mt-2">
               <span className="font-extrabold">Closing balance</span>

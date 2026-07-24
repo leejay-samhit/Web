@@ -88,9 +88,65 @@ export const orderProductName = (o) => {
 /*  Excel export                                                              */
 /* -------------------------------------------------------------------------- */
 
+/** Format Date → `30-12-2026` (DD-MM-YYYY) per product spec. */
+export function formatOrderDate(input) {
+  if (!input) return "";
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+
+/** Format Date → `10:30 PM` (12-hour) per product spec. */
+export function formatOrderTime(input) {
+  if (!input) return "";
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return "";
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${String(h).padStart(2, "0")}:${m} ${ampm}`;
+}
+
+/**
+ * Assign order numbers per the product spec (04-Jul-2026):
+ *   Admin/global: order #1 = the very first order in the entire feed.
+ *   Vendor:       order #1 = the vendor's first order.
+ * Both are computed client-side from the current sorted order list.
+ * If the backend later adds `order_seq` / `vendor_order_seq`, prefer that.
+ */
+export function assignOrderNumbers(orders, { scope = "admin" } = {}) {
+  const list = Array.isArray(orders) ? orders.slice() : [];
+  // Sort ascending by created_at so #1 is the oldest.
+  list.sort((a, b) => new Date(a?.created_at || 0) - new Date(b?.created_at || 0));
+  if (scope === "vendor") {
+    // Per-vendor sequential
+    const seqByVendor = new Map();
+    for (const o of list) {
+      const vid = o?.vendor_id || o?.shop_id || "self";
+      const n = (seqByVendor.get(vid) || 0) + 1;
+      seqByVendor.set(vid, n);
+      o.__order_no = o?.vendor_order_seq || n;
+    }
+  } else {
+    // Global sequential
+    let n = 0;
+    for (const o of list) {
+      n += 1;
+      o.__order_no = o?.order_seq || n;
+    }
+  }
+  return list;
+}
+
 /** Build the fixed 8-column data rows from the given orders array. */
-export function ordersToExcelRows(orders) {
-  return (orders || []).map((o) => ({
+export function ordersToExcelRows(orders, { scope = "admin" } = {}) {
+  const numbered = assignOrderNumbers(orders, { scope });
+  return numbered.map((o) => ({
+    "Order Number":    o.__order_no,
+    "Date":            formatOrderDate(o?.created_at),
+    "Time":            formatOrderTime(o?.created_at),
     "User Name":       orderCustomerName(o),
     "User Mobile":     orderCustomerPhone(o),
     "Product Name":    orderProductName(o),
@@ -104,15 +160,18 @@ export function ordersToExcelRows(orders) {
 
 /** Write and download an .xlsx file containing the order rows. Returns the filename. */
 export function exportOrdersToExcel(orders, { role = "admin", shopName = "" } = {}) {
-  const rows = ordersToExcelRows(orders);
+  const scope = role === "vendor" ? "vendor" : "admin";
+  const rows = ordersToExcelRows(orders, { scope });
   const ws = XLSX.utils.json_to_sheet(rows, {
     header: [
+      "Order Number", "Date", "Time",
       "User Name", "User Mobile", "Product Name", "Product Amount",
       "Order Stage", "Vendor Name", "Vendor Email", "Vendor Mobile",
     ],
   });
   // Column widths (rough character counts).
   ws["!cols"] = [
+    { wch: 12 }, { wch: 12 }, { wch: 11 },
     { wch: 22 }, { wch: 15 }, { wch: 32 }, { wch: 14 },
     { wch: 16 }, { wch: 22 }, { wch: 26 }, { wch: 15 },
   ];

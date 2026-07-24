@@ -1,0 +1,305 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import Layout from "@/components/Layout";
+import VendorNav from "@/components/vendor/VendorNav";
+import { formatINR } from "@/lib/utils";
+import { log } from "@/lib/log";
+import {
+  Plus, Repeat, Download, CheckCircle2, XCircle, Search, ArrowRight,
+  Loader2, Package, Users,
+} from "lucide-react";
+import {
+  loadSubstores, loadTransfers, createTransfer, acceptTransfer, cancelTransfer,
+  transferSummary, downloadTransfersCsv,
+} from "@/lib/vendorSubstore";
+
+/* -------------------------------------------------------------------------- */
+/*  Vendor · Substore transfer ledger                                          */
+/*                                                                             */
+/*  A "substore" is either a secondary shop under the same GSTIN or a partner  */
+/*  vendor exchanging stock. Transfers are logged locally with search by       */
+/*  serial / IMEI / product name.                                              */
+/* -------------------------------------------------------------------------- */
+export default function VendorSubstore() {
+  const { user } = useAuth();
+  const uid = user?.id;
+  const shopName = user?.vendor?.shop_name || user?.shop_name || "My shop";
+  const myEmail = (user?.email || "").toLowerCase();
+
+  const [substores, setSubstores] = useState(() => loadSubstores(uid));
+  const [transfers, setTransfers] = useState(() => loadTransfers(uid));
+  const [q, setQ] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { setSubstores(loadSubstores(uid)); setTransfers(loadTransfers(uid)); }, [uid]);
+
+  const refresh = useCallback(() => { setTransfers(loadTransfers(uid)); }, [uid]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return transfers;
+    return transfers.filter((t) => {
+      const bag = [
+        t.transfer_order_id, t.product_name, t.sku, t.serial_number, t.imei,
+        t.from_email, t.to_email, t.to_name, t.note, t.status,
+      ].join(" ").toLowerCase();
+      return bag.includes(needle);
+    });
+  }, [transfers, q]);
+
+  const summary = useMemo(() => transferSummary(filtered), [filtered]);
+
+  const submit = (payload) => {
+    setBusy(true);
+    try {
+      const rec = createTransfer(uid, {
+        ...payload,
+        from_email: myEmail,
+        from_name: shopName,
+      });
+      log.info?.("VendorSubstore.transfer created", rec.transfer_order_id);
+      refresh();
+      setShowForm(false);
+    } catch (e) {
+      alert(e.message || "Could not create transfer.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Layout title="Vendor · Substore transfers">
+      <VendorNav />
+
+      {/* KPI strip */}
+      <div className="grid sm:grid-cols-4 gap-3 mb-4" data-testid="vst-kpis">
+        <Kpi label="Total transfers" value={summary.total} />
+        <Kpi label="Pending"   value={summary.pending}   tone="amber" />
+        <Kpi label="Accepted"  value={summary.accepted}  tone="green" />
+        <Kpi label="Total value" value={formatINR(summary.total_value)} tone="primary" />
+      </div>
+
+      {/* Toolbar */}
+      <div className="sc-card p-3 mb-3 flex flex-wrap items-center gap-2" data-testid="vst-toolbar">
+        <div className="flex-1 min-w-[220px] flex items-center gap-1.5 border border-[color:var(--sc-border)] rounded-lg px-2 py-1">
+          <Search size={14} className="text-[color:var(--sc-ink-muted)]" />
+          <input
+            data-testid="vst-search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by transfer #, product, serial, IMEI, substore"
+            className="flex-1 text-sm bg-transparent outline-none"
+          />
+        </div>
+        <button
+          data-testid="vst-download"
+          onClick={() => downloadTransfersCsv(filtered, shopName)}
+          disabled={filtered.length === 0}
+          className="sc-btn-outline inline-flex items-center gap-1.5 text-sm disabled:opacity-60"
+        >
+          <Download size={14} /> CSV ({filtered.length})
+        </button>
+        <button
+          data-testid="vst-new"
+          onClick={() => setShowForm(true)}
+          disabled={substores.length === 0}
+          className="sc-btn-primary inline-flex items-center gap-1.5 text-sm disabled:opacity-60"
+        >
+          <Plus size={14} /> New transfer
+        </button>
+      </div>
+
+      {substores.length === 0 && (
+        <div className="sc-card p-4 mb-3 text-sm bg-[color:var(--sc-accent-light)]/40" data-testid="vst-no-substores">
+          <div className="font-extrabold text-[color:var(--sc-ink)] mb-1 flex items-center gap-1.5"><Users size={14} /> No substores added yet</div>
+          <div className="text-[color:var(--sc-ink-muted)] text-[13px]">
+            Add substore emails in <b>My Shop → Shop settings → Substores</b> before creating a transfer.
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      {filtered.length === 0 ? (
+        <div className="sc-card p-8 text-center text-[color:var(--sc-ink-muted)]" data-testid="vst-empty">
+          <Repeat size={28} className="mx-auto opacity-40" />
+          <div className="mt-2 text-sm">No transfers yet.</div>
+          <div className="text-xs mt-1">Create your first stock transfer to a substore to see it here.</div>
+        </div>
+      ) : (
+        <div className="sc-card p-0 overflow-x-auto" data-testid="vst-list">
+          <table className="w-full text-xs">
+            <thead className="bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]">
+              <tr>
+                <th className="text-left px-3 py-2">Transfer #</th>
+                <th className="text-left px-3 py-2">When</th>
+                <th className="text-left px-3 py-2">Product</th>
+                <th className="text-left px-3 py-2 hidden lg:table-cell">Serial / IMEI</th>
+                <th className="text-right px-3 py-2">Qty</th>
+                <th className="text-right px-3 py-2">Value</th>
+                <th className="text-left px-3 py-2">To</th>
+                <th className="text-left px-3 py-2">Status</th>
+                <th className="text-right px-3 py-2">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((t) => (
+                <tr key={t.id} className="border-t border-[color:var(--sc-border)]" data-testid={`vst-row-${t.transfer_order_id}`}>
+                  <td className="px-3 py-2 font-mono">{t.transfer_order_id}</td>
+                  <td className="px-3 py-2 text-[color:var(--sc-ink-muted)]">{new Date(t.created_at).toLocaleString()}</td>
+                  <td className="px-3 py-2">{t.product_name}{t.sku ? <span className="text-[10px] text-[color:var(--sc-ink-muted)]"> · {t.sku}</span> : null}</td>
+                  <td className="px-3 py-2 hidden lg:table-cell text-[10px] text-[color:var(--sc-ink-muted)]">
+                    {[t.serial_number && `SN ${t.serial_number}`, t.imei && `IMEI ${t.imei}`].filter(Boolean).join(" · ")}
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold">{t.qty}</td>
+                  <td className="px-3 py-2 text-right font-extrabold">{formatINR(t.total_value)}</td>
+                  <td className="px-3 py-2">{t.to_name || t.to_email}</td>
+                  <td className="px-3 py-2">
+                    <StatusChip status={t.status} />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {t.status === "pending" && (
+                      <div className="inline-flex gap-1.5">
+                        <button
+                          data-testid={`vst-accept-${t.id}`}
+                          onClick={() => { acceptTransfer(uid, t.id, myEmail); refresh(); }}
+                          title="Accept as destination substore"
+                          className="text-emerald-600 hover:text-emerald-700"
+                        >
+                          <CheckCircle2 size={14} />
+                        </button>
+                        <button
+                          data-testid={`vst-cancel-${t.id}`}
+                          onClick={() => { if (window.confirm("Cancel this transfer?")) { cancelTransfer(uid, t.id); refresh(); } }}
+                          title="Cancel"
+                          className="text-rose-600 hover:text-rose-700"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showForm && (
+        <TransferForm
+          substores={substores}
+          busy={busy}
+          onSubmit={submit}
+          onClose={() => setShowForm(false)}
+        />
+      )}
+    </Layout>
+  );
+}
+
+function Kpi({ label, value, tone = "default" }) {
+  const cls = tone === "primary" ? "text-[color:var(--sc-primary)]"
+    : tone === "green" ? "text-emerald-700"
+    : tone === "amber" ? "text-amber-700"
+    : "text-[color:var(--sc-ink)]";
+  return (
+    <div className="sc-card p-4">
+      <div className="text-[11px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] font-semibold">{label}</div>
+      <div className={`text-2xl font-extrabold mt-1 ${cls}`}>{value}</div>
+    </div>
+  );
+}
+
+function StatusChip({ status }) {
+  const map = {
+    pending:   { bg: "#FEF3C7", text: "#92400E", label: "Pending" },
+    accepted:  { bg: "#DCFCE7", text: "#166534", label: "Accepted" },
+    rejected:  { bg: "#FEE2E2", text: "#991B1B", label: "Rejected" },
+    cancelled: { bg: "#F1F5F9", text: "#475569", label: "Cancelled" },
+  };
+  const s = map[status] || { bg: "#F1F5F9", text: "#475569", label: status };
+  return <span className="sc-chip" style={{ background: s.bg, color: s.text }}>{s.label}</span>;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Transfer form modal                                                        */
+/* -------------------------------------------------------------------------- */
+function TransferForm({ substores, busy, onSubmit, onClose }) {
+  const [form, setForm] = useState({
+    to_substore_id: substores[0]?.id || "",
+    product_name: "", sku: "", serial_number: "", imei: "",
+    qty: 1, unit_price: 0, note: "",
+  });
+  const chosen = substores.find((s) => s.id === form.to_substore_id);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === "number" ? Number(e.target.value || 0) : e.target.value }));
+
+  const submit = (e) => {
+    e.preventDefault();
+    onSubmit({
+      ...form,
+      to_email: chosen?.email || "",
+      to_name: chosen?.name || "",
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
+      <form
+        className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5 space-y-3 max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={submit}
+        data-testid="vst-form"
+      >
+        <div className="font-extrabold text-lg text-[color:var(--sc-ink)] flex items-center gap-2">
+          <Package size={18} className="text-[color:var(--sc-primary)]" /> New stock transfer
+        </div>
+
+        <label className="block">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Destination substore *</span>
+          <select data-testid="vst-form-substore" required className="sc-input mt-1" value={form.to_substore_id} onChange={set("to_substore_id")}>
+            {substores.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.email}</option>)}
+          </select>
+        </label>
+
+        <div className="grid sm:grid-cols-2 gap-2">
+          <label className="block sm:col-span-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Product name *</span>
+            <input data-testid="vst-form-product" required className="sc-input mt-1" value={form.product_name} onChange={set("product_name")} placeholder="e.g. iPhone 15 Pro 256GB" />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">SKU</span>
+            <input data-testid="vst-form-sku" className="sc-input mt-1" value={form.sku} onChange={set("sku")} placeholder="Optional" />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Qty *</span>
+            <input data-testid="vst-form-qty" required min={1} type="number" className="sc-input mt-1" value={form.qty} onChange={set("qty")} />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Serial number</span>
+            <input data-testid="vst-form-serial" className="sc-input mt-1" value={form.serial_number} onChange={set("serial_number")} placeholder="Optional" />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">IMEI</span>
+            <input data-testid="vst-form-imei" className="sc-input mt-1" value={form.imei} onChange={set("imei")} placeholder="Optional" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Unit price (₹)</span>
+            <input data-testid="vst-form-price" type="number" className="sc-input mt-1" value={form.unit_price} onChange={set("unit_price")} placeholder="0" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Note</span>
+            <textarea data-testid="vst-form-note" className="sc-input mt-1 min-h-[60px]" value={form.note} onChange={set("note")} placeholder="Optional context (loan / sale / return)" />
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="sc-btn-outline text-sm">Cancel</button>
+          <button data-testid="vst-form-submit" disabled={busy} type="submit" className="sc-btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-60">
+            {busy ? <Loader2 className="animate-spin" size={14} /> : <ArrowRight size={14} />} Create transfer
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

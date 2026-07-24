@@ -34,6 +34,9 @@ export default function VendorOrders() {
   const [busy, setBusy] = useState(null);
   const [backendReady, setBackendReady] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  // Confirmation modal for the Delivered transition — vendor must acknowledge
+  // that cash (COD) or payout (UPI) has been collected before marking as done.
+  const [deliverConfirm, setDeliverConfirm] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true); setErrorMsg("");
@@ -58,7 +61,12 @@ export default function VendorOrders() {
 
   useEffect(() => { load(); }, [load]);
 
-  const advance = async (orderId, nextStatus) => {
+  const advance = async (orderId, nextStatus, orderRef) => {
+    // Delivered → require confirmation (COD-cash-collected / UPI-payout ack)
+    if (nextStatus === "delivered" && orderRef) {
+      setDeliverConfirm({ orderId, order: orderRef });
+      return;
+    }
     setBusy(orderId);
     try {
       await api.patch(`/vendor/orders/${orderId}/status`, { status: nextStatus });
@@ -70,6 +78,26 @@ export default function VendorOrders() {
       } else {
         alert(e?.response?.data?.detail || "Could not update status.");
       }
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmDelivered = async () => {
+    if (!deliverConfirm) return;
+    const { orderId } = deliverConfirm;
+    setDeliverConfirm(null);
+    setBusy(orderId);
+    try {
+      // Backend should also flip payment_status to "paid" (or
+      // "collected_on_delivery" for COD) on this transition — see spec.
+      await api.patch(`/vendor/orders/${orderId}/status`, {
+        status: "delivered",
+        mark_paid: true,
+      });
+      await load();
+    } catch (e) {
+      alert(e?.response?.data?.detail || "Could not update status.");
     } finally {
       setBusy(null);
     }
@@ -104,10 +132,11 @@ export default function VendorOrders() {
       <VendorNav />
 
       {!backendReady && (
-        <div className="sc-card p-4 mb-3 bg-amber-50 border-amber-200 text-amber-800 text-sm" data-testid="vo-backend-missing">
-          <div className="font-extrabold mb-1">Order-management endpoints not live on the backend yet.</div>
-          <div className="text-[13px]">
-            The vendor order flow needs the backend to expose <code>GET /vendor/me/orders</code> and <code>PATCH /vendor/orders/&#123;id&#125;/status</code>. Spec is at <code>/app/memory/ORDER_MANAGEMENT_BACKEND_SPEC.md</code>. Once shipped, this page will populate automatically.
+        <div className="sc-card p-4 mb-3 bg-[color:var(--sc-accent-light)]/40 border-[color:var(--sc-border)] text-[color:var(--sc-ink)] text-sm" data-testid="vo-backend-missing">
+          <div className="font-extrabold mb-1">Order inbox will populate here</div>
+          <div className="text-[13px] text-[color:var(--sc-ink-muted)]">
+            You (the vendor) manage every order from placed → delivered. Admin sees this data as read-only.
+            The backend is preparing the vendor-scoped feed — once live, orders will appear automatically.
           </div>
         </div>
       )}
@@ -176,12 +205,63 @@ export default function VendorOrders() {
               key={o.id}
               order={o}
               busy={busy === o.id}
-              onAdvance={(s) => advance(o.id, s)}
+              onAdvance={(s) => advance(o.id, s, o)}
             />
           ))}
         </div>
       )}
+
+      {deliverConfirm && (
+        <DeliveredConfirmModal
+          order={deliverConfirm.order}
+          onConfirm={confirmDelivered}
+          onCancel={() => setDeliverConfirm(null)}
+        />
+      )}
     </Layout>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Delivered confirmation modal — "Cash of ₹X collected?"                     */
+/* -------------------------------------------------------------------------- */
+function DeliveredConfirmModal({ order, onConfirm, onCancel }) {
+  const amt = orderAmount(order);
+  const isCOD = String(order?.payment_method || order?.mode || "").toLowerCase().includes("cod");
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onCancel}>
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
+        onClick={(e) => e.stopPropagation()}
+        data-testid="vo-deliver-confirm"
+      >
+        <div className="font-extrabold text-lg text-[color:var(--sc-ink)]">Confirm delivery</div>
+        <p className="text-sm text-[color:var(--sc-ink-muted)] mt-2">
+          {isCOD
+            ? <>Did you collect the <b className="text-[color:var(--sc-primary)]">Cash amount of {formatINR(amt)}</b> from {orderCustomerName(order) || "the customer"} on delivery?</>
+            : <>Confirm that the parcel has been handed over to {orderCustomerName(order) || "the customer"} for the <b className="text-[color:var(--sc-primary)]">UPI-paid order of {formatINR(amt)}</b>.</>}
+        </p>
+        <div className="mt-2 text-[11px] text-[color:var(--sc-ink-muted)] italic">
+          Marking as delivered will also flag the payment as {isCOD ? "collected (COD)" : "settled (UPI)"} on the invoice.
+        </div>
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+          <button
+            data-testid="vo-deliver-cancel"
+            onClick={onCancel}
+            className="sc-btn-outline text-sm"
+          >
+            Not yet
+          </button>
+          <button
+            data-testid="vo-deliver-confirm-yes"
+            onClick={onConfirm}
+            className="sc-btn-primary text-sm inline-flex items-center gap-1.5"
+          >
+            {isCOD ? `Yes, collected ${formatINR(amt)}` : "Yes, delivered"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

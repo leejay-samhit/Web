@@ -3,7 +3,8 @@ import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import { getSettings, saveSettings, peekNextInvoiceNumber, isCloudAvailable, bulkPushToCloud, pullFromCloud, listInvoices } from "@/lib/vendorSales";
-import { Save, CheckCircle2, Info, Receipt, Cloud, CloudOff, Loader2, UploadCloud, DownloadCloud, RefreshCw } from "lucide-react";
+import { loadSubstores, addSubstore, removeSubstore } from "@/lib/vendorSubstore";
+import { Save, CheckCircle2, Info, Receipt, Cloud, CloudOff, Loader2, UploadCloud, DownloadCloud, RefreshCw, Users, Plus, Trash2 } from "lucide-react";
 
 export default function VendorSettings() {
   const { user } = useAuth();
@@ -178,6 +179,76 @@ export default function VendorSettings() {
           </div>
         )}
       </div>
+
+      {/* ============================ Substores directory ============================ */}
+      <SubstoresPanel uid={uid} />
     </Layout>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Substores directory — email list used by /vendor/substore transfer flow    */
+/* -------------------------------------------------------------------------- */
+function SubstoresPanel({ uid }) {
+  const [list, setList] = useState(() => loadSubstores(uid));
+  const [form, setForm] = useState({ email: "", name: "", gstin: "", phone: "", note: "" });
+  const [err, setErr] = useState("");
+  useEffect(() => { setList(loadSubstores(uid)); }, [uid]);
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const add = (e) => {
+    e.preventDefault();
+    setErr("");
+    try {
+      const next = addSubstore(uid, form);
+      setList(next);
+      setForm({ email: "", name: "", gstin: "", phone: "", note: "" });
+    } catch (er) {
+      setErr(er.message || "Could not add substore.");
+    }
+  };
+  const remove = (id) => {
+    if (!window.confirm("Remove this substore? Existing transfers stay in the ledger.")) return;
+    setList(removeSubstore(uid, id));
+  };
+
+  return (
+    <div className="sc-card p-5 max-w-3xl mt-4" data-testid="vset-substores">
+      <div className="font-extrabold mb-1 inline-flex items-center gap-2"><Users size={16} /> Substores</div>
+      <div className="text-xs text-[color:var(--sc-ink-muted)] mb-3">
+        A <b>substore</b> is another shop under your GSTIN <i>or</i> a partner vendor you exchange stock with. Add their email
+        here so you can pick them as a destination in <b>My shop → Vendor to Substore</b> transfers.
+      </div>
+
+      <form onSubmit={add} className="grid sm:grid-cols-2 gap-2 mb-3">
+        <input data-testid="vset-ss-email" required type="email" className="sc-input" placeholder="Substore email *" value={form.email} onChange={set("email")} />
+        <input data-testid="vset-ss-name"           className="sc-input" placeholder="Display name" value={form.name} onChange={set("name")} />
+        <input data-testid="vset-ss-gstin"          className="sc-input" placeholder="GSTIN (if same PAN)" value={form.gstin} onChange={set("gstin")} />
+        <input data-testid="vset-ss-phone"          className="sc-input" placeholder="Phone" value={form.phone} onChange={set("phone")} />
+        <input data-testid="vset-ss-note" className="sc-input sm:col-span-2" placeholder="Note (optional)" value={form.note} onChange={set("note")} />
+        {err && <div data-testid="vset-ss-err" className="text-xs text-[color:var(--sc-error)] sm:col-span-2">{err}</div>}
+        <div className="sm:col-span-2">
+          <button data-testid="vset-ss-add" type="submit" className="sc-btn-primary text-sm inline-flex items-center gap-1.5"><Plus size={13} /> Add substore</button>
+        </div>
+      </form>
+
+      {list.length === 0 ? (
+        <div className="text-xs text-[color:var(--sc-ink-muted)] italic">No substores yet.</div>
+      ) : (
+        <ul className="divide-y divide-[color:var(--sc-border)] border border-[color:var(--sc-border)] rounded-lg" data-testid="vset-ss-list">
+          {list.map((s) => (
+            <li key={s.id} className="px-3 py-2 flex items-center gap-3" data-testid={`vset-ss-row-${s.id}`}>
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm text-[color:var(--sc-ink)] truncate">{s.name}</div>
+                <div className="text-[11px] text-[color:var(--sc-ink-muted)] truncate">
+                  {s.email}{s.phone ? ` · ${s.phone}` : ""}{s.gstin ? ` · GSTIN ${s.gstin}` : ""}
+                </div>
+              </div>
+              <button data-testid={`vset-ss-rm-${s.id}`} onClick={() => remove(s.id)} className="text-rose-600 hover:text-rose-700" title="Remove"><Trash2 size={14} /></button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

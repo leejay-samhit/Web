@@ -44,16 +44,46 @@ export default function VendorInvoices() {
   const handleCancel = (id) => { if (window.confirm("Cancel this invoice?")) { cancelInvoice(uid, id); setBump((b) => b + 1); } };
   const handleRefund = (id) => { const reason = window.prompt("Refund reason"); if (reason !== null) { refundInvoice(uid, id, reason); setBump((b) => b + 1); } };
   const exportCsv = () => {
-    const rows = filtered.map((i) => ({
-      invoice_no: i.invoice_no, date: i.created_at, customer: i.customer?.name || "Walk-in",
-      phone: i.customer?.phone || "", items: i.items?.length || 0, subtotal: i.totals?.subtotal || 0,
-      gst: i.totals?.gst_total || 0, total: i.totals?.grand_total || 0, payment: (i.payments || []).map((p) => `${p.mode}:${p.amount}`).join("|"),
-      status: i.status,
-    }));
+    // Business rule (04-Jul-2026): CSV must include CGST/SGST split + customer
+    // GSTIN + Order Number/Date/Time so vendors can reconcile GSTR-1 filings.
+    const half = (v) => Math.round(((Number(v) || 0) / 2) * 100) / 100;
+    const rows = filtered.map((i, idx) => {
+      const gstTotal = Number(i.totals?.gst_total || 0);
+      const d = new Date(i.created_at);
+      const pad = (n) => String(n).padStart(2, "0");
+      const dateStr = Number.isNaN(d.getTime()) ? "" : `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
+      let timeStr = "";
+      if (!Number.isNaN(d.getTime())) {
+        let h = d.getHours();
+        const m = pad(d.getMinutes());
+        const ampm = h >= 12 ? "PM" : "AM";
+        h = h % 12 || 12;
+        timeStr = `${pad(h)}:${m} ${ampm}`;
+      }
+      return {
+        "Order Number": idx + 1, // per-vendor sequential
+        "Invoice No": i.invoice_no,
+        "Date": dateStr,
+        "Time": timeStr,
+        "Customer": i.customer?.name || "Walk-in",
+        "Phone": i.customer?.phone || "",
+        "Customer GSTIN": i.customer?.gstin || "",
+        "Items": i.items?.length || 0,
+        "Subtotal": i.totals?.subtotal || 0,
+        "CGST": half(gstTotal),
+        "SGST": half(gstTotal),
+        "GST Total": gstTotal,
+        "Discount": i.totals?.discount_total || 0,
+        "Grand Total": i.totals?.grand_total || 0,
+        "Payment Mode": (i.payments || []).map((p) => p.mode_label || p.mode).join("|"),
+        "Payment Detail": (i.payments || []).map((p) => `${p.mode}:${p.amount}`).join("|"),
+        "Status": i.status,
+      };
+    });
     const csv = toCSV(rows);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = "invoices.csv"; a.click();
+    a.href = URL.createObjectURL(blob); a.download = `invoices-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 

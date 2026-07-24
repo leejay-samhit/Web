@@ -115,8 +115,42 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 - **P2** — Web push registration (`/register-push`).
 - **P3** — i18n, offline cart cache.
 
-## Latest updates (04-Jul-2026)
-- **DONE — Vendor Order Management + Admin read-only + Excel export.**
+## Latest updates (04-Jul-2026 — batch drop)
+- **DONE — Order-management polish.** Excel exports (Admin + Vendor) now include **Order Number** (per-vendor sequential for vendors, global sequential for admin), **Date `DD-MM-YYYY`**, **Time `hh:mm AM/PM`** — new helpers `formatOrderDate`, `formatOrderTime`, `assignOrderNumbers` in `src/lib/orders.js`. Excel column count grew from 8 → 11 with the same fixed contract.
+- **DONE — Vendor Orders UX cleanup.** Replaced the amber "Backend not ready" error with a friendlier neutral empty state ("You manage every order · Admin sees this data as read-only"). Added a **Delivered confirmation modal** ("Cash of ₹X collected?" for COD or "Handed over?" for UPI) that also sends `mark_paid: true` to the backend to flip the invoice's payment status. Modal is one-tap Yes / Not-yet.
+- **DONE — Invoices CSV upgrade** (`VendorInvoices.jsx`): CSV now has 17 columns including **CGST / SGST split**, **Customer GSTIN**, **Order Number**, **Date `DD-MM-YYYY`**, **Time `hh:mm AM/PM`** — the format your CA needs for GSTR-1 reconciliation.
+- **DONE — Cash Summary fix**: "Bills generated" row no longer shows a ₹ symbol (it's a count). Uses `Intl.NumberFormat` for thousand separators.
+- **NEW MODULE — Vendor → Substore transfers.**
+  - New page `/vendor/substore` (`VendorSubstore.jsx`): 4 KPI cards (Total, Pending, Accepted, Total value), search, CSV download, new-transfer modal.
+  - Substore management panel added to `/vendor/settings`: add email/name/GSTIN/phone/note, list, remove. Substores are picked from a dropdown in the transfer modal.
+  - Transfer record: `TRF-YYYYMMDD-####` sequential ID, product name, SKU, **serial number**, **IMEI**, qty, unit price, from/to emails, status (pending/accepted/rejected/cancelled).
+  - Accept / Cancel actions from the ledger table.
+  - CSV export with 18 columns including transfer #, date, time, initiator, acceptor, product, serial, IMEI, qty, value, note.
+  - Currently `localStorage`-backed per-browser; will swap to backend endpoints once shipped (spec below).
+  - Vendor nav updated with "Vendor → Substore" tab.
+- **DOC — `/app/memory/BACKLOG_BACKEND_SPEC.md`** — 10-section spec covering everything the backend team needs to unlock the deferred features:
+  1. Admin Products PIN + Vendor filter + stock enrichment
+  2. Vendor Products stock Excel
+  3. Vendor POS search by serial + IMEI
+  4. CGST/SGST split + GST-inclusive
+  5. POS Payment popup card capture (manual, no gateway)
+  6. Q&A vendor reply → user chat auto-thread
+  7. Vendor network downline
+  8. Delivered → auto-Paid flow
+  9. `order_seq` + `vendor_order_seq` DB fields
+  10. Substore transfer endpoints
+- CI build green, zero warnings.
+
+### Deferred to next drop (blocked on backend)
+- Admin Products PIN + Vendor filter dropdowns + filtered Stock Excel + delete-button removal (§1)
+- Vendor Products Stock Excel download (§2)
+- Vendor POS search by serial / IMEI + CGST/SGST split UI + Payment popup card capture (§3, §4, §5)
+- Q&A vendor reply → user chat (§6)
+- Vendor Network downline visualization (§7)
+- Sales Dashboard drill-through / clickable KPI cards folding online + offline into single view (needs backend `/vendor/me/stats` fields — already speced in the CONFIRMED backend drop)
+
+## Verification status
+- 04-Jul-2026: iter-15 E2E confirmed login, shop, PDP, cart hydration, COD checkout, admin Treasury, onboarding-terms, T&C gates. Post-substore-drop screenshots pending vendor-account access — Substore page loads for vendor-role only per `userGuard`.
   - **New `/vendor/orders` page** (`src/pages/vendor/VendorOrders.jsx`): vendor's inbox of orders that contain their products. Each order card shows customer name/phone/address (always visible per business rule), item list with thumbnails, and tap-to-advance stage buttons. Filters by stage (Placed → Confirmed → Paid → Processing → Packed → Shipped → Out for delivery → Delivered / Cancelled / Returned), search, Excel download.
   - **`/admin/orders` rewritten to READ-ONLY**: removed the "Update status" dropdown; added search, stage chip filter, `View` detail modal (shows customer + vendor + address + items + timeline), and Excel download. A "Read-only · vendors own order stages" chip explains the change.
   - **Shared helpers `src/lib/orders.js`**: `ORDER_STAGES`, `stageChipClass`, `nextStages`, order-field extractors (`orderCustomerName/Phone`, `orderVendorName/Email/Mobile`, `orderAmount`, `orderProductName`), and `exportOrdersToExcel()` using the newly-added `xlsx` npm package. Excel columns fixed to product spec: **User Name · User Mobile · Product Name · Product Amount · Order Stage · Vendor Name · Vendor Email · Vendor Mobile**. Filenames: `slangcart-vendor-{shop-slug}-orders-YYYY-MM-DD.xlsx` and `slangcart-admin-orders-YYYY-MM-DD.xlsx`.
