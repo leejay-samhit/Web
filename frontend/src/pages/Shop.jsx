@@ -5,7 +5,6 @@ import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import LocationBanner from "@/components/LocationBanner";
-import ShopBlock from "@/components/shop/ShopBlock";
 import { formatINR } from "@/lib/utils";
 import { Search, ShoppingBag, Plus, Check } from "lucide-react";
 import { useCart } from "@/context/CartContext";
@@ -14,28 +13,69 @@ import { useUserLocation } from "@/hooks/useUserLocation";
 import { log } from "@/lib/log";
 
 function ProductCard({ p, inCart, busy, onAdd }) {
+  const price = Number(p.price) || 0;
+  const mrp = Number(p.mrp || p.original_price || 0);
+  const hasDiscount = mrp && mrp > price;
+  const discountPct = hasDiscount ? Math.round(((mrp - price) / mrp) * 100) : 0;
+  const stock = p.stock != null ? Number(p.stock) : null;
+  const outOfStock = stock === 0;
+  const lowStock = stock != null && stock > 0 && stock <= 5;
   return (
-    <div className="sc-card overflow-hidden flex flex-col group" data-testid={`product-card-${p.id}`}>
-      <Link to={`/product/${p.id}`} className="aspect-square bg-[color:var(--sc-accent-light)] overflow-hidden">
+    <div className="sc-card overflow-hidden flex flex-col group hover:shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)] hover:-translate-y-0.5 transition-all duration-300" data-testid={`product-card-${p.id}`}>
+      {/* Hero image with badges */}
+      <Link to={`/product/${p.id}`} className="relative aspect-square bg-white overflow-hidden block">
         {p.image_url ? (
-          <img alt="" src={p.image_url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          <img alt="" src={p.image_url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         ) : (
-          <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]"><ShoppingBag size={28} /></div>
+          <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]/40 bg-[color:var(--sc-accent-light)]"><ShoppingBag size={40} /></div>
         )}
+        {/* Discount badge */}
+        {hasDiscount && (
+          <span className="absolute top-2 left-2 bg-emerald-600 text-white text-[10px] font-extrabold px-2 py-1 rounded-md shadow-sm">
+            {discountPct}% OFF
+          </span>
+        )}
+        {/* Stock status */}
+        {outOfStock ? (
+          <span className="absolute top-2 right-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-1 rounded-md">Sold out</span>
+        ) : lowStock ? (
+          <span className="absolute top-2 right-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-md">Only {stock} left</span>
+        ) : null}
       </Link>
+
+      {/* Body */}
       <div className="p-3 flex-1 flex flex-col">
-        <Link to={`/product/${p.id}`} className="text-sm font-semibold text-[color:var(--sc-ink)] line-clamp-2">{p.name}</Link>
-        {p.brand && <div className="text-[11px] text-[color:var(--sc-ink-muted)] mt-0.5">{p.brand}</div>}
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div className="font-extrabold text-[color:var(--sc-ink)]">{formatINR(p.price)}</div>
+        {p.brand && <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sc-primary)]/80">{p.brand}</div>}
+        <Link to={`/product/${p.id}`} className="mt-0.5 text-sm font-semibold text-[color:var(--sc-ink)] line-clamp-2 hover:text-[color:var(--sc-primary)]">
+          {p.name}
+        </Link>
+
+        {/* Price row */}
+        <div className="mt-2 flex items-baseline gap-1.5 flex-wrap">
+          <span className="text-lg font-extrabold text-[color:var(--sc-ink)] leading-none">{formatINR(price)}</span>
+          {hasDiscount && <span className="text-[11px] text-[color:var(--sc-ink-muted)] line-through">{formatINR(mrp)}</span>}
+        </div>
+
+        {/* Action row (fills the rest of the card) */}
+        <div className="mt-3 pt-2 border-t border-dashed border-[color:var(--sc-border)] flex items-center justify-between gap-2">
+          <span className="text-[10px] font-semibold text-[color:var(--sc-ink-muted)]">
+            {outOfStock ? "Notify me" : "Free delivery"}
+          </span>
           <button
             data-testid={`add-cart-${p.id}`}
             onClick={() => onAdd(p)}
-            disabled={busy || inCart}
-            className={`w-8 h-8 rounded-lg grid place-items-center transition ${inCart ? "bg-[color:var(--sc-success)] text-white" : "bg-[color:var(--sc-primary)] text-white hover:bg-[color:var(--sc-primary-600)]"}`}
-            title={inCart ? "In cart" : "Add to cart"}
+            disabled={busy || inCart || outOfStock}
+            className={
+              "inline-flex items-center gap-1 px-3 h-8 rounded-lg text-xs font-extrabold transition-all " +
+              (outOfStock
+                ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                : inCart
+                  ? "bg-[color:var(--sc-success)] text-white"
+                  : "bg-[color:var(--sc-primary)] text-white hover:bg-[color:var(--sc-primary-700)] hover:shadow-md")
+            }
+            title={inCart ? "In cart" : outOfStock ? "Out of stock" : "Add to cart"}
           >
-            {inCart ? <Check size={16} /> : <Plus size={16} />}
+            {inCart ? <><Check size={13} /> Added</> : <><Plus size={13} /> Add</>}
           </button>
         </div>
       </div>
@@ -61,7 +101,6 @@ export default function Shop() {
   const { location } = useUserLocation();
   const [products, setProducts] = useState([]);
   const [cats, setCats] = useState([]);
-  const [blocks, setBlocks] = useState([]);
   const [activeCat, setActiveCat] = useState(null); // entire category object
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -84,15 +123,15 @@ export default function Shop() {
     (async () => {
       setLoading(true);
       try {
-        const [p, c, b] = await Promise.allSettled([
+        // Only fetch products + categories — shop-layout is intentionally
+        // NOT consumed on web (see business rule 04-Jul-2026).
+        const [p, c] = await Promise.allSettled([
           api.get("/products", { params: { limit: 200, ...locParams } }),
           api.get("/shop-categories"),
-          api.get("/shop-layout", { params: { scope: "home", ...locParams } }),
         ]);
         if (!alive) return;
         if (p.status === "fulfilled") setProducts(Array.isArray(p.value.data) ? p.value.data : p.value.data?.items || []);
         if (c.status === "fulfilled") setCats(c.value.data?.items || []);
-        if (b.status === "fulfilled") setBlocks(b.value.data?.items || []);
       } catch (e) { log.error("Shop load failed", e); }
       finally { if (alive) setLoading(false); }
     })();
@@ -140,12 +179,9 @@ export default function Shop() {
           />
         </div>
 
-        {/* Shop layout blocks — only when not filtering */}
-        {!q && !activeCat && blocks.length > 0 && (
-          <div data-testid="shop-blocks">
-            {blocks.map((b) => <ShopBlock key={b.id} block={b} allProducts={visibleProducts} />)}
-          </div>
-        )}
+        {/* Shop layout blocks intentionally NOT rendered on web — the mobile
+            app and web have decoupled shop layouts per business rule
+            (04-Jul-2026). Web always shows the category-wise product grid. */}
 
         {/* Category chips */}
         {cats.length > 0 && (

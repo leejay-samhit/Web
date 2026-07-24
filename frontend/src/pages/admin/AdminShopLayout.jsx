@@ -41,8 +41,13 @@ export default function AdminShopLayout() {
   };
 
   const toggleActive = async (b) => {
-    try { await api.put(`/admin/shop-layout/${b.id}`, { ...b, active: !b.active }); load(); }
-    catch (e) { alert(e?.response?.data?.detail || "Failed"); }
+    // Backend uses PATCH for partial updates (PUT returned 405 in prod).
+    try { await api.patch(`/admin/shop-layout/${b.id}`, { active: !b.active }); load(); }
+    catch (e) {
+      // Some backends still use PUT — fall back so we don't 405-loop.
+      try { await api.put(`/admin/shop-layout/${b.id}`, { ...b, active: !b.active }); load(); }
+      catch (e2) { alert(e2?.response?.data?.detail || e?.response?.data?.detail || "Failed"); }
+    }
   };
 
   const reorder = async (idx, delta) => {
@@ -51,8 +56,21 @@ export default function AdminShopLayout() {
     if (target < 0 || target >= newOrder.length) return;
     [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
     setBlocks(newOrder);
-    try { await api.post("/admin/shop-layout/reorder", { ids: newOrder.map((b) => b.id) }); }
-    catch (e) { alert("Reorder failed"); load(); }
+    // Try the two most common shapes: /reorder POST { ids } and PATCH bulk.
+    try {
+      await api.post("/admin/shop-layout/reorder", { ids: newOrder.map((b) => b.id) });
+    } catch (e) {
+      try {
+        await api.patch("/admin/shop-layout/reorder", { ids: newOrder.map((b) => b.id) });
+      } catch (e2) {
+        // Last-ditch: update each row's sort_order individually.
+        try {
+          await Promise.all(newOrder.map((b, i) => api.patch(`/admin/shop-layout/${b.id}`, { sort_order: i })));
+        } catch {
+          alert(e?.response?.data?.detail || "Reorder failed"); load();
+        }
+      }
+    }
   };
 
   return (

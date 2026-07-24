@@ -88,6 +88,102 @@ The web computes order # client-side (per-vendor sequential 1, 2, 3… for vendo
 - `POST /api/vendor/substore-transfers/{id}/accept` — destination substore acknowledges receipt
 - `POST /api/vendor/substore-transfers/{id}/cancel` — initiator cancels
 
+Transfer record schema (client-side implementation is authoritative for now):
+```json
+{
+  "id": "uuid",
+  "transfer_order_id": "TRF-20260704-0001",
+  "created_at": "ISO8601",
+  "status": "pending|accepted|rejected|cancelled",
+  "from_email": "vendor1@example.com",
+  "to_email": "vendor2@example.com",
+  "product_name": "iPhone 15 Pro 256GB",
+  "sku": "SKU-001",
+  "serial_number": "SN123",
+  "imei": "3567...",
+  "qty": 1,
+  "unit_price": 129999,
+  "total_value": 129999,
+  "note": "Loan for demo"
+}
+```
+
+**Business logic**: on `accept`, decrement initiator's stock and increment destination's. Same-GSTIN transfers skip GST accounting; cross-vendor treated as inter-vendor sales.
+
+## 11. Shop Layout — bug fixes + Pincode targeting
+
+**Bugs reported in prod (04-Jul-2026):**
+
+| Item | Symptom | Backend action |
+| ---- | ------- | -------------- |
+| 3, 11 | `block_type must be one of [announcement_strip, background, banner_slider, brand_slider, category_circles, content_box, flash_sale, horizontal_slider, offer_cards, product_grid, section_header, text]` when saving certain block types | Confirm the block-type validator in the backend accepts all 12 keys the frontend sends (see `src/constants/shopBlocks.js`). If the frontend sends `"announcement"` instead of `"announcement_strip"` or `"free_text"` instead of `"text"`, backend should either accept the alias or the frontend needs to be corrected. **Please confirm the exact allowed list on both sides.** |
+| 12 | `Method Not Allowed` when clicking Edit on any block | Backend expects **PATCH** `/admin/shop-layout/{id}` for updates; web sent **PUT**. Web now tries PATCH first, falls back to PUT. Please ensure PATCH is enabled server-side. |
+| 13 | `Reorder failed` pop-up | Backend expects `POST /admin/shop-layout/reorder { ids: [...] }`. Web now falls back to individual PATCH per row. Confirm the reorder endpoint exists and returns 200. |
+| 4-10 | "Category slug" input is a blank text field | Web now fetches from `/shop-categories` (or `/products/categories` or `/categories`, in that fallback order). Please confirm one of these endpoints exists and returns `[{ id, name, slug }]`. |
+
+### Pincode-wise Shop Layout (item 14)
+
+**Goal**: each Shop Layout block can be assigned to one or more pincodes. Customers automatically receive the correct layout based on their delivery pincode. Admin edits reflect in real time.
+
+**Schema change** on the `shop_layout_block` document:
+```json
+{
+  "id": "...",
+  "block_type": "banner_slider",
+  "assigned_pincodes": ["600001", "600002", "560001"],   // NEW
+  "...": "..."
+}
+```
+- Empty / missing = block is shown to every pincode (default).
+- Non-empty = block is only served to matching pincodes.
+- Web CMS at `/admin/shop-layout` now sends `assigned_pincodes: string[]` (verified 6-digit strings).
+
+**API filter**:
+```http
+GET /api/shop-layout?scope=home&pincode=600001
+```
+Returns only blocks where `assigned_pincodes` is empty OR contains `600001`.
+
+**Real-time refresh** (already covered):
+- Admin PATCHes a block → cache invalidated.
+- On the mobile app, `pull-to-refresh` and `pincode change` re-fetch. Web calls the same endpoint on `LocationBanner` change.
+
+**Indexing**: `db.shop_layout_block.create_index([("assigned_pincodes", 1), ("active", 1), ("sort_order", 1)])`.
+
+**Reuse existing distributor-areas mapping** (per user request):
+- Distributor areas are managed at `/admin/distributors/{id}/areas` (`POST { pincode }` / `DELETE`).
+- When admin assigns a block to a distributor's PIN, the layout auto-filters. Consider a helper endpoint:
+  ```
+  POST /api/admin/shop-layout/{id}/assign-distributor-pincodes { distributor_id: "..." }
+  ```
+  that copies every PIN currently mapped to the distributor into `assigned_pincodes`.
+
+**Web is done** — pincode chips + backend spec shipped. Mobile app should mirror the field name.
+
+### Decoupling web from mobile shop layouts
+
+Per business rule (04-Jul-2026), the **web shop no longer consumes `/shop-layout`**. `Shop.jsx` renders only the category-wise product grid. `/admin/shop-layout` continues to manage the mobile-app layout. If you'd rather move to a `?platform=web|mobile` filter, we can add that later — currently we just skip the fetch on web entirely.
+
+## 12. Web `/shop` product-card upgrade (informational — done in frontend)
+
+Web `/shop` product cards were rebuilt to match the vendor dashboard "Hero" style:
+- Larger square image with hover-zoom (500 ms)
+- MRP strike-through + discount badge (top-left)
+- Stock badge: "Sold out" (red) / "Only N left" (amber) when `stock <= 5`
+- Brand pill, 2-line product name, larger price, per-line delivery note
+- "Add" button reads "Added" (green tick) when already in cart
+
+No backend change needed for the visual overhaul, but for the stock badge to work, `GET /products` must return `stock` on each row (already implemented in most environments).
+
+**New endpoints** (currently stored client-side in `localStorage.slangcart_vendor_substore_transfers`):
+- `GET /api/vendor/me/substores`
+- `POST /api/vendor/me/substores` — add
+- `DELETE /api/vendor/me/substores/{id}`
+- `GET /api/vendor/me/substore-transfers?q=&status=`
+- `POST /api/vendor/me/substore-transfers` — create
+- `POST /api/vendor/substore-transfers/{id}/accept` — destination substore acknowledges receipt
+- `POST /api/vendor/substore-transfers/{id}/cancel` — initiator cancels
+
 Transfer record schema (already implemented client-side; mirror on backend):
 ```json
 {

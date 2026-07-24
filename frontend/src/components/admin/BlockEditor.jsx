@@ -26,18 +26,41 @@ export default function BlockEditor({ block, onClose, onSaved }) {
     product_ids: [], data_source: "manual", product_count: 10, layout_style: "grid",
     category_filter: "", items: [], flash_sale_ends_at: "", products_per_row: 2,
     show_view_all: false, view_all_link: "", scope: "home", scope_category: "",
+    assigned_pincodes: [], // NEW — Pincode-wise layout targeting (see BACKLOG_BACKEND_SPEC §11)
     ...(block || {}),
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [productPick, setProductPick] = useState("");
+  const [pincodeInput, setPincodeInput] = useState("");
 
   useEffect(() => {
+    // Products
     api.get("/products", { params: { limit: 200 } }).then((r) => {
       setProducts(Array.isArray(r.data) ? r.data : r.data?.items || []);
     }).catch((e) => log.error("BlockEditor products fetch failed", e));
+    // Shop categories — feed the Category slug + Category filter dropdowns.
+    // Backend endpoint name varies across environments; try both.
+    (async () => {
+      for (const path of ["/shop-categories", "/products/categories", "/categories"]) {
+        try {
+          const { data } = await api.get(path);
+          const list = Array.isArray(data) ? data : (data?.items || data?.categories || []);
+          if (list.length) { setCategories(list); break; }
+        } catch { /* try next */ }
+      }
+    })();
   }, []);
+
+  // Products filtered to the currently selected category filter (so the manual
+  // picker shows only items that match the block's scope).
+  const scopedProducts = useMemo(() => {
+    const slug = form.category_filter || form.scope_category;
+    if (!slug) return products;
+    return products.filter((p) => (p.category === slug) || (p.category_slug === slug) || (p.category_id === slug));
+  }, [products, form.category_filter, form.scope_category]);
 
   const cfg = BLOCK_TYPE_BY_KEY[type] || BLOCK_TYPES[0];
   const needs = cfg.needs;
@@ -46,8 +69,8 @@ export default function BlockEditor({ block, onClose, onSaved }) {
   // keystroke in other fields. Only re-runs when products or already-picked
   // IDs change.
   const pickableProducts = useMemo(
-    () => products.filter((p) => !form.product_ids?.includes(p.id)).slice(0, 100),
-    [products, form.product_ids],
+    () => scopedProducts.filter((p) => !form.product_ids?.includes(p.id)).slice(0, 100),
+    [scopedProducts, form.product_ids],
   );
 
   const set = (k, v) => setForm((s) => ({ ...s, [k]: v }));
@@ -86,15 +109,40 @@ export default function BlockEditor({ block, onClose, onSaved }) {
     setBusy(true); setErr("");
     try {
       const payload = { ...form, block_type: type };
-      // Only send needed fields to keep payload lean; but extras are harmless.
-      if (isEdit) await api.put(`/admin/shop-layout/${block.id}`, payload);
-      else await api.post("/admin/shop-layout", payload);
+      // Edit uses PATCH (backend returned 405 for PUT in prod). Fall back to
+      // PUT for older backends so we don't break parity.
+      if (isEdit) {
+        try {
+          await api.patch(`/admin/shop-layout/${block.id}`, payload);
+        } catch (patchErr) {
+          if (patchErr?.response?.status === 405) {
+            await api.put(`/admin/shop-layout/${block.id}`, payload);
+          } else {
+            throw patchErr;
+          }
+        }
+      } else {
+        await api.post("/admin/shop-layout", payload);
+      }
       onSaved?.();
       onClose?.();
     } catch (e) {
       setErr(e?.response?.data?.detail || "Save failed");
     } finally { setBusy(false); }
   }, [form, type, isEdit, block?.id, onSaved, onClose]);
+
+  const addPincode = () => {
+    const p = pincodeInput.trim();
+    if (!/^\d{6}$/.test(p)) { setErr("Pincode must be 6 digits."); return; }
+    setErr("");
+    setForm((s) => {
+      const list = Array.isArray(s.assigned_pincodes) ? s.assigned_pincodes : [];
+      if (list.includes(p)) return s;
+      return { ...s, assigned_pincodes: [...list, p] };
+    });
+    setPincodeInput("");
+  };
+  const removePincode = (p) => setForm((s) => ({ ...s, assigned_pincodes: (s.assigned_pincodes || []).filter((x) => x !== p) }));
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4" data-testid="sl-editor">
@@ -125,7 +173,16 @@ export default function BlockEditor({ block, onClose, onSaved }) {
             {form.scope === "category" && (
               <div>
                 <label className="text-[11px] font-bold text-[color:var(--sc-ink-muted)] uppercase">Category slug</label>
-                <input className="sc-input mt-1" data-testid="sl-scope-cat" value={form.scope_category} onChange={(e) => set("scope_category", e.target.value)} />
+                {categories.length > 0 ? (
+                  <select className="sc-input mt-1" data-testid="sl-scope-cat" value={form.scope_category} onChange={(e) => set("scope_category", e.target.value)}>
+                    <option value="">All shop categories</option>
+                    {categories.map((c) => (
+                      <option key={c.id || c.slug || c.name} value={c.slug || c.id || c.name}>{c.name || c.slug}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input className="sc-input mt-1" data-testid="sl-scope-cat" value={form.scope_category} onChange={(e) => set("scope_category", e.target.value)} placeholder="e.g. mobiles" />
+                )}
               </div>
             )}
           </div>
@@ -153,7 +210,7 @@ export default function BlockEditor({ block, onClose, onSaved }) {
             <div>
               <label className="text-[11px] font-bold text-[color:var(--sc-ink-muted)] uppercase">Image</label>
               <input type="file" accept="image/*" data-testid="sl-image" onChange={onImg} className="sc-input mt-1" />
-              {form.image_data_url && <img alt="" src={form.image_data_url} className="mt-2 h-32 rounded-lg border border-[color:var(--sc-border)] object-contain" />}
+              {form.image_data_url && <img alt="" src={form.image_data_url} className="mt-2 h-40 w-full rounded-lg border border-[color:var(--sc-border)] object-cover" />}
             </div>
           )}
 
@@ -192,7 +249,16 @@ export default function BlockEditor({ block, onClose, onSaved }) {
                 <input className="sc-input" type="number" data-testid="sl-product-count" placeholder="Auto count" value={form.product_count} onChange={(e) => set("product_count", Number(e.target.value))} />
                 {needs.layout && <select className="sc-input" data-testid="sl-layout-style" value={form.layout_style} onChange={(e) => set("layout_style", e.target.value)}>{LAYOUT_STYLES.map((l) => <option key={l} value={l}>{l}</option>)}</select>}
                 <input className="sc-input" type="number" data-testid="sl-ppr" placeholder="Products per row" value={form.products_per_row} onChange={(e) => set("products_per_row", Number(e.target.value))} />
-                <input className="sc-input col-span-2" placeholder="Category filter (slug)" value={form.category_filter} onChange={(e) => set("category_filter", e.target.value)} />
+                {categories.length > 0 ? (
+                  <select className="sc-input col-span-2" data-testid="sl-cat-filter" value={form.category_filter} onChange={(e) => set("category_filter", e.target.value)}>
+                    <option value="">Any category (no filter)</option>
+                    {categories.map((c) => (
+                      <option key={c.id || c.slug || c.name} value={c.slug || c.id || c.name}>{c.name || c.slug}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input className="sc-input col-span-2" placeholder="Category filter (slug)" value={form.category_filter} onChange={(e) => set("category_filter", e.target.value)} />
+                )}
               </div>
               {form.data_source === "manual" && (
                 <div>
@@ -256,6 +322,38 @@ export default function BlockEditor({ block, onClose, onSaved }) {
             <select className="sc-input" value={form.size} onChange={(e) => set("size", e.target.value)}>{SIZES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
             <input className="sc-input" type="number" placeholder="Sort order" value={form.sort_order} onChange={(e) => set("sort_order", Number(e.target.value))} />
             <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" data-testid="sl-active" checked={!!form.active} onChange={(e) => set("active", e.target.checked)} /> Active</label>
+          </div>
+
+          {/* Pincode targeting (Item 14) — one or more delivery PINs this block should show for */}
+          <div className="border border-[color:var(--sc-border)] rounded-xl p-3" data-testid="sl-pincodes">
+            <div className="text-[11px] font-bold text-[color:var(--sc-ink-muted)] uppercase mb-1">Assigned pincodes</div>
+            <div className="text-[11px] text-[color:var(--sc-ink-muted)] mb-2">
+              Leave empty to show for every PIN. Add specific PINs to make this block target a pincode-restricted layout. See <code>BACKLOG_BACKEND_SPEC.md §11</code>.
+            </div>
+            <div className="flex gap-2 mb-2">
+              <input
+                className="sc-input flex-1"
+                data-testid="sl-pincode-input"
+                placeholder="6-digit PIN, e.g. 600001"
+                inputMode="numeric"
+                maxLength={6}
+                value={pincodeInput}
+                onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPincode(); } }}
+              />
+              <button type="button" onClick={addPincode} className="sc-btn-outline text-sm" data-testid="sl-pincode-add"><Plus size={13} /> Add</button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(form.assigned_pincodes || []).map((p) => (
+                <span key={p} className="sc-chip text-[10px] inline-flex items-center gap-1" data-testid={`sl-pincode-${p}`}>
+                  {p}
+                  <button onClick={() => removePincode(p)} className="text-[color:var(--sc-error)]"><X size={10} /></button>
+                </span>
+              ))}
+              {(!form.assigned_pincodes || form.assigned_pincodes.length === 0) && (
+                <span className="text-[11px] text-[color:var(--sc-ink-muted)] italic">Shown to all pincodes (default).</span>
+              )}
+            </div>
           </div>
 
           {err && <div data-testid="sl-err" className="text-sm font-semibold text-[color:var(--sc-error)]">{err}</div>}
