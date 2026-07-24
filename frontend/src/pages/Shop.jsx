@@ -20,6 +20,12 @@ function ProductCard({ p, inCart, busy, onAdd }) {
   const stock = p.stock != null ? Number(p.stock) : null;
   const outOfStock = stock === 0;
   const lowStock = stock != null && stock > 0 && stock <= 5;
+
+  // Backend returns `distance_km` + `deliverable` when the shop grid is
+  // filtered by the customer's location (see BACKLOG_BACKEND_SPEC §13).
+  // Chips render only when the backend provides those fields.
+  const distanceKm = p.distance_km != null ? Number(p.distance_km) : null;
+  const deliverable = p.deliverable ?? (p.delivery_available !== false && distanceKm !== null);
   return (
     <div className="sc-card overflow-hidden flex flex-col group hover:shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)] hover:-translate-y-0.5 transition-all duration-300" data-testid={`product-card-${p.id}`}>
       {/* Hero image with badges */}
@@ -59,7 +65,13 @@ function ProductCard({ p, inCart, busy, onAdd }) {
         {/* Action row (fills the rest of the card) */}
         <div className="mt-3 pt-2 border-t border-dashed border-[color:var(--sc-border)] flex items-center justify-between gap-2">
           <span className="text-[10px] font-semibold text-[color:var(--sc-ink-muted)]">
-            {outOfStock ? "Notify me" : "Free delivery"}
+            {distanceKm != null ? (
+              deliverable ? (
+                <span className="text-emerald-700">🛵 {distanceKm.toFixed(1)} km · Deliverable</span>
+              ) : (
+                <span className="text-rose-700">🚫 Not deliverable</span>
+              )
+            ) : outOfStock ? "Notify me" : "Free delivery"}
           </span>
           <button
             data-testid={`add-cart-${p.id}`}

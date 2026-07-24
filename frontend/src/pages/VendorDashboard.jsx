@@ -8,6 +8,7 @@ import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Tr
 import { log } from "@/lib/log";
 import VendorNav from "@/components/vendor/VendorNav";
 import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
+import LocationBlock from "@/components/LocationBlock";
 import { searchMaster, getMaster, reportMasterHit } from "@/lib/productMaster";
 import {
   parseLines, linesFromArray, parseExtraAttrs, extraAttrsToText,
@@ -92,6 +93,12 @@ export default function VendorDashboard() {
     warranty_summary: "", delivery_summary: "",
     whats_in_box: "",     // newline-separated
     spec_tabs: "",        // "Tab | k:v; k:v" per line
+    // Location + delivery (see LocationBlock component + BACKLOG_BACKEND_SPEC §13)
+    location: {
+      pincode: "", state: "", district: "", city: "", address: "",
+      latitude: "", longitude: "",
+      delivery_radius_km: 5, delivery_scope: "km", delivery_available: true,
+    },
   };
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -379,6 +386,18 @@ export default function VendorDashboard() {
         delivery_summary: toStyled(form.delivery_summary),
         whats_in_box: parseLines(form.whats_in_box).map((name) => ({ name, image_data_url: "" })),
         spec_tabs: parseSpecTabs(form.spec_tabs),
+        // Flatten location fields so backend can persist them directly on
+        // the product doc (see BACKLOG_BACKEND_SPEC §13).
+        location_pincode: form.location?.pincode || null,
+        location_state: form.location?.state || null,
+        location_district: form.location?.district || null,
+        location_city: form.location?.city || null,
+        location_address: form.location?.address || null,
+        location_latitude: form.location?.latitude ? Number(form.location.latitude) : null,
+        location_longitude: form.location?.longitude ? Number(form.location.longitude) : null,
+        delivery_radius_km: form.location?.delivery_radius_km ?? null,
+        delivery_scope: form.location?.delivery_scope || "km",
+        delivery_available: form.location?.delivery_available !== false,
       };
       // Drop empty strings so backend receives explicit nulls / omits them.
       [
@@ -743,6 +762,18 @@ export default function VendorDashboard() {
                     placeholder="What's in the box (one item per line)"
                     value={form.whats_in_box}
                     onChange={(e) => setForm({ ...form, whats_in_box: e.target.value })}
+                  />
+                </div>
+              </details>
+
+              {/* ---- Section 4.5.5: Location & Delivery ---- */}
+              <details open>
+                <summary className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] cursor-pointer py-1">Location &amp; Delivery *</summary>
+                <div className="mt-2">
+                  <LocationBlock
+                    value={form.location}
+                    onChange={(loc) => setForm({ ...form, location: loc })}
+                    testIdRoot="vd-form-loc"
                   />
                 </div>
               </details>

@@ -9,7 +9,7 @@ import api from "@/lib/api";
 import { log } from "@/lib/log";
 import {
   CreditCard, Loader2, ShieldCheck, AlertCircle, ShoppingBag,
-  Banknote, User, Phone, MapPin, Home, Package, Tag,
+  Banknote, User, Phone, MapPin, Home, Package, Tag, Locate,
 } from "lucide-react";
 
 /* -------------------------------------------------------------------------- */
@@ -107,17 +107,68 @@ function ItemsPanel({ cart }) {
 /* -------------------------------------------------------------------------- */
 function AddressForm({ addr, onChange, error }) {
   const set = (k) => (e) => onChange({ ...addr, [k]: e.target.value });
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [gpsErr, setGpsErr] = useState("");
+
+  const useMyLocation = () => {
+    setGpsErr("");
+    if (!navigator.geolocation) { setGpsErr("Geolocation not supported."); return; }
+    setGpsBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const patch = { ...addr, latitude, longitude };
+          try {
+            const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&addressdetails=1`;
+            const res = await fetch(url, { headers: { "Accept-Language": "en" } });
+            if (res.ok) {
+              const data = await res.json();
+              const a = data.address || {};
+              patch.pincode = a.postcode || patch.pincode;
+              patch.state = a.state || patch.state;
+              patch.city = a.city || a.town || a.village || a.suburb || patch.city;
+              // District — stored for backend eligibility but not surfaced in form
+              patch.district = a.state_district || a.county || a.district || "";
+              patch.line1 = patch.line1 || data.display_name?.split(",").slice(0, 2).join(", ") || "";
+            }
+          } catch { /* offline / rate-limited — keep coords only */ }
+          onChange(patch);
+        } finally { setGpsBusy(false); }
+      },
+      (e) => {
+        setGpsBusy(false);
+        setGpsErr(e.code === 1 ? "Location permission denied." : "Could not detect location.");
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+    );
+  };
   return (
     <div className="sc-card p-5 space-y-4" data-testid="checkout-address-card">
       <div className="flex items-center gap-2">
         <div className="w-9 h-9 rounded-xl bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)]">
           <MapPin size={16} />
         </div>
-        <div>
+        <div className="flex-1">
           <div className="font-extrabold text-[color:var(--sc-ink)]">Delivery address</div>
           <div className="text-xs text-[color:var(--sc-ink-muted)]">All fields marked * are required by our courier</div>
         </div>
+        <button
+          type="button"
+          onClick={useMyLocation}
+          disabled={gpsBusy}
+          data-testid="addr-gps"
+          className="sc-btn-outline text-xs inline-flex items-center gap-1.5 disabled:opacity-60"
+        >
+          {gpsBusy ? <Loader2 className="animate-spin" size={12} /> : <Locate size={12} />}
+          {gpsBusy ? "Detecting…" : "Use my current location"}
+        </button>
       </div>
+      {gpsErr && (
+        <div className="text-[11px] text-[color:var(--sc-error)] font-semibold bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5 flex items-start gap-1.5">
+          <AlertCircle size={12} className="mt-0.5" /> {gpsErr}
+        </div>
+      )}
       <div className="grid sm:grid-cols-2 gap-3">
         <label className="block sm:col-span-2">
           <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)] flex items-center gap-1"><User size={10} /> Full name *</span>
@@ -289,6 +340,9 @@ function pickInitialAddress(user) {
     city: a.city || "",
     state: a.state || "",
     pincode: a.pincode || a.pin || "",
+    district: a.district || "",
+    latitude: a.latitude ?? null,
+    longitude: a.longitude ?? null,
   };
 }
 
