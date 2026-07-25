@@ -4,6 +4,7 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import { formatINR } from "@/lib/utils";
 import { log } from "@/lib/log";
+import api from "@/lib/api";
 import {
   Plus, Repeat, Download, CheckCircle2, XCircle, Search, ArrowRight,
   Loader2, Package, Users,
@@ -22,19 +23,30 @@ import {
 /* -------------------------------------------------------------------------- */
 export default function VendorSubstore() {
   const { user } = useAuth();
-  const uid = user?.id;
   const shopName = user?.vendor?.shop_name || user?.shop_name || "My shop";
   const myEmail = (user?.email || "").toLowerCase();
+  // Use `user` (email-keyed) rather than `uid` for cross-account visibility.
+  const identity = user;
 
-  const [substores, setSubstores] = useState(() => loadSubstores(uid));
-  const [transfers, setTransfers] = useState(() => loadTransfers(uid));
+  const [substores, setSubstores] = useState(() => loadSubstores(identity));
+  const [transfers, setTransfers] = useState(() => loadTransfers(identity));
+  const [products, setProducts] = useState([]);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { setSubstores(loadSubstores(uid)); setTransfers(loadTransfers(uid)); }, [uid]);
+  useEffect(() => {
+    setSubstores(loadSubstores(identity));
+    setTransfers(loadTransfers(identity));
+    // Fetch this vendor's products so the transfer form can pick one instead
+    // of forcing free-text entry (fix for reported bug).
+    api.get("/vendor/me/products", { params: { limit: 200 } })
+      .then((r) => setProducts(Array.isArray(r.data) ? r.data : r.data?.items || []))
+      .catch((e) => log.info?.("VendorSubstore products fetch failed", e?.response?.status));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myEmail]);
 
-  const refresh = useCallback(() => { setTransfers(loadTransfers(uid)); }, [uid]);
+  const refresh = useCallback(() => { setTransfers(loadTransfers(identity)); }, [identity]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -53,7 +65,7 @@ export default function VendorSubstore() {
   const submit = (payload) => {
     setBusy(true);
     try {
-      const rec = createTransfer(uid, {
+      const rec = createTransfer(identity, {
         ...payload,
         from_email: myEmail,
         from_name: shopName,
@@ -162,7 +174,7 @@ export default function VendorSubstore() {
                       <div className="inline-flex gap-1.5">
                         <button
                           data-testid={`vst-accept-${t.id}`}
-                          onClick={() => { acceptTransfer(uid, t.id, myEmail); refresh(); }}
+                          onClick={() => { try { const list = acceptTransfer(identity, t.id); setTransfers(list); } catch (e) { alert(e.message); } }}
                           title="Accept as destination substore"
                           className="text-emerald-600 hover:text-emerald-700"
                         >
@@ -170,7 +182,7 @@ export default function VendorSubstore() {
                         </button>
                         <button
                           data-testid={`vst-cancel-${t.id}`}
-                          onClick={() => { if (window.confirm("Cancel this transfer?")) { cancelTransfer(uid, t.id); refresh(); } }}
+                          onClick={() => { if (window.confirm("Cancel this transfer?")) { const list = cancelTransfer(identity, t.id); setTransfers(list); } }}
                           title="Cancel"
                           className="text-rose-600 hover:text-rose-700"
                         >
@@ -189,6 +201,7 @@ export default function VendorSubstore() {
       {showForm && (
         <TransferForm
           substores={substores}
+          products={products}
           busy={busy}
           onSubmit={submit}
           onClose={() => setShowForm(false)}
@@ -225,14 +238,30 @@ function StatusChip({ status }) {
 /* -------------------------------------------------------------------------- */
 /*  Transfer form modal                                                        */
 /* -------------------------------------------------------------------------- */
-function TransferForm({ substores, busy, onSubmit, onClose }) {
+function TransferForm({ substores, products = [], busy, onSubmit, onClose }) {
   const [form, setForm] = useState({
     to_substore_id: substores[0]?.id || "",
-    product_name: "", sku: "", serial_number: "", imei: "",
+    product_id: "",
+    product_name: "", sku: "", serial_number: "", imei: "", image_url: "",
     qty: 1, unit_price: 0, note: "",
   });
   const chosen = substores.find((s) => s.id === form.to_substore_id);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === "number" ? Number(e.target.value || 0) : e.target.value }));
+
+  const pickProduct = (e) => {
+    const pid = e.target.value;
+    if (!pid) { setForm((f) => ({ ...f, product_id: "", product_name: "", sku: "", image_url: "" })); return; }
+    const p = products.find((x) => (x.id || x._id) === pid);
+    if (!p) return;
+    setForm((f) => ({
+      ...f,
+      product_id: pid,
+      product_name: p.name || "",
+      sku: p.sku || "",
+      image_url: p.image_url || p.image || (Array.isArray(p.images) ? p.images[0] : "") || "",
+      unit_price: f.unit_price || Number(p.price) || 0,
+    }));
+  };
 
   const submit = (e) => {
     e.preventDefault();
@@ -263,6 +292,25 @@ function TransferForm({ substores, busy, onSubmit, onClose }) {
         </label>
 
         <div className="grid sm:grid-cols-2 gap-2">
+          {products.length > 0 && (
+            <label className="block sm:col-span-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Pick from my shop products</span>
+              <select
+                data-testid="vst-form-product-picker"
+                className="sc-input mt-1"
+                value={form.product_id}
+                onChange={pickProduct}
+              >
+                <option value="">— Choose a product from my shop —</option>
+                {products.map((p) => (
+                  <option key={p.id || p._id} value={p.id || p._id}>
+                    {p.name}{p.sku ? ` · ${p.sku}` : ""} · {formatINR(p.price)}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[10px] text-[color:var(--sc-ink-muted)] italic">Selecting a product auto-fills name, SKU, price and image.</span>
+            </label>
+          )}
           <label className="block sm:col-span-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Product name *</span>
             <input data-testid="vst-form-product" required className="sc-input mt-1" value={form.product_name} onChange={set("product_name")} placeholder="e.g. iPhone 15 Pro 256GB" />

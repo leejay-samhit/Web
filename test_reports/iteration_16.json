@@ -1,0 +1,41 @@
+{
+  "summary": "Frontend E2E for vendor→substore transfer flow (client-side / localStorage). Same-browser session-swap between two accounts. 8/10 review points PASS. Product picker code works correctly (verified with support@slangcart.com which has 1 product). Shared LS ledger works cross-account within the same browser (A→creates, B→sees & accepts, A→sees Accepted). CSV export correct. Two issues found: (a) received-product does NOT surface in the recipient's My Shop when recipient's `/vendor` route resolves to the Admin dashboard instead of VendorDashboard (role-based routing); (b) HTML hydration warning caused by `formatINR()` returning a <span> nested inside <option> in the product picker.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "VendorSubstore.jsx / TransferForm product picker",
+        "issue": "Hydration warning in console: '<span> cannot be a child of <option>'. The <option> content includes `{formatINR(p.price)}` and formatINR returns a React element (span). Options must be plain text. Replace with template literal (e.g. `₹${Number(p.price).toLocaleString('en-IN')}`) inside the <option>.",
+        "selector": "[data-testid=\"vst-form-product-picker\"] > option",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Recipient sees accepted transferred product in My Shop → Products",
+        "issue": "For support@slangcart.com (role=admin), navigating to /vendor renders the Admin UI (Admin · Products) instead of VendorDashboard. Therefore VendorDashboard.loadAll()'s merge of loadReceivedProducts(user) is never executed and the transferred product does not appear in the recipient's product list — even though LS_RECEIVED:<email> IS correctly populated (verified in localStorage). This means the shipped fix only works when the receiving vendor's /vendor route actually mounts VendorDashboard. Any admin-role receiver silently misses the surfaced product.",
+        "affected_selectors": ["/vendor route", "VendorDashboard Products tab"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_16.json"],
+  "action_items": [
+    "Fix <option> hydration warning: don't call formatINR() (returns <span>) inside <option>; use a plain string like `₹${Number(p.price).toLocaleString('en-IN')}`.",
+    "Decide the UX for admin-role receivers: either (a) show received substore products inside the Admin Products view, or (b) render VendorDashboard even for admin users when they have received substore transfers, or (c) update BACKLOG_BACKEND_SPEC §10 so the backend surfaces the received rows in whichever product listing endpoint the admin sees.",
+    "Note in docs / release notes: the demo account brightkittu@gmail.com has 0 products from /api/vendor/me/products, so the picker will not appear for that account. For picker verification use support@slangcart.com (has Apple iPhone 17)."
+  ],
+  "critical_code_review_comments": [
+    "vendorSubstore.js `addReceivedProduct` sets `accepted_at: transfer.accepted_at` but is called BEFORE the transfer object is mutated with accepted_at (in acceptTransfer the mutated `next` list is written to LS, but the local `t` passed into addReceivedProduct still has accepted_at=null). Confirmed empirically: LS_RECEIVED shows `\"accepted_at\":null` even though the ledger row is 'accepted'. Trivial fix — pass the updated record or set accepted_at inline.",
+    "Product picker <option> renders JSX from formatINR (span) — causes React hydration warnings. Use pure strings inside <option>.",
+    "Route guard on /vendor: admin users are redirected to the Admin dashboard, which prevents the client-side substore-transfer merge from executing. Consider surfacing received transfers in a shared component or in the admin products listing."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only per request)", "frontend": "80% (8/10 review points)"},
+  "test_credentials": "Vendor A: support@slangcart.com / 3)Ywxtic (has 1 product — Apple iPhone 17). Vendor B: brightkittu@gmail.com / Just@4me (0 products). Note: original request had these roles swapped; brightkittu returns [] from /api/vendor/me/products so the product picker would never render for that account.",
+  "seed_data_creation": "Added substore 'Slangcart HQ / support@slangcart.com' under Vendor A brightkittu, and substore 'Kiran Shop / brightkittu@gmail.com' under Vendor A support@slangcart.com. Created 1 transfer TRF-20260725-0001 (₹100, qty 1, product 'Test Transfer Product'), later accepted by support@slangcart.com. All state in localStorage only.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Verified points: (1) substore add row appears ✓, (2) /vendor/substore page renders 4 KPI + search + CSV + New transfer ✓, (3) product picker DOM (test-id vst-form-product-picker) renders when /api/vendor/me/products returns items — verified with support@slangcart.com; picking a product auto-fills name/price (SKU/image empty when product lacks those fields) ✓, (4) creating a transfer persists to localStorage key 'slangcart_substore_ledger_global' ✓, (5) cross-account visibility in same browser ✓ (Vendor B sees transfer created by Vendor A), (6) accept flow flips status to Accepted ✓, (7) Vendor A sees status 'Accepted' after session swap ✓, (8) CSV downloads with correct filename slangcart-vendor-<slug>-transfers-YYYY-MM-DD.csv and contains accepted row ✓. FAILING points: (a) recipient admin's /vendor page renders Admin UI, not VendorDashboard, so received product isn't visible in a product list even though LS_RECEIVED IS populated correctly, (b) console hydration warning from <span> inside <option> in the product picker. The original test account brightkittu (role=user) had zero products so the picker did not render for that account — this is a data condition, not a code bug.",
+  "rca of the issue": "Recipient-side surface bug: /vendor route is protected/branching by role; admin users get AdminDashboard, so VendorDashboard.jsx never mounts and its loadReceivedProducts(user) merge never runs. Product picker hydration warning: <option> children contain a React element (formatINR returns a <span>), but HTML spec requires option children to be text-only; React logs a hydration/DOM warning."
+}

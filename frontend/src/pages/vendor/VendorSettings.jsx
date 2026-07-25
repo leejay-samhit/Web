@@ -181,7 +181,7 @@ export default function VendorSettings() {
       </div>
 
       {/* ============================ Substores directory ============================ */}
-      <SubstoresPanel uid={uid} />
+      <SubstoresPanel user={user} />
     </Layout>
   );
 }
@@ -189,18 +189,18 @@ export default function VendorSettings() {
 /* -------------------------------------------------------------------------- */
 /*  Substores directory — email list used by /vendor/substore transfer flow    */
 /* -------------------------------------------------------------------------- */
-function SubstoresPanel({ uid }) {
-  const [list, setList] = useState(() => loadSubstores(uid));
+function SubstoresPanel({ user }) {
+  const [list, setList] = useState(() => loadSubstores(user));
   const [form, setForm] = useState({ email: "", name: "", gstin: "", phone: "", note: "" });
   const [err, setErr] = useState("");
-  useEffect(() => { setList(loadSubstores(uid)); }, [uid]);
+  useEffect(() => { setList(loadSubstores(user)); }, [user]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const add = (e) => {
     e.preventDefault();
     setErr("");
     try {
-      const next = addSubstore(uid, form);
+      const next = addSubstore(user, form);
       setList(next);
       setForm({ email: "", name: "", gstin: "", phone: "", note: "" });
     } catch (er) {
@@ -209,7 +209,7 @@ function SubstoresPanel({ uid }) {
   };
   const remove = (id) => {
     if (!window.confirm("Remove this substore? Existing transfers stay in the ledger.")) return;
-    setList(removeSubstore(uid, id));
+    setList(removeSubstore(user, id));
   };
 
   return (

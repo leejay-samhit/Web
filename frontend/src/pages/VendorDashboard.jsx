@@ -6,9 +6,11 @@ import EmptyState from "@/components/EmptyState";
 import { formatINR, formatDateTime } from "@/lib/utils";
 import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2, Search, Sparkles, Check, Info, Strikethrough } from "lucide-react";
 import { log } from "@/lib/log";
+import { useAuth } from "@/context/AuthContext";
 import VendorNav from "@/components/vendor/VendorNav";
 import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
 import LocationBlock from "@/components/LocationBlock";
+import { loadReceivedProducts } from "@/lib/vendorSubstore";
 import { searchMaster, getMaster, reportMasterHit } from "@/lib/productMaster";
 import {
   parseLines, linesFromArray, parseExtraAttrs, extraAttrsToText,
@@ -51,6 +53,7 @@ function Stats({ stats }) {
 }
 
 export default function VendorDashboard() {
+  const { user } = useAuth();
   const [tab, setTab] = useState("products");
   const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
@@ -161,7 +164,16 @@ export default function VendorDashboard() {
         api.get("/vendor/me/questions"),
       ]);
       if (s.status === "fulfilled") setStats(s.value.data);
-      if (p.status === "fulfilled") setProducts(p.value.data?.items || p.value.data || []);
+      if (p.status === "fulfilled") {
+        // Merge in accepted substore transfers so the recipient sees the
+        // transferred products in their My Shop list (see vendorSubstore.js).
+        const backendProducts = p.value.data?.items || p.value.data || [];
+        const received = loadReceivedProducts(user).map((r) => ({
+          ...r,
+          is_from_substore: true,
+        }));
+        setProducts([...received, ...backendProducts]);
+      }
       if (sa.status === "fulfilled") setSales(sa.value.data?.items || sa.value.data || []);
       if (q.status === "fulfilled") setQuestions(q.value.data?.items || q.value.data || []);
     } catch (error) {
@@ -169,7 +181,7 @@ export default function VendorDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
