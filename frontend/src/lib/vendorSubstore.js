@@ -148,13 +148,12 @@ export function acceptTransfer(vendor, id) {
   const t = all.find((x) => x.id === id);
   if (!t) throw new Error("Transfer not found.");
   if (t.to_email !== me) throw new Error("Only the destination substore can accept this transfer.");
-  const next = all.map((x) => x.id === id
-    ? { ...x, status: "accepted", accepted_at: new Date().toISOString(), accepted_by: me }
-    : x);
+  const updated = { ...t, status: "accepted", accepted_at: new Date().toISOString(), accepted_by: me };
+  const next = all.map((x) => (x.id === id ? updated : x));
   saveAllTransfers(next);
-  // Push the transferred product into the recipient's "received" cache so
-  // VendorDashboard can surface it under Products.
-  addReceivedProduct(me, t);
+  // Push the transferred product into the recipient's "received" cache. Pass
+  // the UPDATED record so accepted_at is populated (fix from iter-16 review).
+  addReceivedProduct(me, updated);
   return next.filter((x) => x.from_email === me || x.to_email === me);
 }
 

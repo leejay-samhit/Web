@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import {
   loadSubstores, loadTransfers, createTransfer, acceptTransfer, cancelTransfer,
-  transferSummary, downloadTransfersCsv,
+  transferSummary, downloadTransfersCsv, loadReceivedProducts,
 } from "@/lib/vendorSubstore";
 
 /* -------------------------------------------------------------------------- */
@@ -30,6 +30,7 @@ export default function VendorSubstore() {
 
   const [substores, setSubstores] = useState(() => loadSubstores(identity));
   const [transfers, setTransfers] = useState(() => loadTransfers(identity));
+  const [received, setReceived] = useState(() => loadReceivedProducts(identity));
   const [products, setProducts] = useState([]);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -46,7 +47,10 @@ export default function VendorSubstore() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myEmail]);
 
-  const refresh = useCallback(() => { setTransfers(loadTransfers(identity)); }, [identity]);
+  const refresh = useCallback(() => {
+    setTransfers(loadTransfers(identity));
+    setReceived(loadReceivedProducts(identity));
+  }, [identity]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -91,6 +95,34 @@ export default function VendorSubstore() {
         <Kpi label="Accepted"  value={summary.accepted}  tone="green" />
         <Kpi label="Total value" value={formatINR(summary.total_value)} tone="primary" />
       </div>
+
+      {/* Received products (accepted transfers where I am the destination) */}
+      {received.length > 0 && (
+        <div className="sc-card p-4 mb-3" data-testid="vst-received">
+          <div className="flex items-center gap-2 mb-2">
+            <Package size={16} className="text-emerald-600" />
+            <div>
+              <div className="font-extrabold text-[color:var(--sc-ink)]">Received via substore transfer</div>
+              <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Accepted transfers appear here and in your My Shop products.</div>
+            </div>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {received.slice(0, 6).map((r) => (
+              <div key={r.id} className="flex items-center gap-2 p-2 rounded-lg border border-[color:var(--sc-border)] bg-[color:var(--sc-accent-light)]/30" data-testid={`vst-received-${r.id}`}>
+                <div className="w-10 h-10 rounded-lg bg-white overflow-hidden shrink-0 grid place-items-center border border-[color:var(--sc-border)]">
+                  {r.image_url ? <img alt="" src={r.image_url} className="w-full h-full object-cover" /> : <Package size={16} className="text-[color:var(--sc-primary)]/60" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-[color:var(--sc-ink)] truncate">{r.name}</div>
+                  <div className="text-[10px] text-[color:var(--sc-ink-muted)] truncate">
+                    Qty {r.stock} · {formatINR(r.price)} · from {r.from_email}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="sc-card p-3 mb-3 flex flex-wrap items-center gap-2" data-testid="vst-toolbar">
@@ -174,7 +206,7 @@ export default function VendorSubstore() {
                       <div className="inline-flex gap-1.5">
                         <button
                           data-testid={`vst-accept-${t.id}`}
-                          onClick={() => { try { const list = acceptTransfer(identity, t.id); setTransfers(list); } catch (e) { alert(e.message); } }}
+                          onClick={() => { try { const list = acceptTransfer(identity, t.id); setTransfers(list); setReceived(loadReceivedProducts(identity)); } catch (e) { alert(e.message); } }}
                           title="Accept as destination substore"
                           className="text-emerald-600 hover:text-emerald-700"
                         >
@@ -302,11 +334,14 @@ function TransferForm({ substores, products = [], busy, onSubmit, onClose }) {
                 onChange={pickProduct}
               >
                 <option value="">— Choose a product from my shop —</option>
-                {products.map((p) => (
-                  <option key={p.id || p._id} value={p.id || p._id}>
-                    {p.name}{p.sku ? ` · ${p.sku}` : ""} · {formatINR(p.price)}
-                  </option>
-                ))}
+                {products.map((p) => {
+                  const priceStr = `₹${Number(p.price || 0).toLocaleString("en-IN")}`;
+                  return (
+                    <option key={p.id || p._id} value={p.id || p._id}>
+                      {p.name}{p.sku ? ` · ${p.sku}` : ""} · {priceStr}
+                    </option>
+                  );
+                })}
               </select>
               <span className="text-[10px] text-[color:var(--sc-ink-muted)] italic">Selecting a product auto-fills name, SKU, price and image.</span>
             </label>
