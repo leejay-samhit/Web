@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import OnboardingTour from "@/components/erp/OnboardingTour";
 
 const DONE_KEY = "sc.erp.tour.completed.v1";
@@ -12,20 +13,16 @@ const TourCtx = createContext({ start: () => {}, close: () => {}, restart: () =>
  */
 export function TourProvider({ children }) {
   const [running, setRunning] = useState(false);
+  const location = useLocation();
 
-  // Auto-open on the vendor's first visit to the ERP hub.
+  // Auto-open on the vendor's first visit to the ERP hub — react-router
+  // location changes (including in-app <Link/> clicks) trigger this.
   useEffect(() => {
-    const check = () => {
-      if (typeof window === "undefined") return;
-      const onHub = window.location.pathname === "/vendor/erp";
-      const seen = localStorage.getItem(DONE_KEY);
-      if (onHub && !seen) setRunning(true);
-    };
-    // Initial + on browser navigation
-    check();
-    window.addEventListener("popstate", check);
-    return () => window.removeEventListener("popstate", check);
-  }, []);
+    if (location.pathname !== "/vendor/erp") return;
+    if (localStorage.getItem(DONE_KEY)) return;
+    const t = setTimeout(() => setRunning(true), 900);
+    return () => clearTimeout(t);
+  }, [location.pathname]);
 
   const start = useCallback(() => setRunning(true), []);
   const close = useCallback(() => {

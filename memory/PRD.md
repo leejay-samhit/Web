@@ -170,6 +170,44 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 ## Verification status
 - 04-Jul-2026: iter-15 E2E validated admin+user login, shop, PDP, cart hydration, COD checkout, admin Treasury Group 1 exclusion, admin onboarding-terms stable-UID reorder, become-vendor + become-provider T&C gates. Post-hydration-fix screenshot confirms Cart + Checkout Order Summary + new "Review your order" panel all render product name/image/price correctly. Vendor Orders page will populate once backend ships `/vendor/me/orders`.
 
+## Slangcart Vendor Billing 3.0 — Next-Action Batch (25-Jul-2026)
+
+Four polish features shipped in a single pass, all frontend-first with graceful backend fallback:
+
+### 1. Product CSV Import  (`src/components/erp/ProductCsvImport.jsx`)
+- Drag-and-drop + file picker + paste textarea. Client-side CSV parser (`src/lib/csvImport.js`) handles quoted fields, escaped quotes and CRLF.
+- Header auto-mapping via aliases (`Product Name` → `name`, `GST%` → `gstPct`, `HSN` → `hsnCode`, etc.).
+- Dry-run preview table with per-row **Ready / Errors**, individual row checkboxes, and column mapping chips (`green` = mapped, `grey` = ignored).
+- Template CSV download (`csv-download-template`) with two sample products.
+- Commit calls `saveProduct()` for each valid row — falls back to localStorage on 404.
+
+### 2. Cashier Onboarding Tour  (`src/components/erp/OnboardingTour.jsx` + `src/context/TourContext.jsx`)
+- 5 steps (~3 min): Product Master → Billing → Inventory → Reports → Learn.
+- Auto-opens on the vendor's first visit to `/vendor/erp`; manual replay via `3-min tour` button in the ERP Hub header (data-testid `tour-start-btn`).
+- **Route-persistent lifecycle** — `<TourProvider/>` wraps `<Routes/>` at App root so the overlay survives navigation between steps. Uses `useLocation()` so in-app `<Link/>` clicks also trigger auto-open.
+- Spotlight overlay: 4 dark scrim boxes around the target rect + animated ring; card auto-scrolls the target into view.
+- Persistence via `localStorage.sc.erp.tour.completed.v1`; `restart()` clears the key.
+
+### 3. Owner PIN Fast Path  (`src/components/erp/OwnerLockGate.jsx`)
+- Segmented switch inside the lock gate: **Password** or **Quick PIN (4–6 digits)**. Last-used mode remembered in `localStorage.sc.erp.owner.mode`.
+- New Quick PIN card in `/vendor/erp/security` (data-testids `owner-new-pin`, `owner-confirm-pin`, `owner-save-pin-btn`). Requires current password to confirm; posts to `POST /api/erp/owner-security/change-pin` (spec added).
+- Falls back to `localStorage` with an informational toast when the backend endpoint is 404.
+
+### 4. GST Filing Timeline  (`src/components/erp/GstFilingTimeline.jsx`)
+- Horizontal 12-month rail rendered directly below the GST dashboard on `/vendor/erp/gst`.
+- Colour-coded states: FILED (green), DUE (amber), OVERDUE (red), UPCOMING (grey). Each cell shows GST payable ₹, days-to-due / days-late, and filed date.
+- 5-chip summary strip: Filed / Due / Overdue / Upcoming / **Late fee (est.)** — computed at ₹50/day placeholder rate.
+- Financial-year picker (`timeline-year`) — 3 FYs. Backend endpoint `GET /api/erp/gst/timeline?year=YYYY` documented in the spec. When 404, we synthesise 12 months of realistic sample data that guarantees all 4 states are visible.
+
+### Backend spec updates (`/app/memory/ERP_BILLING_3.0_SPEC.md`)
+- Added `POST /api/erp/owner-security/change-pin` — body `{ currentPassword, newPin }`, 4-6 digits.
+- Added `GET /api/erp/gst/timeline?year=YYYY` — 12-month array with status, GST payable, days to/from due, filed date, late fee.
+
+### Testing
+- **iteration_18**: base ERP suite — 100% pass.
+- **iteration_19**: 4 new features — 80% pass; onboarding tour broke at step 2 (unmount bug).
+- **iteration_20**: primary regression FIX verified — tour survives all 5 steps in both auto-open and manual-replay flows; PIN/CSV/timeline stable. Two cosmetic LOWs (FILED cell early in FY, in-app Link auto-open) fixed post-report.
+
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).
 - Iteration 18 (frontend, ERP 3.0): **100% frontend pass**. All 21 vendor ERP pages + admin ERP settings verified: navigation, forms, Owner Lock Gate, localStorage fallback, empty states, banners, 5-tab admin config all work. Only a benign `<span>-inside-<option>` hydration warning was flagged and fixed post-report.

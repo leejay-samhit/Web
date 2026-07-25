@@ -129,11 +129,18 @@ function sampleTimeline(year) {
     let status = "UPCOMING";
     let daysToDue, daysLate;
     if (dueDate < today) {
-      // Older months: mostly filed, a couple overdue near the current month to
-      // demonstrate all four states in preview mode.
+      // Force the two oldest past months to FILED so the green state is
+      // always demonstrated even early in the FY; nearer months become
+      // OVERDUE to demonstrate the red state.
       const monthsAgo = Math.round((today - dueDate) / (30 * 86400000));
-      status = monthsAgo <= 2 ? "OVERDUE" : "FILED";
-      if (status === "OVERDUE") daysLate = Math.round((today - dueDate) / 86400000);
+      if (i < 2) {
+        status = "FILED";
+      } else if (monthsAgo <= 2) {
+        status = "OVERDUE";
+        daysLate = Math.round((today - dueDate) / 86400000);
+      } else {
+        status = "FILED";
+      }
     } else {
       // Nearest upcoming month becomes DUE so the preview shows the amber state.
       const daysToDueRaw = Math.round((dueDate - today) / 86400000);
