@@ -24,6 +24,27 @@ import VendorInvoices from "@/pages/vendor/VendorInvoices";
 import VendorCashSummary from "@/pages/vendor/VendorCashSummary";
 import VendorAnalytics from "@/pages/vendor/VendorAnalytics";
 import VendorSettings from "@/pages/vendor/VendorSettings";
+import ErpHub from "@/pages/vendor/erp/ErpHub";
+import ErpProducts from "@/pages/vendor/erp/ErpProducts";
+import ErpPurchaseBook from "@/pages/vendor/erp/ErpPurchaseBook";
+import ErpInventory from "@/pages/vendor/erp/ErpInventory";
+import ErpBilling from "@/pages/vendor/erp/ErpBilling";
+import ErpPriceLock from "@/pages/vendor/erp/ErpPriceLock";
+import ErpAccounts from "@/pages/vendor/erp/ErpAccounts";
+import ErpProfit from "@/pages/vendor/erp/ErpProfit";
+import ErpGst from "@/pages/vendor/erp/ErpGst";
+import ErpGstAssistant from "@/pages/vendor/erp/ErpGstAssistant";
+import ErpBusinessProfile from "@/pages/vendor/erp/ErpBusinessProfile";
+import ErpCompliance from "@/pages/vendor/erp/ErpCompliance";
+import ErpReminders from "@/pages/vendor/erp/ErpReminders";
+import ErpIncomeTax from "@/pages/vendor/erp/ErpIncomeTax";
+import ErpFinancialHealth from "@/pages/vendor/erp/ErpFinancialHealth";
+import ErpReports from "@/pages/vendor/erp/ErpReports";
+import ErpSearch from "@/pages/vendor/erp/ErpSearch";
+import ErpRoles from "@/pages/vendor/erp/ErpRoles";
+import ErpAudit from "@/pages/vendor/erp/ErpAudit";
+import ErpOwnerSettings from "@/pages/vendor/erp/ErpOwnerSettings";
+import ErpLearn from "@/pages/vendor/erp/ErpLearn";
 import Chat from "@/pages/Chat";
 import Wallet from "@/pages/Wallet";
 import Network from "@/pages/Network";
@@ -75,6 +96,27 @@ function App() {
               <Route path="/vendor/substore" element={userGuard(<VendorSubstore />)} />
               <Route path="/vendor/analytics" element={userGuard(<VendorAnalytics />)} />
               <Route path="/vendor/settings" element={userGuard(<VendorSettings />)} />
+              <Route path="/vendor/erp" element={userGuard(<ErpHub />)} />
+              <Route path="/vendor/erp/products" element={userGuard(<ErpProducts />)} />
+              <Route path="/vendor/erp/purchase-book" element={userGuard(<ErpPurchaseBook />)} />
+              <Route path="/vendor/erp/inventory" element={userGuard(<ErpInventory />)} />
+              <Route path="/vendor/erp/billing" element={userGuard(<ErpBilling />)} />
+              <Route path="/vendor/erp/price-lock" element={userGuard(<ErpPriceLock />)} />
+              <Route path="/vendor/erp/accounts" element={userGuard(<ErpAccounts />)} />
+              <Route path="/vendor/erp/profit" element={userGuard(<ErpProfit />)} />
+              <Route path="/vendor/erp/gst" element={userGuard(<ErpGst />)} />
+              <Route path="/vendor/erp/gst-assistant" element={userGuard(<ErpGstAssistant />)} />
+              <Route path="/vendor/erp/business-profile" element={userGuard(<ErpBusinessProfile />)} />
+              <Route path="/vendor/erp/compliance" element={userGuard(<ErpCompliance />)} />
+              <Route path="/vendor/erp/reminders" element={userGuard(<ErpReminders />)} />
+              <Route path="/vendor/erp/income-tax" element={userGuard(<ErpIncomeTax />)} />
+              <Route path="/vendor/erp/financial-health" element={userGuard(<ErpFinancialHealth />)} />
+              <Route path="/vendor/erp/reports" element={userGuard(<ErpReports />)} />
+              <Route path="/vendor/erp/search" element={userGuard(<ErpSearch />)} />
+              <Route path="/vendor/erp/roles" element={userGuard(<ErpRoles />)} />
+              <Route path="/vendor/erp/audit" element={userGuard(<ErpAudit />)} />
+              <Route path="/vendor/erp/security" element={userGuard(<ErpOwnerSettings />)} />
+              <Route path="/vendor/erp/learn" element={userGuard(<ErpLearn />)} />
               <Route path="/chat" element={userGuard(<Chat />)} />
               <Route path="/wallet" element={userGuard(<Wallet />)} />
               <Route path="/network" element={userGuard(<Network />)} />

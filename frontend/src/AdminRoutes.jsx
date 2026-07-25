@@ -38,6 +38,7 @@ import AdminLegalPages from "@/pages/admin/AdminLegalPages";
 import AdminExports from "@/pages/admin/AdminExports";
 import AdminLanding from "@/pages/admin/AdminLanding";
 import AdminOnboardingTerms from "@/pages/admin/AdminOnboardingTerms";
+import AdminErpSettings from "@/pages/admin/AdminErpSettings";
 
 const g = (el) => <ProtectedRoute adminOnly>{el}</ProtectedRoute>;
 
@@ -81,6 +82,7 @@ export const adminRoutes = [
   { path: "/admin/legal-pages", element: g(<AdminLegalPages />) },
   { path: "/admin/landing", element: g(<AdminLanding />) },
   { path: "/admin/onboarding-terms", element: g(<AdminOnboardingTerms />) },
+  { path: "/admin/erp-settings", element: g(<AdminErpSettings />) },
 
   // Export
   { path: "/admin/exports", element: g(<AdminExports />) },

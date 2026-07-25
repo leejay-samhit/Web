@@ -6,7 +6,7 @@ import {
   Layout as LayoutIcon, Tag, Image as ImageIcon, UserCog, UserCheck, UserX,
   CreditCard, Briefcase, Wrench as ServiceIcon, PieChart, MapPin, Landmark,
   Database, ListChecks, Receipt, ScrollText, IndianRupee, QrCode, FileText,
-  Download,
+  Download, Rocket,
 } from "lucide-react";
 
 export const adminGroups = [
@@ -52,6 +52,7 @@ export const adminGroups = [
       { to: "/admin/legal-pages", label: "Legal pages", icon: FileText },
       { to: "/admin/onboarding-terms", label: "Onboarding T&C (Vendor / Service)", icon: FileText },
       { to: "/admin/landing", label: "Landing page (slangcart.com)", icon: LayoutIcon },
+      { to: "/admin/erp-settings", label: "ERP settings (GST · HSN · thresholds)", icon: Rocket },
     ],
   },
   {
