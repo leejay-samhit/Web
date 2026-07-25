@@ -125,16 +125,19 @@ function sampleTimeline(year) {
     const monthIdx = (3 + i) % 12; // Apr = 3
     const y = i + 3 < 12 ? year : year + 1;
     const monthKey = `${y}-${String(monthIdx + 1).padStart(2, "0")}`;
-    const dueDate = new Date(y, monthIdx + 1, dueDay); // GSTR-3B for month X due 20th of month X+1
+    const dueDate = new Date(y, monthIdx + 1, dueDay); // GSTR-3B due 20th of next month
     let status = "UPCOMING";
     let daysToDue, daysLate;
     if (dueDate < today) {
-      // Randomise "filed" vs "overdue" for earlier months so the sample looks real.
-      status = i < 5 ? "FILED" : (i < 8 ? "FILED" : "OVERDUE");
+      // Older months: mostly filed, a couple overdue near the current month to
+      // demonstrate all four states in preview mode.
+      const monthsAgo = Math.round((today - dueDate) / (30 * 86400000));
+      status = monthsAgo <= 2 ? "OVERDUE" : "FILED";
       if (status === "OVERDUE") daysLate = Math.round((today - dueDate) / 86400000);
-    } else if (today.getFullYear() === y && today.getMonth() === monthIdx + 1) {
-      status = "DUE";
-      daysToDue = Math.round((dueDate - today) / 86400000);
+    } else {
+      // Nearest upcoming month becomes DUE so the preview shows the amber state.
+      const daysToDueRaw = Math.round((dueDate - today) / 86400000);
+      if (daysToDueRaw <= 45) { status = "DUE"; daysToDue = daysToDueRaw; }
     }
     months.push({
       month: monthKey,

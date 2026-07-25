@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import OnboardingTour, { useOnboardingTour } from "@/components/erp/OnboardingTour";
+import { useTour } from "@/context/TourContext";
 import {
   Package, BookOpen, Boxes, Receipt, Lock, Wallet as WalletIcon,
   TrendingUp, Percent, Sparkles, Building2, ShieldAlert, BellRing,
@@ -34,7 +34,7 @@ const TILES = [
 ];
 
 export default function ErpHub() {
-  const tour = useOnboardingTour();
+  const tour = useTour();
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 py-6" data-testid="erp-hub">
@@ -53,7 +53,7 @@ export default function ErpHub() {
               </div>
             </div>
             <button
-              onClick={tour.start}
+              onClick={tour.restart}
               className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-2 bg-white border border-[color:var(--sc-primary)]/40 text-[color:var(--sc-primary)] text-xs font-semibold hover:bg-[color:var(--sc-primary)]/10"
               data-testid="tour-start-btn"
             >
@@ -86,7 +86,6 @@ export default function ErpHub() {
           ))}
         </div>
       </div>
-      <OnboardingTour running={tour.running} onClose={tour.close} />
     </Layout>
   );
 }

@@ -41,24 +41,9 @@ const STEPS = [
   },
 ];
 
-const DONE_KEY = "sc.erp.tour.completed.v1";
-
-export function useOnboardingTour() {
-  const [running, setRunning] = useState(false);
-  useEffect(() => {
-    const seen = localStorage.getItem(DONE_KEY);
-    if (!seen) {
-      // Auto-open shortly after first paint of the Hub.
-      const t = setTimeout(() => setRunning(true), 900);
-      return () => clearTimeout(t);
-    }
-  }, []);
-  return {
-    running,
-    start: () => setRunning(true),
-    close: () => { localStorage.setItem(DONE_KEY, new Date().toISOString()); setRunning(false); },
-  };
-}
+// (Onboarding lifecycle — running/start/close/restart — is owned by
+// TourProvider in @/context/TourContext.jsx so the overlay survives route
+// changes between /vendor/erp/* screens.)
 
 /**
  * Overlay tour that navigates the user through key ERP screens.
@@ -69,6 +54,11 @@ export default function OnboardingTour({ running, onClose }) {
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState(null);
   const navigate = useNavigate();
+
+  // Reset to the first step each time the tour opens.
+  useEffect(() => {
+    if (running) setStep(0);
+  }, [running]);
 
   // Navigate to the route for the current step whenever it changes.
   useEffect(() => {

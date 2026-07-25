@@ -1,0 +1,71 @@
+{
+  "summary": "Re-test iteration_20: PRIMARY REGRESSION FIX VERIFIED. The onboarding tour now survives full 5-step navigation from /vendor/erp → /billing → /inventory → /reports → /vendor/erp. Hoisting <OnboardingTour/> into <TourProvider> at App root (wrapping <Routes>) resolved the unmount bug from iteration_19. Auto-open, tour-next x4, tour-finish, tour-close (X), and manual replay via tour-start-btn all work. sc.erp.tour.completed.v1 is correctly set on Done and X-close and correctly cleared by tour.restart(). Reload after Done/X does NOT re-auto-open. Smoke tests: CSV import shows '1 ready + 1 with errors' correctly, commit button is disabled when nothing selectable is left (all-invalid CSV). Owner PIN + password toggle still present on /vendor/erp/purchase-book. GST filing timeline renders 12 cells with DUE (1), OVERDUE (3), UPCOMING (8) — but 0 FILED for the current live date (Jul 2026, FY 2026-27) because sampleTimeline classifies anything older than 2 months as FILED and nothing in this FY is older than 2 months yet.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "GstFilingTimeline sampleTimeline()",
+        "issue": "Polish item from iteration_19 was 'guarantee at least one DUE month so all 4 states are visible in preview'. DUE + OVERDUE are now guaranteed, BUT FILED can still be 0 when the FY started recently. On the live env (today = 2026-07-25, so year=2026 → FY 2026-27), Apr/May/Jun 2026 all land within monthsAgo<=2 → OVERDUE, leaving 0 FILED cells. The green FILED state is therefore not demonstrated on the current preview. Fix suggestion: force the two oldest past months to FILED regardless of monthsAgo, so preview always shows all 4 states.",
+        "selector": "[data-testid=\"timeline-filed\"]",
+        "priority": "LOW"
+      },
+      {
+        "component": "GstFilingTimeline <select>",
+        "issue": "Pre-existing DOM warning from iteration_19: '<span> cannot be a child of <option>' from Emergent x-source wrapper. Non-blocking.",
+        "selector": "[data-testid=\"timeline-year\"] option",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_verified": {
+    "onboarding_tour": {
+      "auto_open_after_key_clear": true,
+      "step_1_of_5_visible": true,
+      "step_2_navigates_to_billing_and_card_survives": true,
+      "step_3_navigates_to_inventory_and_card_survives": true,
+      "step_4_navigates_to_reports_and_card_survives": true,
+      "step_5_back_to_hub_with_learn_highlight": true,
+      "tour_finish_closes_and_sets_done_key": true,
+      "reload_after_done_no_reopen": true,
+      "manual_replay_via_tour_start_btn_clears_key_and_restarts_at_step_1": true,
+      "manual_replay_full_5_step_loop_survives_navigation": true,
+      "tour_close_X_sets_done_key_and_prevents_reopen_on_reload": true
+    },
+    "csv_import_regression": {
+      "1_valid_1_invalid_row_stats": "1 ready + 1 with errors",
+      "commit_button_disabled_when_no_selectable_rows_left": true,
+      "commit_success_toast_captured": "empty capture (sonner likely auto-dismissed before eval, but code path uses toast.warning/success with failed count)"
+    },
+    "gst_timeline": {
+      "timeline_rendered": true,
+      "total_cells": 12,
+      "chips": {"filed": 0, "due": 1, "overdue": 3, "upcoming": 8, "late_fee": "\u20b95,450"},
+      "all_4_states_visible": false,
+      "note": "FILED=0 on current env date; DUE, OVERDUE, UPCOMING all present"
+    },
+    "pin_and_password_regression": {
+      "purchase_book_toggle_present": true,
+      "password_and_pin_labels_both_visible": true
+    }
+  },
+  "critical_code_review_comments": [
+    "TourProvider auto-open uses only 'popstate' — React-router internal navigate() calls do NOT fire popstate, so if a user lands on /vendor/erp via an in-app <Link/> (e.g. tapping the ERP 3.0 button in VendorNav) the tour will NOT auto-open until a full page load or browser back/forward. Consider driving the check off useLocation() inside TourProvider instead of window.location + popstate.",
+    "sampleTimeline still cannot guarantee a FILED cell early in the fiscal year (Apr–Jun). If the reviewer's ask was 'all 4 states visible in preview', pin the two oldest cells to FILED explicitly.",
+    "ProductCsvImport commit toast text was not captured in the automation (sonner auto-dismisses fast). Not a bug per se, but consider bumping the toast duration or writing a data-testid on the toast wrapper to make automated assertions reliable."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL LOW: Force sampleTimeline() in GstFilingTimeline.jsx to produce at least 1 FILED cell (e.g. mark the 2 oldest past months FILED regardless of monthsAgo threshold) so the green state is demonstrated even early in the FY.",
+    "OPTIONAL LOW: Replace window.location + popstate check in TourProvider with a useLocation() hook so in-app <Link/> navigation to /vendor/erp also triggers the tour auto-open on first visit."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only run as requested)", "frontend": "100% on the primary tour regression; 95% overall (GST FILED state cosmetic miss)"},
+  "test_credentials": "brightkittu@gmail.com / Just@4me; owner password 'demo'; owner PIN '1234' (both accepted via 404 pass-through)",
+  "seed_data_creation": "One product 'Good Row' committed via CSV during commit-toast test (falls back to localStorage since backend save is 404).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The onboarding-tour regression is fully fixed and validated end-to-end. Only cosmetic GST-timeline FILED count remains, which is a preview-only sample-data tweak. Other 3 features (CSV, PIN, GST panel presence) already stable from iteration_19 and still stable now.",
+  "rca_of_the_issue": "Iteration_19 bug: <OnboardingTour/> was mounted inside ErpHub which unmounts on route change, wiping tour state. Iteration_20 fix moves the overlay + running/step state into <TourProvider> at the App root, above <Routes>. Overlay now renders as a sibling of the routed content, so it survives navigation. ErpHub reads useTour() and calls restart() from its 3-min-tour button. Confirmed by walking through all 5 steps twice (auto-open + manual replay), both times the tour-card and spotlight ring stayed mounted after every navigate()."
+}

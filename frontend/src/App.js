@@ -2,6 +2,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
+import { TourProvider } from "@/context/TourContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
@@ -66,7 +67,8 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <CartProvider>
-            <Routes>
+            <TourProvider>
+              <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
 
@@ -133,6 +135,7 @@ function App() {
 
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
+            </TourProvider>
           </CartProvider>
         </AuthProvider>
       </BrowserRouter>

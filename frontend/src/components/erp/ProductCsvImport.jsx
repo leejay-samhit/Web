@@ -72,10 +72,13 @@ export default function ProductCsvImport({ vendorId, onClose, onImported }) {
     setCommitting(true);
     const toImport = preview.rows.filter((_, i) => selected[i] && preview.rows[i].ok);
     let done = 0;
+    let failed = 0;
     for (const row of toImport) {
-      try { await saveProduct(vendorId, row.canonical); done++; } catch { /* skip */ }
+      try { await saveProduct(vendorId, row.canonical); done++; }
+      catch { failed++; }
     }
-    toast.success(`Imported ${done} of ${toImport.length} products`);
+    if (failed) toast.warning(`Imported ${done} of ${toImport.length} products · ${failed} failed`);
+    else toast.success(`Imported ${done} of ${toImport.length} products`);
     setCommitting(false);
     onImported?.();
   };
