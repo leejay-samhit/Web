@@ -2,11 +2,12 @@ import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
+import OnboardingTour, { useOnboardingTour } from "@/components/erp/OnboardingTour";
 import {
   Package, BookOpen, Boxes, Receipt, Lock, Wallet as WalletIcon,
   TrendingUp, Percent, Sparkles, Building2, ShieldAlert, BellRing,
   FileBarChart, LineChart, Search, UserCog, ScrollText, KeyRound,
-  GraduationCap, Rocket,
+  GraduationCap, Rocket, PlayCircle,
 } from "lucide-react";
 
 const TILES = [
@@ -33,6 +34,7 @@ const TILES = [
 ];
 
 export default function ErpHub() {
+  const tour = useOnboardingTour();
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 py-6" data-testid="erp-hub">
@@ -44,12 +46,19 @@ export default function ErpHub() {
             <div className="w-11 h-11 rounded-2xl bg-[color:var(--sc-primary)] text-white grid place-items-center">
               <Rocket size={20} />
             </div>
-            <div>
+            <div className="flex-1">
               <div className="text-lg sm:text-xl font-extrabold">Slangcart Vendor Billing 3.0 — ERP Suite</div>
               <div className="text-xs text-[color:var(--sc-ink-muted)] mt-1 max-w-2xl">
                 A retailer-first ERP for kirana stores, medical shops, hardware, mobile & fashion outlets, restaurants, bakeries, wholesalers and distributors. All amounts in ₹. Fully synced across mobile, web and admin.
               </div>
             </div>
+            <button
+              onClick={tour.start}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-2 bg-white border border-[color:var(--sc-primary)]/40 text-[color:var(--sc-primary)] text-xs font-semibold hover:bg-[color:var(--sc-primary)]/10"
+              data-testid="tour-start-btn"
+            >
+              <PlayCircle size={14} /> 3-min tour
+            </button>
           </div>
         </div>
 
@@ -77,6 +86,7 @@ export default function ErpHub() {
           ))}
         </div>
       </div>
+      <OnboardingTour running={tour.running} onClose={tour.close} />
     </Layout>
   );
 }

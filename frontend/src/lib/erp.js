@@ -173,6 +173,9 @@ export const profitDashboard = (params, ownerPassword) =>
 export const gstDashboard = (params, ownerPassword) =>
   api.get("/erp/gst/dashboard", { params, headers: withOwner({}, ownerPassword) }).then((r) => r.data);
 
+export const gstTimeline = (params, ownerPassword) =>
+  api.get("/erp/gst/timeline", { params, headers: withOwner({}, ownerPassword) }).then((r) => r.data).catch(() => null);
+
 export const gstAssistant = (params, ownerPassword) =>
   api.get("/erp/gst/assistant", { params, headers: withOwner({}, ownerPassword) }).then((r) => r.data);
 
@@ -221,6 +224,7 @@ export const ownerStatus = () => api.get("/erp/owner-security/status").then((r) 
 export const ownerInit = (payload) => api.post("/erp/owner-security/init", payload).then((r) => r.data);
 export const ownerVerify = (payload) => api.post("/erp/owner-security/verify", payload).then((r) => r.data);
 export const ownerChangePassword = (payload) => api.post("/erp/owner-security/change-password", payload).then((r) => r.data);
+export const ownerChangePin = (payload) => api.post("/erp/owner-security/change-pin", payload).then((r) => r.data);
 export const ownerHistory = (ownerPassword) => api.get("/erp/owner-security/history", { headers: withOwner({}, ownerPassword) }).then((r) => r.data);
 
 // ─── Roles & staff ─────────────────────────────────────────────────────────

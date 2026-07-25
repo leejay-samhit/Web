@@ -359,6 +359,19 @@ Owner-protected.
 ```
 Owner-protected. FE must render a bold "estimates only — verify before filing" banner.
 
+**Timeline sub-endpoint** (Owner-protected):
+- `GET /api/erp/gst/timeline?year=YYYY` → returns 12 months of filing status for the given Indian FY (Apr → Mar):
+```json
+{
+  "months": [
+    { "month": "2025-04", "status": "FILED|DUE|OVERDUE|UPCOMING",
+      "gstPayable_paise": 0, "daysToDue": null, "daysLate": null,
+      "lateFee_paise": 0, "filedAt": "iso|null" }
+  ]
+}
+```
+`lateFee_paise` uses a configurable daily rate from `erp_settings` (currently ₹50/day placeholder in FE). Frontend renders a colour-coded rail below the GST Dashboard.
+
 ---
 
 ## 9. Smart GST Assistant  (Module 9)
@@ -463,7 +476,7 @@ Endpoints:
 - `GET  /api/erp/owner-security/status` → `{ enrolled, biometricsEnabled, autoLockSeconds, passwordUpdatedAt, pinUpdatedAt }`
 - `POST /api/erp/owner-security/verify` → body `{ password | pin | webauthnAssertion }` returns `{ ok: true, verifiedAt:"iso" }`. **No session token issued** — verification is per-request via `X-Owner-Verify` header.
 - `POST /api/erp/owner-security/change-password` → requires current password
-- `POST /api/erp/owner-security/change-pin`
+- `POST /api/erp/owner-security/change-pin` → body `{ currentPassword, newPin }` (4–6 digits). Enables the **PIN Fast Path** used by cashiers on shared devices. Frontend `OwnerLockGate` exposes a Password/PIN toggle.
 - `PATCH /api/erp/owner-security/settings` → biometricsEnabled, autoLockSeconds
 - `GET  /api/erp/owner-security/history` → login + reset history
 

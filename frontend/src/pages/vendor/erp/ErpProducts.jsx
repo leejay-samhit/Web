@@ -7,7 +7,8 @@ import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDate } from "@/lib/utils";
 import { listProducts, saveProduct, deleteProduct, paiseToRupees, rupeesToPaise, isOwnerRequired } from "@/lib/erp";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
-import { Search, Plus, Trash2, Save, AlertTriangle, Package, Barcode, Tag } from "lucide-react";
+import ProductCsvImport from "@/components/erp/ProductCsvImport";
+import { Search, Plus, Trash2, Save, AlertTriangle, Package, Barcode, Tag, Upload } from "lucide-react";
 
 const EMPTY = {
   name: "", image: "", category: "", subCategory: "", brand: "",
@@ -35,6 +36,7 @@ export default function ErpProducts() {
   const [editing, setEditing] = useState(EMPTY);
   const [ownerPassword, setOwnerPassword] = useState("");
   const [ownerNeeded, setOwnerNeeded] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [err, setErr] = useState("");
 
   const refresh = useCallback(async () => {
@@ -131,6 +133,13 @@ export default function ErpProducts() {
               />
             </div>
             <button
+              onClick={() => setShowImport(true)}
+              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 border border-[color:var(--sc-border)] bg-white text-sm font-semibold"
+              data-testid="erp-products-import-btn"
+            >
+              <Upload size={14} /> Import CSV
+            </button>
+            <button
               onClick={() => { setEditing(EMPTY); setShowForm(true); setErr(""); }}
               className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 bg-[color:var(--sc-primary)] text-white text-sm font-semibold"
               data-testid="erp-products-add-btn"
@@ -203,6 +212,14 @@ export default function ErpProducts() {
             onClose={() => { setShowForm(false); setOwnerNeeded(false); setErr(""); }}
             onSave={handleSave}
             err={err}
+          />
+        )}
+
+        {showImport && (
+          <ProductCsvImport
+            vendorId={vendorId}
+            onClose={() => setShowImport(false)}
+            onImported={async () => { setShowImport(false); await refresh(); }}
           />
         )}
 

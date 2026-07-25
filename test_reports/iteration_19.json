@@ -1,0 +1,81 @@
+{
+  "summary": "Frontend-only testing of the 4 new ERP 3.0 features: CSV Import, Onboarding Tour, Owner PIN Fast Path, GST Filing Timeline. 3 of 4 features work end-to-end. Onboarding Tour breaks after the first Next click because <OnboardingTour/> is mounted inside ErpHub and unmounts when the tour navigates away from /vendor/erp. CSV import, PIN unlock (both modes + persistence), PIN change form, and GST timeline (12 cells, chips, year switcher, preview pill) all verified. Regression: ERP Hub still shows 20 tiles + 3-min tour button; Products page still has both Import CSV and Add Product buttons.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "OnboardingTour / ErpHub",
+        "issue": "Tour breaks after step 1. <OnboardingTour/> is rendered only inside ErpHub.jsx (line 89). When the tour navigates from /vendor/erp to /vendor/erp/billing (step 2), ErpHub unmounts, taking OnboardingTour and its React state (step index, running flag) with it. Result: after clicking Next once, the tour card and spotlight disappear at /vendor/erp/billing, /vendor/erp/inventory and /vendor/erp/reports. tour-next / tour-finish selectors were not found from step 2 onwards. Because Done is never reached, localStorage 'sc.erp.tour.completed.v1' never gets set, so the tour re-auto-opens on every fresh visit to /vendor/erp.",
+        "selector": "[data-testid=\"onboarding-tour\"], [data-testid=\"tour-next\"]",
+        "priority": "HIGH"
+      },
+      {
+        "component": "GstFilingTimeline <select>",
+        "issue": "React hydration/DOM warning: 'In HTML, <span> cannot be a child of <option>'. Caused by Emergent's x-source wrapper spans injected inside <option> — likely non-blocking but worth noting.",
+        "selector": "[data-testid=\"timeline-year\"] option",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "features_verified": {
+    "csv_import": {
+      "import_button_present": true,
+      "modal_opens": true,
+      "template_downloads": "slangcart-products-template.csv",
+      "dry_run_preview_works": true,
+      "stats_badge": "1 ready",
+      "commit_saves_row_and_row_appears_in_table": true,
+      "invalid_row_shows_red_styling_and_missing_name_error_with_disabled_checkbox": true
+    },
+    "onboarding_tour": {
+      "auto_opens_on_first_visit_after_clearing_key": true,
+      "step_1_of_5_card_visible": true,
+      "next_navigates_to_billing": true,
+      "steps_2_5_broken": "See ui_bugs — tour unmounts because ErpHub is left",
+      "replay_button_present": true,
+      "done_key_ever_set": false
+    },
+    "owner_pin_fast_path": {
+      "password_pin_toggle_present": true,
+      "pin_input_numeric_and_masked": true,
+      "unlock_with_pin_1234_succeeds_pass_through_404": true,
+      "sc_erp_owner_mode_persisted_as_pin": true,
+      "pin_mode_remembered_after_reload": true,
+      "password_mode_still_unlocks_with_demo": true
+    },
+    "pin_change_on_security_page": {
+      "new_pin_confirm_pin_save_pin_inputs_present": true,
+      "mismatch_and_short_pin_paths_reached_ui": "Toasts not captured by selector (sonner auto-dismiss), but form guards exist in code (submitPin)"
+    },
+    "gst_filing_timeline": {
+      "panel_renders_below_gst_dashboard": true,
+      "five_summary_chips": ["timeline-filed=Filed3", "timeline-due=Due0", "timeline-overdue=Overdue0", "timeline-upcoming=Upcoming9", "timeline-latefee=Late fee (est.)₹0"],
+      "year_picker_present_with_3_options": ["2025", "2026", "2027"],
+      "twelve_month_cells_rendered": 12,
+      "preview_pill_visible": true,
+      "year_switch_recomputes_cells": true
+    },
+    "regression_hub": {
+      "tour_start_button_in_header": true,
+      "erp_tile_count": 20,
+      "products_has_both_import_and_add_buttons": true
+    }
+  },
+  "critical_code_review_comments": [
+    "OnboardingTour placement bug — must be mounted at Layout/App level (or reuse a portal) so it survives route changes; current implementation guarantees the tour breaks the moment the user leaves the Hub, which is exactly what step 2 does (see STEPS[1].route = /vendor/erp/billing). The useOnboardingTour hook + <OnboardingTour/> need to live in a top-level component (e.g. Layout or a route-persistent context provider) so `running` / `step` state survives navigation.",
+    "useOnboardingTour has no way to clear the completed key from within the app UI — only via manually clearing localStorage; consider adding a 'Restart tour' entry-point that also clears the key.",
+    "GstFilingTimeline sampleTimeline still emits a 'DUE' status only if today.getMonth() === monthIdx + 1 && today.getFullYear() === y — this is only true one month per year and the FY math (Apr-start) plus year param mean the current month rarely shows amber. In the current fabricated sample for FY 2026 we see 0 'Due' months. Consider forcing one DUE cell so the preview demonstrates all four states.",
+    "ProductCsvImport commit loop swallows every saveProduct error silently (catch {}). If ALL rows fail the toast still says 'Imported 0 of 1 products' with no differentiation. Consider surfacing error count in the toast.",
+    "OwnerLockGate does not actually distinguish PIN vs password on the backend when both endpoints 404 — any 4-digit input unlocks. This is expected in preview mode but should be documented for the eventual backend contract."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only test as requested)", "frontend": "80% (4 of 5 subtests fully pass; tour steps 2-5 broken)"},
+  "test_credentials": "brightkittu@gmail.com / Just@4me; owner password demo; owner PIN 1234 (both accepted in preview since backend 404s)",
+  "seed_data_creation": "One product 'Test Rice' inserted via CSV import into local storage (Product Master preview).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Focus on onboarding tour after main agent moves <OnboardingTour/> out of ErpHub. Verify: (a) tour survives navigation through all 5 steps, (b) tour-finish sets sc.erp.tour.completed.v1, (c) reload no longer auto-opens tour, (d) manual replay via [data-testid=tour-start-btn] still works. Other 3 features are stable — no need to retest deeply. Existing test credentials remain the same.",
+  "rca_of_the_issue": "OnboardingTour is a child of <ErpHub/>. STEPS[1].route === '/vendor/erp/billing' — as soon as `navigate('/vendor/erp/billing')` fires in the useEffect on step change, ErpHub unmounts (React Router replaces the ErpHub element with ErpBilling), which unmounts <OnboardingTour/> too. The tour state (`step`, `running`) resets. Fix: hoist <OnboardingTour/> and useOnboardingTour into a route-persistent parent (Layout.jsx or App.js), or use a global provider + React portal so the overlay outlives route transitions."
+}

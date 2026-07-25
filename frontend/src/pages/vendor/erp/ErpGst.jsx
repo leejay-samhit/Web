@@ -5,6 +5,7 @@ import ErpNav from "@/components/erp/ErpNav";
 import DashboardCard from "@/components/erp/DashboardCard";
 import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
+import GstFilingTimeline from "@/components/erp/GstFilingTimeline";
 import { gstDashboard, paiseToRupees } from "@/lib/erp";
 import { formatINR, formatDate } from "@/lib/utils";
 import { Percent, AlertTriangle, Info, Calendar } from "lucide-react";
@@ -93,6 +94,8 @@ function Inner({ ownerPassword, period, setPeriod }) {
           </div>
 
           <div className="mt-4 text-xs text-[color:var(--sc-ink-muted)] inline-flex items-center gap-1"><Info size={12} /> HSN → GST rate mapping is Super Admin editable in /admin/erp-settings.</div>
+
+          <GstFilingTimeline ownerPassword={ownerPassword} />
         </>
       )}
     </>
