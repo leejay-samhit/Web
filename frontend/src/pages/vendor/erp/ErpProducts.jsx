@@ -268,7 +268,7 @@ function ProductFormModal({ draft, onChange, onClose, onSave, err }) {
             <Field label="Purchase Price (ex-GST) ₹"><input type="number" step="0.01" value={draft.purchasePriceExGst} onChange={(e) => set("purchasePriceExGst", Number(e.target.value))} className={inputCls} data-testid="erp-form-purchase" /></Field>
             <Field label="GST %">
               <select value={draft.gstPct} onChange={(e) => set("gstPct", Number(e.target.value))} className={inputCls}>
-                {GST_SLABS.map((g) => <option key={g} value={g}>{g}%</option>)}
+                {GST_SLABS.map((g) => <option key={g} value={g}>{`${g}%`}</option>)}
               </select>
             </Field>
             <Field label="GST Type">

@@ -172,7 +172,53 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 
 ## Testing
 - Iteration 1 (frontend, external backend): **43/45 assertions** passed. The only failures were mobile bottom-nav tabs overlapping the platform's "Made with Emergent" badge; resolved by reducing mobile tabs to 4 and adding right padding (`pr-44`).
-- See `/app/test_reports/iteration_1.json`.
+- Iteration 18 (frontend, ERP 3.0): **100% frontend pass**. All 21 vendor ERP pages + admin ERP settings verified: navigation, forms, Owner Lock Gate, localStorage fallback, empty states, banners, 5-tab admin config all work. Only a benign `<span>-inside-<option>` hydration warning was flagged and fixed post-report.
+- See `/app/test_reports/iteration_18.json`.
+
+## Slangcart Vendor Billing 3.0 — ERP Suite (25-Jul-2026)
+23 modules delivered as spec-first (backend) + frontend shells with localStorage fallback.
+
+### Backend contract
+- **`/app/memory/ERP_BILLING_3.0_SPEC.md`** — Full spec covering data model (`erp_products`, `erp_purchases`, `erp_suppliers`, `erp_sales`, `erp_customers`, `erp_audit`, `erp_business_profile`, `erp_owner_security`, `erp_roles`, `erp_settings`), 45+ endpoints, error contract (`428 owner_verification_required`), per-request Owner-Verify header (no session), Super Admin `/api/admin/erp-settings`, and phased rollout order.
+
+### Frontend routes (21 vendor + 1 admin)
+- **Vendor Hub**: `/vendor/erp` — 20 tiles, colour-coded per Module 23 (green sales/profit/stock, blue purchase/orders, orange gst, red danger).
+- **Module 1** `/vendor/erp/products` — full Product Master form (Info + Purchase + Selling + Inventory sections), search, edit/delete.
+- **Module 2** `/vendor/erp/purchase-book` — Owner-gated. Summary KPIs, multi-line purchase form with GST split, historical table.
+- **Module 3** `/vendor/erp/inventory` — 6 KPIs + low/OOS lists + fast/slow-moving panels.
+- **Module 4** `/vendor/erp/billing` — informational page linking to existing POS with auto-sync explanation.
+- **Module 5** `/vendor/erp/price-lock` — explainer of what's locked & audited.
+- **Modules 6-9, 13, 14** `/vendor/erp/{accounts,profit,gst,gst-assistant,income-tax,financial-health}` — all Owner-gated. Estimates-only banners. Recharts monthly trend for Financial Health.
+- **Module 10** `/vendor/erp/business-profile` — Business type, PAN, GSTIN, scheme, state, FY start.
+- **Module 11** `/vendor/erp/compliance` — turnover flags (thresholds from `erp_settings`).
+- **Module 12** `/vendor/erp/reminders` — severity-coloured list (GST return, low stock, missing bills…).
+- **Module 15** `/vendor/erp/reports` — Owner-gated. 10 report kinds × 6 ranges, PDF/Excel/CSV/Print.
+- **Module 16** `/vendor/erp/search` — Product/Barcode/Supplier/Invoice/GSTIN/Category/Brand/Batch.
+- **Modules 17-19** `/vendor/erp/security` — Owner Lock Gate = full password re-prompt every time (per user choice). Password change form + biometrics/auto-lock cards + login history.
+- **Module 20** `/vendor/erp/roles` — 4 system role templates (Owner/Manager/Cashier/Staff) + permission catalogue + custom-role editor.
+- **Module 21** `/vendor/erp/audit` — Owner-gated table (when/actor/action/entity/old→new/reason).
+- **Module 22** `/vendor/erp/learn` — 13 plain-English topics bundled in `lib/learningContent.js` (GST, ITC, profit types, HSN, GSTR, turnover, taxable value, etc.). Super Admin can override.
+- **Module 23** — UI colour-coding, dashboard cards, sub-nav, hub tiles all follow spec.
+- **Super Admin** `/admin/erp-settings` — 5 tabs (GST slabs, HSN mapping, turnover thresholds, reminders, learning content).
+
+### Design decisions locked in this iteration
+1. **Spec-first** — no backend code shipped. All backend changes documented as Markdown.
+2. **Owner Lock Gate = full password every time** (no session caching, per user choice).
+3. **`X-Owner-Verify` request-scoped header** for backend to consume (already coded on FE).
+4. **Preview mode banner** on every page hitting a pending endpoint (yellow with `Preview mode` label).
+5. **Learning Content** = 13 topics I authored with ₹ examples for Indian retailers.
+
+### Wiring
+- `src/App.js` — 21 routes under `userGuard`.
+- `src/AdminRoutes.jsx` — `/admin/erp-settings`.
+- `src/components/vendor/VendorNav.jsx` — added `ERP 3.0` tab (Rocket icon).
+- `src/constants/adminNav.js` — added ERP settings under `Operations`.
+
+### Known follow-ups (waiting on backend)
+- Real numbers on all Owner-gated dashboards once billing lift-off writes `erp_sales`.
+- Server-side Owner verification (currently gate accepts any password locally on 404 pass-through).
+- Report generation output (PDF/Excel/CSV).
+- Admin ERP settings save round-trip.
 
 ## Credentials
 See `/app/memory/test_credentials.md`.
