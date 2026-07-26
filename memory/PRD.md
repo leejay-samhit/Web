@@ -382,5 +382,13 @@ Four polish features shipped in a single pass, all frontend-first with graceful 
 - Report generation output (PDF/Excel/CSV).
 - Admin ERP settings save round-trip.
 
+## Vendor · Orders — Auto-Sync (26-Feb-2026)
+- `/vendor/orders` polls upstream + local mirror every 30s (paused when tab hidden).
+- Auto-refetches on tab-focus return.
+- Toasts: "N new orders received" for arrivals; per-order "status: old → new" (throttled to 3 + overflow line) for stage transitions.
+- Visible "Auto-syncing every 30s · last checked HH:MM:SS" indicator + manual **Sync** button (spinner while syncing).
+- Test IDs: `vo-refresh`, `vo-last-synced`.
+- File: `src/pages/vendor/VendorOrders.jsx`.
+
 ## Credentials
 See `/app/memory/test_credentials.md`.

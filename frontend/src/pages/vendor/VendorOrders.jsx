@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import api from "@/lib/api";
 import apiLocal from "@/lib/apiLocal";
 import Layout from "@/components/Layout";
@@ -7,7 +8,7 @@ import Spinner from "@/components/Spinner";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDateTime } from "@/lib/utils";
 import { log } from "@/lib/log";
-import { Download, Search, ArrowRight, Package, Phone, MapPin, User as UserIcon } from "lucide-react";
+import { Download, Search, ArrowRight, Package, Phone, MapPin, User as UserIcon, RefreshCw } from "lucide-react";
 import {
   ORDER_STAGES, stageChipClass, stageMeta, nextStages,
   orderCustomerName, orderCustomerPhone, orderAmount, orderProductName,
@@ -38,9 +39,18 @@ export default function VendorOrders() {
   // Confirmation modal for the Delivered transition — vendor must acknowledge
   // that cash (COD) or payout (UPI) has been collected before marking as done.
   const [deliverConfirm, setDeliverConfirm] = useState(null);
+  // Auto-sync polling — silently refetch every 30s so vendors see mobile-app
+  // status changes without manual refresh. Tracks last-sync timestamp and
+  // toasts on new orders / status changes (per user decision Feb-2026).
+  const [lastSynced, setLastSynced] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const prevOrdersRef = useRef(new Map());
+  const initialLoadedRef = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoading(true); setErrorMsg("");
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    else setSyncing(true);
+    setErrorMsg("");
     const params = statusFilter ? { status: statusFilter } : {};
     // Merge upstream (network-pay-1) and local mirror (this container) so
     // web-side vendors see checkout orders whether the mobile backend has
@@ -54,7 +64,7 @@ export default function VendorOrders() {
     } catch (error) {
       const status = error?.response?.status;
       if (status && status !== 404 && status !== 405 && status !== 501) {
-        setErrorMsg(error?.response?.data?.detail || "Could not load orders.");
+        if (!silent) setErrorMsg(error?.response?.data?.detail || "Could not load orders.");
       }
     }
     try {
@@ -64,12 +74,62 @@ export default function VendorOrders() {
       merged = [...merged, ...local.filter((o) => !seen.has(o.id))];
       sawAny = sawAny || local.length > 0;
     } catch { /* local backend may be offline */ }
+
+    // Diff against previous snapshot to notify on new orders / status changes.
+    const prev = prevOrdersRef.current;
+    if (initialLoadedRef.current && prev.size > 0) {
+      let newCount = 0;
+      const changes = [];
+      merged.forEach((o) => {
+        const before = prev.get(o.id);
+        if (!before) newCount += 1;
+        else if (before !== o.status) changes.push({ id: o.id, from: before, to: o.status });
+      });
+      if (newCount > 0) {
+        toast.success(`${newCount} new order${newCount > 1 ? "s" : ""} received`, { id: "vo-new-orders" });
+      }
+      changes.slice(0, 3).forEach((c) => {
+        toast.info(`Order ${c.id.slice(0, 8)} · ${c.from || "?"} → ${c.to}`, { id: `vo-status-${c.id}` });
+      });
+      if (changes.length > 3) {
+        toast.info(`+${changes.length - 3} more status updates`, { id: "vo-status-overflow" });
+      }
+    }
+    prevOrdersRef.current = new Map(merged.map((o) => [o.id, o.status]));
+    initialLoadedRef.current = true;
+
     setOrders(merged);
     setBackendReady(sawAny || merged.length === 0);
-    setLoading(false);
+    setLastSynced(new Date());
+    if (!silent) setLoading(false);
+    else setSyncing(false);
   }, [statusFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  // Initial load whenever the filter changes.
+  useEffect(() => {
+    initialLoadedRef.current = false;
+    prevOrdersRef.current = new Map();
+    load();
+  }, [load]);
+
+  // 30s background polling — paused when the tab is hidden to save quota.
+  useEffect(() => {
+    const POLL_MS = 30000;
+    let timer = null;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      load({ silent: true });
+    };
+    timer = setInterval(tick, POLL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") load({ silent: true });
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      if (timer) clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [load]);
 
   const advance = async (orderId, nextStatus, orderRef) => {
     // Delivered → require confirmation (COD-cash-collected / UPI-payout ack)
@@ -90,7 +150,7 @@ export default function VendorOrders() {
           throw e;
         }
       }
-      await load();
+      await load({ silent: true });
     } catch (e) {
       const status = e?.response?.status;
       if (status === 404 || status === 405) {
@@ -115,7 +175,7 @@ export default function VendorOrders() {
         status: "delivered",
         mark_paid: true,
       });
-      await load();
+      await load({ silent: true });
     } catch (e) {
       alert(e?.response?.data?.detail || "Could not update status.");
     } finally {
@@ -173,6 +233,16 @@ export default function VendorOrders() {
           />
         </div>
         <button
+          data-testid="vo-refresh"
+          onClick={() => load({ silent: true })}
+          disabled={syncing}
+          title={lastSynced ? `Last synced ${lastSynced.toLocaleTimeString()}` : "Sync now"}
+          className="sc-btn-outline inline-flex items-center gap-1.5 text-sm disabled:opacity-60"
+        >
+          <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+          {syncing ? "Syncing…" : "Sync"}
+        </button>
+        <button
           data-testid="vo-download"
           onClick={download}
           disabled={filtered.length === 0}
@@ -181,6 +251,13 @@ export default function VendorOrders() {
           <Download size={14} /> Download Excel ({filtered.length})
         </button>
       </div>
+
+      {lastSynced && (
+        <div className="text-[11px] text-[color:var(--sc-ink-muted)] mb-2 flex items-center gap-1.5" data-testid="vo-last-synced">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Auto-syncing every 30s · last checked {lastSynced.toLocaleTimeString()}
+        </div>
+      )}
 
       <div className="flex gap-2 flex-wrap mb-3">
         <button
