@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import useRazorpayCheckout from "@/hooks/useRazorpayCheckout";
 import { formatINR } from "@/lib/utils";
 import api from "@/lib/api";
+import apiLocal from "@/lib/apiLocal";
 import { log } from "@/lib/log";
 import {
   CreditCard, Loader2, ShieldCheck, AlertCircle, ShoppingBag,
@@ -397,6 +398,30 @@ export default function Checkout() {
     setCodBusy(true);
     try {
       const shipping_address = { ...addr, address: addr.line1 };
+      // Best-effort mirror to LOCAL backend so the web vendor sees the order
+      // even when the mobile-only production endpoint doesn't feed the web.
+      const items = (cart?.items || []).map((it) => ({
+        product_id: it.product_id || it.id,
+        vendor_email: (it.vendor_email || it.seller_email || "").toString().trim().toLowerCase(),
+        name: it.name || it.title || "Item",
+        image_url: it.image_url || it.image || "",
+        qty: Number(it.quantity || it.qty || 1),
+        price: Number(it.price || 0),
+        total: Number(it.price || 0) * Number(it.quantity || it.qty || 1),
+      }));
+      const mirror = {
+        items,
+        address: shipping_address,
+        payment_mode: "COD",
+        customer_name: user?.name || "",
+        customer_phone: addr?.phone || user?.phone || "",
+        subtotal: Number(cart?.subtotal || 0),
+        shipping: Number(cart?.shipping || 0),
+        tax: Number(cart?.tax || 0),
+        grand_total: Number(cart?.total || cart?.grand_total || 0),
+      };
+      apiLocal.post("/orders/checkout", mirror).catch(() => { /* non-blocking */ });
+
       const res = await api.post("/orders/checkout", {
         shipping_address,
         address: shipping_address,

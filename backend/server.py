@@ -197,9 +197,13 @@ async def _upstream_patch_stock(token: str, product_id: str, new_stock: int) -> 
         return False
 
 
-async def _upstream_find_product_by_sku(token: str, sku: str) -> Optional[dict]:
-    if not sku:
-        return None
+async def _upstream_find_existing_product(token: str, sku: str, name: str) -> Optional[dict]:
+    """Find receiver's existing product that matches this transfer.
+
+    Match order: SKU (case-insensitive) > exact name+non-zero price.  Empty
+    SKU + generic name deliberately never matches to avoid merging unrelated
+    products.
+    """
     try:
         async with httpx.AsyncClient(timeout=8.0) as h:
             r = await h.get(f"{UPSTREAM_BASE}/vendor/me/products", params={"limit": 500},
@@ -207,9 +211,16 @@ async def _upstream_find_product_by_sku(token: str, sku: str) -> Optional[dict]:
         if r.status_code != 200:
             return None
         items = r.json() if isinstance(r.json(), list) else r.json().get("items", [])
-        for p in items:
-            if (p.get("sku") or "").strip().lower() == sku.strip().lower():
-                return p
+        sku_n = (sku or "").strip().lower()
+        name_n = (name or "").strip().lower()
+        if sku_n:
+            for p in items:
+                if (p.get("sku") or "").strip().lower() == sku_n:
+                    return p
+        if name_n:
+            for p in items:
+                if (p.get("name") or "").strip().lower() == name_n:
+                    return p
     except Exception:
         pass
     return None
@@ -411,11 +422,11 @@ async def accept_transfer(transfer_id: str, me: dict = Depends(resolve_vendor)):
     stock_added = False
     add_detail = "Receiver product not touched (upstream unavailable)"
     try:
-        existing = await _upstream_find_product_by_sku(me["_token"], doc.get("sku", ""))
+        existing = await _upstream_find_existing_product(me["_token"], doc.get("sku", ""), doc.get("product_name", ""))
         if existing and isinstance(existing.get("stock"), (int, float)):
             new_stock = int(existing["stock"]) + int(doc["qty"])
             stock_added = await _upstream_patch_stock(me["_token"], existing["id"], new_stock)
-            add_detail = f"Merged into existing SKU {doc.get('sku')} (+{doc['qty']} units)" if stock_added else "Merge failed — try refreshing"
+            add_detail = f"Merged into existing product '{existing.get('name')}' (+{doc['qty']} units)" if stock_added else "Merge failed — try refreshing"
         else:
             created = await _upstream_create_product(me["_token"], {
                 "name": doc["product_name"],
@@ -542,6 +553,226 @@ async def delete_substore_route(substore_id: str, me: dict = Depends(resolve_ven
     return {"ok": True}
 
 
+# ─── Owner Security (local — persists PIN / password per vendor) ─────────
+class OwnerVerifyBody(BaseModel):
+    password: Optional[str] = None
+    pin: Optional[str] = None
+
+
+class OwnerChangePasswordBody(BaseModel):
+    currentPassword: str
+    newPassword: str
+
+
+class OwnerChangePinBody(BaseModel):
+    currentPassword: str
+    newPin: str
+
+
+DEFAULT_OWNER_PIN = "1234"
+DEFAULT_OWNER_PASSWORD = "1234"
+
+
+async def _owner_doc(email: str) -> dict:
+    """Fetch or lazily create the owner-security doc with 1234 defaults."""
+    doc = await db.owner_security.find_one({"owner_email": email}, {"_id": 0})
+    if doc:
+        return doc
+    doc = {
+        "owner_email": email,
+        "password": DEFAULT_OWNER_PASSWORD,
+        "pin": DEFAULT_OWNER_PIN,
+        "password_updated_at": None,
+        "pin_updated_at": None,
+        "biometrics_enabled": False,
+        "auto_lock_seconds": 900,
+        "created_at": now_iso(),
+    }
+    await db.owner_security.insert_one(dict(doc))
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/erp/owner-security/status")
+async def owner_status(me: dict = Depends(resolve_vendor)):
+    doc = await _owner_doc(me["email"].strip().lower())
+    return {
+        "enrolled": True,
+        "biometricsEnabled": doc.get("biometrics_enabled", False),
+        "autoLockSeconds": doc.get("auto_lock_seconds", 900),
+        "passwordUpdatedAt": doc.get("password_updated_at"),
+        "pinUpdatedAt": doc.get("pin_updated_at"),
+        "usingDefault": doc.get("password") == DEFAULT_OWNER_PASSWORD or doc.get("pin") == DEFAULT_OWNER_PIN,
+    }
+
+
+@api_router.post("/erp/owner-security/verify")
+async def owner_verify(body: OwnerVerifyBody, me: dict = Depends(resolve_vendor)):
+    doc = await _owner_doc(me["email"].strip().lower())
+    if body.pin is not None:
+        if body.pin == doc.get("pin"):
+            return {"ok": True, "verifiedAt": now_iso(), "mode": "pin"}
+        raise HTTPException(status_code=401, detail="invalid_pin")
+    if body.password is not None:
+        if body.password == doc.get("password"):
+            return {"ok": True, "verifiedAt": now_iso(), "mode": "password"}
+        raise HTTPException(status_code=401, detail="invalid_password")
+    raise HTTPException(status_code=400, detail="password_or_pin_required")
+
+
+@api_router.post("/erp/owner-security/change-password")
+async def owner_change_password(body: OwnerChangePasswordBody, me: dict = Depends(resolve_vendor)):
+    email = me["email"].strip().lower()
+    doc = await _owner_doc(email)
+    if body.currentPassword != doc.get("password"):
+        raise HTTPException(status_code=401, detail="current_password_incorrect")
+    if len(body.newPassword) < 4:
+        raise HTTPException(status_code=400, detail="new_password_too_short")
+    await db.owner_security.update_one(
+        {"owner_email": email},
+        {"$set": {"password": body.newPassword, "password_updated_at": now_iso()}},
+    )
+    return {"ok": True}
+
+
+@api_router.post("/erp/owner-security/change-pin")
+async def owner_change_pin(body: OwnerChangePinBody, me: dict = Depends(resolve_vendor)):
+    email = me["email"].strip().lower()
+    doc = await _owner_doc(email)
+    if body.currentPassword != doc.get("password"):
+        raise HTTPException(status_code=401, detail="current_password_incorrect")
+    if not body.newPin.isdigit() or not (4 <= len(body.newPin) <= 6):
+        raise HTTPException(status_code=400, detail="pin_must_be_4_to_6_digits")
+    await db.owner_security.update_one(
+        {"owner_email": email},
+        {"$set": {"pin": body.newPin, "pin_updated_at": now_iso()}},
+    )
+    return {"ok": True}
+
+
+# ─── Customer Orders mirror (local — bridges checkout to vendor view) ────
+class OrderItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    product_id: Optional[str] = None
+    vendor_email: Optional[str] = None
+    name: str
+    image_url: str = ""
+    qty: int = 1
+    price: float = 0.0
+    total: float = 0.0
+
+
+class OrderCreate(BaseModel):
+    items: List[OrderItem]
+    address: dict = Field(default_factory=dict)
+    payment_mode: str = "COD"          # COD | UPI | CARD | RAZORPAY
+    payment_reference: str = ""
+    customer_name: str = ""
+    customer_phone: str = ""
+    subtotal: float = 0.0
+    shipping: float = 0.0
+    tax: float = 0.0
+    grand_total: float = 0.0
+    note: str = ""
+
+
+class OrderStatusBody(BaseModel):
+    status: str  # placed | packed | shipped | delivered | cancelled
+
+
+ORDER_STATUSES = ("placed", "packed", "shipped", "delivered", "cancelled")
+
+
+async def next_order_number() -> str:
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    prefix = f"ORD-{today}-"
+    n = await db.customer_orders.count_documents({"order_number": {"$regex": f"^{prefix}"}})
+    return f"{prefix}{n + 1:05d}"
+
+
+@api_router.post("/orders/checkout", status_code=201)
+async def create_order(payload: OrderCreate, me: dict = Depends(resolve_vendor)):
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="empty_cart")
+    # Group items by vendor so the vendor's `/vendor/me/orders` view surfaces
+    # only what belongs to them.
+    vendors = {(it.vendor_email or "").strip().lower() for it in payload.items if (it.vendor_email or "")}
+    order_number = await next_order_number()
+    ts = now_iso()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "order_number": order_number,
+        "customer_email": me["email"].strip().lower(),
+        "customer_name": payload.customer_name or me.get("name", ""),
+        "customer_phone": payload.customer_phone,
+        "vendor_emails": sorted(vendors),
+        "items": [it.model_dump() for it in payload.items],
+        "address": payload.address,
+        "payment_mode": payload.payment_mode,
+        "payment_reference": payload.payment_reference,
+        "subtotal": payload.subtotal,
+        "shipping": payload.shipping,
+        "tax": payload.tax,
+        "grand_total": payload.grand_total,
+        "note": payload.note,
+        "status": "placed",
+        "created_at": ts,
+        "updated_at": ts,
+        "status_history": [{"status": "placed", "at": ts, "actor_email": me["email"]}],
+    }
+    await db.customer_orders.insert_one(dict(doc))
+    doc.pop("_id", None)
+    # Push realtime to each affected vendor so their VendorOrders refreshes.
+    for v in vendors:
+        await broker.publish([v], {"type": "order.placed", "order": doc})
+    return doc
+
+
+@api_router.get("/orders/me")
+async def my_orders(me: dict = Depends(resolve_vendor), limit: int = Query(default=200, ge=1, le=500)):
+    email = me["email"].strip().lower()
+    items = await db.customer_orders.find({"customer_email": email}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return {"items": items}
+
+
+@api_router.get("/vendor/me/orders")
+async def vendor_orders(
+    me: dict = Depends(resolve_vendor),
+    status: str = Query(default="all"),
+    limit: int = Query(default=200, ge=1, le=500),
+):
+    email = me["email"].strip().lower()
+    query = {"vendor_emails": email}
+    if status in ORDER_STATUSES:
+        query["status"] = status
+    items = await db.customer_orders.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return {"items": items}
+
+
+@api_router.patch("/vendor/orders/{order_id}/status")
+async def vendor_order_status(order_id: str, body: OrderStatusBody, me: dict = Depends(resolve_vendor)):
+    email = me["email"].strip().lower()
+    if body.status not in ORDER_STATUSES:
+        raise HTTPException(status_code=400, detail=f"invalid_status_{body.status}")
+    doc = await db.customer_orders.find_one({"id": order_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="order_not_found")
+    if email not in doc.get("vendor_emails", []):
+        raise HTTPException(status_code=403, detail="not_a_vendor_for_this_order")
+    ts = now_iso()
+    entry = {"status": body.status, "at": ts, "actor_email": email}
+    await db.customer_orders.update_one(
+        {"id": order_id},
+        {"$set": {"status": body.status, "updated_at": ts}, "$push": {"status_history": entry}},
+    )
+    doc["status"] = body.status
+    doc["updated_at"] = ts
+    doc.setdefault("status_history", []).append(entry)
+    await broker.publish(doc.get("vendor_emails", []) + [doc.get("customer_email")],
+                         {"type": "order.updated", "order": doc})
+    return doc
+
+
 # Legacy stub
 class StatusCheck(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -595,6 +826,11 @@ async def ensure_indexes():
         await db.vendor_transfers.create_index([("created_at", -1)])
         await db.vendor_substores.create_index([("owner_email", 1), ("email", 1)], unique=True)
         await db.vendor_substores.create_index("id", unique=True)
+        await db.customer_orders.create_index("customer_email")
+        await db.customer_orders.create_index("vendor_emails")
+        await db.customer_orders.create_index("id", unique=True)
+        await db.customer_orders.create_index([("created_at", -1)])
+        await db.owner_security.create_index("owner_email", unique=True)
         logger.info("indexes ready")
     except Exception as e:
         logger.warning("index_creation_failed: %s", e)

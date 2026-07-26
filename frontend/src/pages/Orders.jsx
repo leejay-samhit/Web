@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import apiLocal from "@/lib/apiLocal";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
@@ -77,16 +78,20 @@ export default function Orders() {
   useEffect(() => {
     let alive = true;
     (async () => {
+      let merged = [];
       try {
         const { data } = await api.get("/orders/me");
-        if (alive) setOrders(Array.isArray(data) ? data : data?.items || []);
-      } finally {
-        if (alive) setLoading(false);
-      }
+        merged = Array.isArray(data) ? data : data?.items || [];
+      } catch { /* upstream may 404; fall through */ }
+      try {
+        const { data } = await apiLocal.get("/orders/me");
+        const local = Array.isArray(data?.items) ? data.items : [];
+        const seen = new Set(merged.map((o) => o.id));
+        merged = [...merged, ...local.filter((o) => !seen.has(o.id))];
+      } catch { /* local may be offline */ }
+      if (alive) { setOrders(merged); setLoading(false); }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   return (

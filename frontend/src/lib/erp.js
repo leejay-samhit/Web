@@ -469,12 +469,18 @@ export async function runReport(kind /*, params, ownerPassword */) {
 export async function exportReport(/* kind, params, ownerPassword */) { return { url: null }; }
 
 // ─── Owner Security ──────────────────────────────────────────────────────
-export const ownerStatus = () => api.get("/erp/owner-security/status").then((r) => r.data).catch(() => ({ enrolled: false }));
-export const ownerInit = (payload) => api.post("/erp/owner-security/init", payload).then((r) => r.data);
-export const ownerVerify = (payload) => api.post("/erp/owner-security/verify", payload).then((r) => r.data);
-export const ownerChangePassword = (payload) => api.post("/erp/owner-security/change-password", payload).then((r) => r.data);
-export const ownerChangePin = (payload) => api.post("/erp/owner-security/change-pin", payload).then((r) => r.data);
-export const ownerHistory = (ownerPassword) => api.get("/erp/owner-security/history", { headers: withOwner({}, ownerPassword) }).then((r) => r.data);
+// Owner endpoints live on the LOCAL backend (not network-pay-1) so the PIN /
+// password data stays with the transfer service.  Default credentials are
+// `1234` (both password and PIN); vendors can update them from Owner
+// Settings.  See /app/backend/server.py for the endpoint bodies.
+import apiLocal from "@/lib/apiLocal";
+
+export const ownerStatus = () => apiLocal.get("/erp/owner-security/status").then((r) => r.data).catch(() => ({ enrolled: false }));
+export const ownerInit = (payload) => apiLocal.post("/erp/owner-security/init", payload).then((r) => r.data);
+export const ownerVerify = (payload) => apiLocal.post("/erp/owner-security/verify", payload).then((r) => r.data);
+export const ownerChangePassword = (payload) => apiLocal.post("/erp/owner-security/change-password", payload).then((r) => r.data);
+export const ownerChangePin = (payload) => apiLocal.post("/erp/owner-security/change-pin", payload).then((r) => r.data);
+export const ownerHistory = (ownerPassword) => apiLocal.get("/erp/owner-security/history", { headers: withOwner({}, ownerPassword) }).then((r) => r.data).catch(() => null);
 
 // ─── Roles & Staff — no backend yet ──────────────────────────────────────
 export const listRoles = () => api.get("/erp/roles").then((r) => r.data).catch(() => []);

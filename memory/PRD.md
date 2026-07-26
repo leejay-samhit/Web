@@ -170,6 +170,34 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 ## Verification status
 - 04-Jul-2026: iter-15 E2E validated admin+user login, shop, PDP, cart hydration, COD checkout, admin Treasury Group 1 exclusion, admin onboarding-terms stable-UID reorder, become-vendor + become-provider T&C gates. Post-hydration-fix screenshot confirms Cart + Checkout Order Summary + new "Review your order" panel all render product name/image/price correctly. Vendor Orders page will populate once backend ships `/vendor/me/orders`.
 
+## Bug batch #3 — Duplicate stock · Web Orders · Owner PIN 1234 (26-Jul-2026)
+
+### Fix #1 — Duplicate stock on accept
+- **Root cause**: `VendorDashboard.jsx` was merging `loadReceivedProducts()` into the product list on top of the auto-created upstream product, resulting in one card per source. Additionally, `accept_transfer` used SKU-only matching so accepts with empty SKU created a new upstream product every time instead of merging.
+- **Fix**: (a) removed the `loadReceivedProducts` merge in `VendorDashboard.jsx` — backend is now the single source of truth for the receiver's catalog. (b) upgraded `_upstream_find_existing_product` in `server.py` to match by SKU first, then by exact case-insensitive product name, so future accepts always dedupe correctly.
+
+### Fix #2 — Vendor Orders on the web
+Web `/vendor/orders` was blank because production backend on `network-pay-1` never shipped `/vendor/me/orders`. Added a local **orders mirror service** so checkout on the web/app also lands orders that the vendor can see and progress from the web.
+- New endpoints (local backend):
+  - `POST /api/orders/checkout` — cart items grouped by `vendor_email`, assigns `ORD-YYYYMMDD-#####`, initial status `placed`, SSE broadcast to each vendor.
+  - `GET  /api/orders/me` — buyer's orders.
+  - `GET  /api/vendor/me/orders?status=all|placed|packed|shipped|delivered|cancelled` — vendor sees orders where they appear in `vendor_emails`.
+  - `PATCH /api/vendor/orders/{id}/status` — vendor advances status (403 if not one of the assigned vendors, 400 on invalid status). Appends to `status_history` and broadcasts `order.updated` SSE.
+- Frontend:
+  - `Checkout.jsx` now fire-and-forgets a mirror `POST /api/orders/checkout` alongside the upstream call.
+  - `Orders.jsx` (buyer) merges upstream + local results by `id` so nothing is lost.
+  - `VendorOrders.jsx` (vendor) does the same dual-source merge on load and falls back to the local `PATCH` when upstream doesn't have the endpoint.
+
+### Fix #3 — Owner password now works with default 1234
+- New local-backend endpoints `GET/POST /api/erp/owner-security/{status|verify|change-password|change-pin}` persisted per-vendor in `owner_security` collection. Lazily creates with defaults **password=1234, pin=1234, autoLockSeconds=900**.
+- Endpoints return proper `200 / 401 / 400` (no more 404 pass-through in `OwnerLockGate`). The gate now genuinely verifies against the server; the "any password unlocks" behaviour is over.
+- Frontend `lib/erp.js` swapped the owner endpoints from the upstream `api` client to the new `apiLocal` client so PIN/password changes persist across devices.
+- The Quick PIN card on `/vendor/erp/security` (already built earlier) now actually saves PINs; the "Update password" card actually rotates the password.
+
+### Testing
+- Backend: **11/11 pass** including two new tests (`test_owner_security_defaults_and_update`, `test_customer_orders_flow`) that cover: defaults, verify 200/401, PIN update round-trip, order creation with vendor grouping, cross-vendor visibility, invalid status 400, unauthorised status change 403.
+- Frontend: `CI=true yarn build` clean. Smoke-tested vendor dashboard shows real products from upstream without duplication of newly accepted transfers (historical duplicates from before the SKU/name matcher landed remain until the vendor deletes them).
+
 ## Substore Transfer — Realtime · Auto-stock · Directory sync · Timeline (26-Jul-2026)
 
 Four follow-ups to the initial substore backend, all shipped in one pass.

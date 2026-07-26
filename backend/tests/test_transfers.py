@@ -171,3 +171,69 @@ def test_substore_directory_crud(tokens):
     # Second delete = 404
     r_del2 = httpx.delete(f"{LOCAL}/vendor/me/substores/{sid}", headers=h(tokens["a"]), timeout=8.0)
     assert r_del2.status_code == 404
+
+
+def test_owner_security_defaults_and_update(tokens):
+    # Default status → password/pin = 1234
+    r = httpx.get(f"{LOCAL}/erp/owner-security/status", headers=h(tokens["a"]), timeout=8.0)
+    assert r.status_code == 200
+    assert r.json()["enrolled"] is True
+
+    # Default PIN 1234 verifies
+    assert httpx.post(f"{LOCAL}/erp/owner-security/verify", json={"pin": "1234"}, headers=h(tokens["a"]), timeout=8.0).status_code == 200
+    # Wrong PIN → 401
+    assert httpx.post(f"{LOCAL}/erp/owner-security/verify", json={"pin": "0000"}, headers=h(tokens["a"]), timeout=8.0).status_code == 401
+    # Default password 1234 verifies
+    assert httpx.post(f"{LOCAL}/erp/owner-security/verify", json={"password": "1234"}, headers=h(tokens["a"]), timeout=8.0).status_code == 200
+
+    # Update PIN
+    r_pin = httpx.post(f"{LOCAL}/erp/owner-security/change-pin",
+                      json={"currentPassword": "1234", "newPin": "5678"},
+                      headers=h(tokens["a"]), timeout=8.0)
+    assert r_pin.status_code == 200
+    # New PIN verifies, old one fails
+    assert httpx.post(f"{LOCAL}/erp/owner-security/verify", json={"pin": "5678"}, headers=h(tokens["a"]), timeout=8.0).status_code == 200
+    assert httpx.post(f"{LOCAL}/erp/owner-security/verify", json={"pin": "1234"}, headers=h(tokens["a"]), timeout=8.0).status_code == 401
+    # Reset PIN back to 1234 to keep default state for other tests
+    httpx.post(f"{LOCAL}/erp/owner-security/change-pin",
+               json={"currentPassword": "1234", "newPin": "1234"},
+               headers=h(tokens["a"]), timeout=8.0)
+
+
+def test_customer_orders_flow(tokens):
+    # Vendor A creates an order for themselves as customer (edge, but valid)
+    body = {
+        "items": [
+            {"vendor_email": CREDS_B["email"], "name": "Web Test Product", "qty": 2, "price": 100, "total": 200},
+        ],
+        "address": {"line1": "1 Test Rd", "city": "Bengaluru"},
+        "payment_mode": "COD", "subtotal": 200, "grand_total": 200,
+    }
+    r = httpx.post(f"{LOCAL}/orders/checkout", json=body, headers=h(tokens["a"]), timeout=8.0)
+    assert r.status_code == 201, r.text
+    order = r.json()
+    assert order["status"] == "placed" and order["order_number"].startswith("ORD-")
+
+    # Vendor B (assigned) sees it
+    r_b = httpx.get(f"{LOCAL}/vendor/me/orders", headers=h(tokens["b"]), timeout=8.0)
+    assert r_b.status_code == 200
+    assert any(o["id"] == order["id"] for o in r_b.json()["items"])
+
+    # Buyer sees it under /orders/me
+    r_me = httpx.get(f"{LOCAL}/orders/me", headers=h(tokens["a"]), timeout=8.0)
+    assert any(o["id"] == order["id"] for o in r_me.json()["items"])
+
+    # B advances status to shipped
+    r_s = httpx.patch(f"{LOCAL}/vendor/orders/{order['id']}/status",
+                     json={"status": "shipped"}, headers=h(tokens["b"]), timeout=8.0)
+    assert r_s.status_code == 200 and r_s.json()["status"] == "shipped"
+
+    # A (not the vendor) cannot advance status
+    r_bad = httpx.patch(f"{LOCAL}/vendor/orders/{order['id']}/status",
+                       json={"status": "delivered"}, headers=h(tokens["a"]), timeout=8.0)
+    assert r_bad.status_code == 403
+
+    # Invalid status rejected
+    r_inv = httpx.patch(f"{LOCAL}/vendor/orders/{order['id']}/status",
+                       json={"status": "flying"}, headers=h(tokens["b"]), timeout=8.0)
+    assert r_inv.status_code == 400

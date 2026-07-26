@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
+import apiLocal from "@/lib/apiLocal";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import Spinner from "@/components/Spinner";
@@ -41,22 +42,31 @@ export default function VendorOrders() {
   const load = useCallback(async () => {
     setLoading(true); setErrorMsg("");
     const params = statusFilter ? { status: statusFilter } : {};
+    // Merge upstream (network-pay-1) and local mirror (this container) so
+    // web-side vendors see checkout orders whether the mobile backend has
+    // wired them up or not.
+    let merged = [];
+    let sawAny = false;
     try {
       const { data } = await api.get("/vendor/me/orders", { params });
-      setOrders(Array.isArray(data) ? data : data?.items || []);
-      setBackendReady(true);
+      merged = Array.isArray(data) ? data : data?.items || [];
+      sawAny = true;
     } catch (error) {
-      log.error("VendorOrders.load failed", error);
       const status = error?.response?.status;
-      if (status === 404 || status === 405 || status === 501) {
-        setBackendReady(false);
-      } else {
+      if (status && status !== 404 && status !== 405 && status !== 501) {
         setErrorMsg(error?.response?.data?.detail || "Could not load orders.");
       }
-      setOrders([]);
-    } finally {
-      setLoading(false);
     }
+    try {
+      const { data } = await apiLocal.get("/vendor/me/orders", { params });
+      const local = Array.isArray(data?.items) ? data.items : [];
+      const seen = new Set(merged.map((o) => o.id));
+      merged = [...merged, ...local.filter((o) => !seen.has(o.id))];
+      sawAny = sawAny || local.length > 0;
+    } catch { /* local backend may be offline */ }
+    setOrders(merged);
+    setBackendReady(sawAny || merged.length === 0);
+    setLoading(false);
   }, [statusFilter]);
 
   useEffect(() => { load(); }, [load]);
@@ -69,7 +79,17 @@ export default function VendorOrders() {
     }
     setBusy(orderId);
     try {
-      await api.patch(`/vendor/orders/${orderId}/status`, { status: nextStatus });
+      // Try upstream first; if not implemented, patch the local mirror.
+      try {
+        await api.patch(`/vendor/orders/${orderId}/status`, { status: nextStatus });
+      } catch (e) {
+        const st = e?.response?.status;
+        if (st === 404 || st === 405 || st === 501) {
+          await apiLocal.patch(`/vendor/orders/${orderId}/status`, { status: nextStatus });
+        } else {
+          throw e;
+        }
+      }
       await load();
     } catch (e) {
       const status = e?.response?.status;

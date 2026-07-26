@@ -10,7 +10,9 @@ import { useAuth } from "@/context/AuthContext";
 import VendorNav from "@/components/vendor/VendorNav";
 import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
 import LocationBlock from "@/components/LocationBlock";
-import { loadReceivedProducts } from "@/lib/vendorSubstore";
+// (loadReceivedProducts intentionally NOT imported — accepted transfers are
+// now auto-added to the receiver's live catalog on the backend, so merging
+// them here would show duplicates.)
 import { searchMaster, getMaster, reportMasterHit } from "@/lib/productMaster";
 import {
   parseLines, linesFromArray, parseExtraAttrs, extraAttrsToText,
@@ -165,15 +167,12 @@ export default function VendorDashboard() {
       ]);
       if (s.status === "fulfilled") setStats(s.value.data);
       if (p.status === "fulfilled") {
-        // Merge in accepted substore transfers so the recipient sees the
-        // transferred products in their My Shop list (see vendorSubstore.js).
+        // Accepted substore transfers now auto-create/patch the receiver's
+        // product upstream (see /app/backend/server.py accept_transfer), so
+        // we only display the backend list here — no local merge — to avoid
+        // duplicated stock cards.
         const backendProducts = p.value.data?.items || p.value.data || [];
-        let received = [];
-        try {
-          const list = await loadReceivedProducts(user);
-          received = list.map((r) => ({ ...r, is_from_substore: true }));
-        } catch { /* backend hiccup — show only main products */ }
-        setProducts([...received, ...backendProducts]);
+        setProducts(backendProducts);
       }
       if (sa.status === "fulfilled") setSales(sa.value.data?.items || sa.value.data || []);
       if (q.status === "fulfilled") setQuestions(q.value.data?.items || q.value.data || []);
@@ -182,7 +181,7 @@ export default function VendorDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
