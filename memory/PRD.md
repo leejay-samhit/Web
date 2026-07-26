@@ -170,6 +170,34 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 ## Verification status
 - 04-Jul-2026: iter-15 E2E validated admin+user login, shop, PDP, cart hydration, COD checkout, admin Treasury Group 1 exclusion, admin onboarding-terms stable-UID reorder, become-vendor + become-provider T&C gates. Post-hydration-fix screenshot confirms Cart + Checkout Order Summary + new "Review your order" panel all render product name/image/price correctly. Vendor Orders page will populate once backend ships `/vendor/me/orders`.
 
+## ERP 3.0 — Pivot to real backend data (25-Jul-2026)
+
+**Trigger**: user report — every ERP page was showing yellow "Preview mode / running on local data" banners and none of the vendor's 4 real products (Banana, Potato, Onions, Tomato) were visible. Also: substore transfers between two different vendor accounts on different browsers were not syncing.
+
+### What changed
+1. `/app/frontend/src/lib/erp.js` **completely rewritten** to pull live data from existing production endpoints:
+   - `listProducts / saveProduct / deleteProduct` → `GET/POST/PATCH/DELETE /vendor/me/products` (Product Master + CSV import + Inventory now show real 4 products with correct stock/prices).
+   - `accountsDashboard` → `/vendor/me/pos/dashboard` (today/month) + `/vendor/me/stats` (lifetime).
+   - `profitDashboard` → `/vendor/me/pos/analytics` (top revenue, top gst, least sold).
+   - `gstDashboard / gstAssistant` → derived from `/vendor/me/pos/dashboard` monthly bucket; CGST/SGST split, next-return-due, filing status.
+   - `incomeTaxDashboard` → `/vendor/me/stats` (annual sales, gross profit, estimated taxable).
+   - `financialHealth` → monthly buckets over analytics.daily.
+   - `complianceStatus / listReminders` → live turnover + live product stock.
+   - `runReport` → sales/profit from `/vendor/me/pos/sales`, product/inventory from live products.
+   - `erpSearch` → real-product text search.
+2. Removed the "Preview mode" `BackendPendingBanner` from every page that now has live data — kept it only on the 4 modules that truly still need a backend endpoint: Purchase Book, Audit Log, Roles & Staff, Business Profile, Owner Settings.
+3. Added an amber cross-vendor warning banner on `/vendor/substore` (data-testid `vst-cross-vendor-warning`) explaining that cross-device transfers require `POST /api/vendor/me/transfers`.
+4. New backend spec `/app/memory/SUBSTORE_TRANSFER_SPEC.md` — full endpoint contract, collection schema, side-effects and rollout order for the substore team.
+
+### Verification (iteration_21) — 100 % pass
+- Product Master: 4 real vendor products (₹50/100, ₹15/98, ₹40/100, ₹10/94).
+- Inventory: 392 units, ₹11,410 value.
+- Accounts: today ₹0 / month ₹10 · 1 order / lifetime ₹80 · 6 orders / ₹56 profit.
+- Profit: top product = Tomato 1Kg with real numbers.
+- Search: `tomato` returns the real product.
+- Substore amber warning banner renders.
+- Purchase Book / Audit / Roles / Business Profile still show "Preview mode" (expected).
+
 ## Slangcart Vendor Billing 3.0 — Next-Action Batch (25-Jul-2026)
 
 Four polish features shipped in a single pass, all frontend-first with graceful backend fallback:

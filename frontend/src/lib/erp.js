@@ -374,12 +374,13 @@ export async function financialHealth(/* params, ownerPassword */) {
   const monthlySeries = Object.values(byMonth).sort((x, y) => x.month.localeCompare(y.month));
   monthlySeries.forEach((r) => { r.margin = r.sales_paise ? (r.profit_paise / r.sales_paise) : 0; });
   const salesArr = monthlySeries.map((r) => r.sales_paise);
-  const highestSalesMonth = monthlySeries[salesArr.indexOf(Math.max(...salesArr))]?.month || "";
-  const lowestSalesMonth  = monthlySeries[salesArr.indexOf(Math.min(...salesArr))]?.month || "";
+  const highestSalesMonth = monthlySeries.length > 1 ? monthlySeries[salesArr.indexOf(Math.max(...salesArr))]?.month || "" : "";
+  const lowestSalesMonth  = monthlySeries.length > 1 ? monthlySeries[salesArr.indexOf(Math.min(...salesArr))]?.month || "" : "";
   const salesGrowthPct = monthlySeries.length >= 2 && monthlySeries[0].sales_paise
     ? ((monthlySeries[monthlySeries.length - 1].sales_paise - monthlySeries[0].sales_paise) / monthlySeries[0].sales_paise) * 100
     : 0;
   const totalSales = salesArr.reduce((s, v) => s + v, 0);
+  const inv = await inventorySummary(undefined);
   return {
     salesGrowthPct,
     purchaseGrowthPct: 0,
@@ -391,7 +392,7 @@ export async function financialHealth(/* params, ownerPassword */) {
     cardSales_paise: 0,
     creditSales_paise: 0,
     outstandingPayments_paise: 0,
-    inventoryValue_paise: (await inventorySummary()).inventoryValue_paise,
+    inventoryValue_paise: inv.inventoryValue_paise,
   };
 }
 
