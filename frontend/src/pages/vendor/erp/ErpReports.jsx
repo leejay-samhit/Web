@@ -2,7 +2,6 @@ import { useState } from "react";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { runReport, exportReport } from "@/lib/erp";
 import { toast } from "sonner";
@@ -96,7 +95,6 @@ function Inner({ ownerPassword }) {
 
   return (
     <>
-      {pending && <BackendPendingBanner endpoint="/api/erp/reports/*" note="Report data will appear once billing is wired." />}
 
       <div className="sc-card p-4 mb-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

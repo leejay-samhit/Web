@@ -7,7 +7,7 @@ import { log } from "@/lib/log";
 import api from "@/lib/api";
 import {
   Plus, Repeat, Download, CheckCircle2, XCircle, Search, ArrowRight,
-  Loader2, Package, Users,
+  Loader2, Package, Users, AlertTriangle,
 } from "lucide-react";
 import {
   loadSubstores, loadTransfers, createTransfer, acceptTransfer, cancelTransfer,
@@ -87,6 +87,17 @@ export default function VendorSubstore() {
   return (
     <Layout title="Vendor · Substore transfers">
       <VendorNav />
+
+      {/* Cross-vendor limitation banner — see SUBSTORE_TRANSFER_SPEC.md */}
+      <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 mb-4 flex items-start gap-3 text-sm" data-testid="vst-cross-vendor-warning">
+        <AlertTriangle size={16} className="mt-[2px] shrink-0" />
+        <div>
+          <div className="font-semibold">Cross-device sync needs the backend endpoint</div>
+          <div className="text-xs mt-0.5">
+            Transfers between <b>different vendor accounts on different devices</b> won't sync until the backend ships <code className="px-1 py-0.5 rounded bg-white/60">/api/vendor/me/transfers</code>. Right now the ledger is stored per-browser: sender and receiver must sign in on the same browser to see each other's transfers. Same-account substores (e.g. Store A → Store B under the same GSTIN) work fine. Spec at <code className="px-1 py-0.5 rounded bg-white/60">/app/memory/SUBSTORE_TRANSFER_SPEC.md</code>.
+          </div>
+        </div>
+      </div>
 
       {/* KPI strip */}
       <div className="grid sm:grid-cols-4 gap-3 mb-4" data-testid="vst-kpis">

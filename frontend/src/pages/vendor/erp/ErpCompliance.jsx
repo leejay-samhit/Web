@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import { complianceStatus, paiseToRupees } from "@/lib/erp";
 import { formatINR } from "@/lib/utils";
 import { ShieldAlert, Info, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -34,7 +33,6 @@ export default function ErpCompliance() {
       <div className="max-w-4xl mx-auto px-4 py-6" data-testid="erp-compliance">
         <VendorNav />
         <ErpNav />
-        {pending && <BackendPendingBanner endpoint="/api/erp/compliance/status" note="No compliance data yet." />}
 
         {loading ? (
           <div className="sc-card p-6 text-center text-sm text-[color:var(--sc-ink-muted)]">Loading…</div>

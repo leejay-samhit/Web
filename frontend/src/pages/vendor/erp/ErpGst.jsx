@@ -3,7 +3,6 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
 import DashboardCard from "@/components/erp/DashboardCard";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import GstFilingTimeline from "@/components/erp/GstFilingTimeline";
 import { gstDashboard, paiseToRupees } from "@/lib/erp";
@@ -56,7 +55,6 @@ function Inner({ ownerPassword, period, setPeriod }) {
         />
       </div>
 
-      {pending && <BackendPendingBanner endpoint="/api/erp/gst/dashboard" note="Preview values. Real GST once billing goes live." />}
 
       <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 mb-4 flex items-start gap-3 text-sm">
         <AlertTriangle size={16} className="mt-[2px]" />

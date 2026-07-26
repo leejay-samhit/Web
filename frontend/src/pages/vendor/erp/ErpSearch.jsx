@@ -2,7 +2,6 @@ import { useState } from "react";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import { erpSearch } from "@/lib/erp";
 import { Search as SearchIcon } from "lucide-react";
 
@@ -67,7 +66,6 @@ export default function ErpSearch() {
           </div>
         </form>
 
-        {pending && <BackendPendingBanner endpoint="/api/erp/search" note="Search will light up once the backend endpoint is available." />}
 
         {results.length === 0 ? (
           <div className="sc-card p-8 text-center text-sm text-[color:var(--sc-ink-muted)]" data-testid="erp-search-empty">Enter a query above.</div>

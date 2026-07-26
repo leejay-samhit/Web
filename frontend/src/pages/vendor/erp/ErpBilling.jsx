@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import { Receipt, ArrowRight, CheckCircle2 } from "lucide-react";
 
 const FLOW = [
@@ -22,7 +21,6 @@ export default function ErpBilling() {
       <div className="max-w-4xl mx-auto px-4 py-6" data-testid="erp-billing">
         <VendorNav />
         <ErpNav />
-        <BackendPendingBanner endpoint="/api/erp/bills" note="Deltas will flow into every ERP dashboard once wired." />
 
         <div className="sc-card p-5 mb-4 bg-gradient-to-r from-sky-50 to-white ring-1 ring-sky-200">
           <div className="flex items-center gap-3">

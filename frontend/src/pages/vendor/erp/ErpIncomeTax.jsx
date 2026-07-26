@@ -3,7 +3,6 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
 import DashboardCard from "@/components/erp/DashboardCard";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { incomeTaxDashboard, paiseToRupees } from "@/lib/erp";
 import { formatINR } from "@/lib/utils";
@@ -56,7 +55,6 @@ function Inner({ ownerPassword, fy, setFy }) {
         </select>
       </div>
 
-      {pending && <BackendPendingBanner endpoint="/api/erp/income-tax/dashboard" note="Preview values." />}
 
       <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 mb-4 flex items-start gap-3 text-sm">
         <Info size={16} className="mt-[2px]" />

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { gstAssistant } from "@/lib/erp";
 import { Sparkles, ShieldAlert, Info, ArrowRight } from "lucide-react";
@@ -70,7 +69,6 @@ function Inner({ ownerPassword, period, setPeriod }) {
         />
       </div>
 
-      {pending && <BackendPendingBanner endpoint="/api/erp/gst/assistant" note="Showing sample explanations." />}
 
       {loading ? (
         <div className="sc-card p-6 text-center text-sm text-[color:var(--sc-ink-muted)]">Preparing your GST summary…</div>

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import { listReminders } from "@/lib/erp";
 import { formatDate } from "@/lib/utils";
 import { BellRing, AlertTriangle, Info, ShieldAlert } from "lucide-react";
@@ -33,7 +32,6 @@ export default function ErpReminders() {
       <div className="max-w-4xl mx-auto px-4 py-6" data-testid="erp-reminders">
         <VendorNav />
         <ErpNav />
-        {pending && <BackendPendingBanner endpoint="/api/erp/reminders" note="No reminders will appear until the backend is wired." />}
         <div className="sc-card p-4 mb-3 flex items-center gap-2">
           <BellRing size={16} className="text-[color:var(--sc-primary)]" />
           <div className="font-extrabold">Reminders</div>

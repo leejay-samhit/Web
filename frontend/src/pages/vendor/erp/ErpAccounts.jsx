@@ -3,7 +3,6 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
 import DashboardCard from "@/components/erp/DashboardCard";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { accountsDashboard, paiseToRupees } from "@/lib/erp";
 import { formatINR } from "@/lib/utils";
@@ -28,7 +27,6 @@ export default function ErpAccounts() {
 function Inner({ ownerPassword }) {
   const [data, setData] = useState({ today: EMPTY, month: EMPTY, lifetime: EMPTY });
   const [loading, setLoading] = useState(true);
-  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -37,9 +35,7 @@ function Inner({ ownerPassword }) {
       try {
         const d = await accountsDashboard(ownerPassword);
         if (mounted) setData({ today: { ...EMPTY, ...d.today }, month: { ...EMPTY, ...d.month }, lifetime: { ...EMPTY, ...d.lifetime } });
-      } catch (e) {
-        setPending(true);
-      }
+      } catch { /* keep zeros */ }
       if (mounted) setLoading(false);
     })();
     return () => { mounted = false; };
@@ -49,7 +45,6 @@ function Inner({ ownerPassword }) {
 
   return (
     <>
-      {pending && <BackendPendingBanner endpoint="/api/erp/accounts/dashboard" note="Real numbers will appear once billing is wired." />}
       <Section icon={Calendar} title="Today's business" data={data.today} testPrefix="acc-today" />
       <Section icon={Calendar} title="Monthly business" data={data.month} testPrefix="acc-month" />
       <Section icon={Calendar} title="Lifetime business" data={data.lifetime} testPrefix="acc-lifetime" />

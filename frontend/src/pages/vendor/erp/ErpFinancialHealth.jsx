@@ -3,7 +3,6 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
 import DashboardCard from "@/components/erp/DashboardCard";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { financialHealth, paiseToRupees } from "@/lib/erp";
 import { formatINR } from "@/lib/utils";
@@ -49,7 +48,6 @@ function Inner({ ownerPassword }) {
 
   return (
     <>
-      {pending && <BackendPendingBanner endpoint="/api/erp/financial-health" note="Live data appears once billing goes live." />}
 
       {loading ? (
         <div className="sc-card p-6 text-center text-sm text-[color:var(--sc-ink-muted)]">Loading…</div>

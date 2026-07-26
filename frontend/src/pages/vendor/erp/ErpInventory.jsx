@@ -3,7 +3,6 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
 import DashboardCard from "@/components/erp/DashboardCard";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR } from "@/lib/utils";
 import { inventorySummary, listProducts, paiseToRupees } from "@/lib/erp";
@@ -34,8 +33,6 @@ export default function ErpInventory() {
       <div className="max-w-7xl mx-auto px-4 py-6" data-testid="erp-inventory">
         <VendorNav />
         <ErpNav />
-
-        <BackendPendingBanner endpoint="/api/erp/inventory/summary" note="Stock is estimated from local product data until live sync." />
 
         {loading || !summary ? (
           <div className="sc-card p-6 text-center text-sm text-[color:var(--sc-ink-muted)]">Loading inventory…</div>

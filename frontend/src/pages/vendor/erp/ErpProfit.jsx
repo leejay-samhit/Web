@@ -3,7 +3,6 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
 import DashboardCard from "@/components/erp/DashboardCard";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { profitDashboard, paiseToRupees } from "@/lib/erp";
 import { formatINR } from "@/lib/utils";
@@ -43,7 +42,6 @@ function Inner({ ownerPassword }) {
 
   return (
     <>
-      {pending && <BackendPendingBanner endpoint="/api/erp/profit/dashboard" note="These are placeholder values." />}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
         <DashboardCard label="Total Purchase" value={formatINR(paiseToRupees(d.totalPurchaseValue_paise))} tone="purchase" testId="pd-purchase" />
         <DashboardCard label="Total Sales"    value={formatINR(paiseToRupees(d.totalSalesValue_paise))}    tone="sales"    testId="pd-sales" />

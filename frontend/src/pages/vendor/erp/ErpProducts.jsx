@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDate } from "@/lib/utils";
 import { listProducts, saveProduct, deleteProduct, paiseToRupees, rupeesToPaise, isOwnerRequired } from "@/lib/erp";
@@ -116,8 +115,6 @@ export default function ErpProducts() {
       <div className="max-w-7xl mx-auto px-4 py-6" data-testid="erp-products">
         <VendorNav />
         <ErpNav />
-
-        <BackendPendingBanner endpoint="/api/erp/products" note="Data will migrate seamlessly once the API is live." />
 
         <div className="sc-card p-4 mb-4">
           <div className="flex items-center gap-3 flex-wrap">
