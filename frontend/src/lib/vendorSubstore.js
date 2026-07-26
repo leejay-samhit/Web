@@ -1,26 +1,19 @@
-// Vendor Substore transfer ledger — client-side (localStorage) storage.
-// A "substore" is either a secondary shop under the same GSTIN or a partner
-// vendor exchanging stock. Transfers are logged with: from → to, product,
-// serial/IMEI, qty, price, timestamp, transfer order id, initiator, acceptor.
+// Vendor Substore transfer ledger — backed by the local Emergent backend
+// (`/api/vendor/me/transfers`) which persists to MongoDB and delegates
+// identity to network-pay-1 via /auth/me.  Two vendors on two devices now
+// see each other's transfers in real time.
 //
-// Storage strategy (v2, 04-Jul-2026):
-//   `slangcart_substore_ledger_global`   — SHARED ledger keyed by email.
-//     Any logged-in vendor sees transfers where `from_email === me OR to_email === me`.
-//     This lets Vendor A create a transfer and Vendor B see it on the same
-//     device / browser without a backend.
-//   `slangcart_substore_received:<email>` — accepted products the recipient
-//     should surface in their "My shop" product list.
-//   `slangcart_vendor_substores:<email>`  — per-vendor substore directory.
+// Spec: /app/memory/SUBSTORE_TRANSFER_SPEC.md
 //
-// True cross-device sync still requires the backend spec at
-// BACKLOG_BACKEND_SPEC §10 — this refactor unblocks single-device demos.
+// The per-vendor substore DIRECTORY (list of known partner emails) stays
+// in localStorage — it's a personal contact list, not shared data.
 
-const LS_LEDGER  = "slangcart_substore_ledger_global";
-const LS_RECEIVED = "slangcart_substore_received";
-const LS_SUBSTORES = "slangcart_vendor_substores";
+import apiLocal from "@/lib/apiLocal";
 
-/** Normalise the vendor identity we key everything on. Prefers email over id
- *  because email is the field a partner vendor knows when adding a substore. */
+/* -------------------------------------------------------------------------- */
+/*  Vendor identity helper                                                    */
+/* -------------------------------------------------------------------------- */
+
 function keyOf(vendor) {
   if (!vendor) return "self";
   if (typeof vendor === "string") return vendor.trim().toLowerCase();
@@ -28,29 +21,26 @@ function keyOf(vendor) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Substore directory                                                        */
+/*  Substore directory  (local — personal contact list, not shared)           */
 /* -------------------------------------------------------------------------- */
 
-/** Load the substore directory (list of substore emails + display names). */
+const LS_SUBSTORES = "slangcart_vendor_substores";
+
 export function loadSubstores(vendor) {
   try {
     const raw = localStorage.getItem(`${LS_SUBSTORES}:${keyOf(vendor)}`);
     if (!raw) return [];
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
-/** Save the substore directory (replace-all). */
 export function saveSubstores(vendor, substores) {
   try {
     localStorage.setItem(`${LS_SUBSTORES}:${keyOf(vendor)}`, JSON.stringify(substores || []));
   } catch { /* quota */ }
 }
 
-/** Add a substore. Returns the updated list. */
 export function addSubstore(vendor, substore) {
   const list = loadSubstores(vendor);
   const clean = {
@@ -68,7 +58,6 @@ export function addSubstore(vendor, substore) {
   return next;
 }
 
-/** Remove a substore by id. Returns the updated list. */
 export function removeSubstore(vendor, id) {
   const list = loadSubstores(vendor).filter((s) => s.id !== id);
   saveSubstores(vendor, list);
@@ -76,55 +65,43 @@ export function removeSubstore(vendor, id) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Transfer ledger — GLOBAL, filtered by (from_email OR to_email) === me      */
+/*  Transfer ledger — persisted server-side, filtered by from/to email        */
 /* -------------------------------------------------------------------------- */
 
-function loadAllTransfers() {
-  try {
-    const raw = localStorage.getItem(LS_LEDGER);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch { return []; }
-}
-function saveAllTransfers(list) {
-  try { localStorage.setItem(LS_LEDGER, JSON.stringify(list)); } catch { /* quota */ }
-}
-
-/** Load transfers where the given vendor is either initiator OR destination. */
-export function loadTransfers(vendor) {
-  const me = keyOf(vendor);
-  return loadAllTransfers().filter((t) => t.from_email === me || t.to_email === me);
-}
-
-/** Next per-vendor sequential transfer order id. Format: `TRF-YYYYMMDD-####`. */
-export function nextTransferOrderId(vendor) {
+// Retained for callers that still import it (e.g. optimistic UI). The real
+// order id is assigned by the backend and returned in the create response.
+export function nextTransferOrderId(/* vendor */) {
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const existing = loadTransfers(vendor)
-    .filter((t) => (t.transfer_order_id || "").startsWith(`TRF-${today}`))
-    .length;
-  return `TRF-${today}-${String(existing + 1).padStart(4, "0")}`;
+  return `TRF-${today}-pending`;
 }
 
-/** Create a transfer record. */
-export function createTransfer(vendor, payload) {
+/** Fetch every transfer where the caller is sender OR receiver. */
+export async function loadTransfers(/* vendor */) {
+  try {
+    const { data } = await apiLocal.get("/vendor/me/transfers");
+    return Array.isArray(data?.items) ? data.items : [];
+  } catch (e) {
+    // Return an empty list on failure so the UI can render the empty state
+    // rather than crashing. Errors are surfaced via toast in the page.
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.error("loadTransfers failed", e);
+    }
+    return [];
+  }
+}
+
+/** Create a new transfer. Returns the server-persisted record. */
+export async function createTransfer(vendor, payload) {
   if (!payload.product_name?.trim()) throw new Error("Product name is required.");
   const qty = Number(payload.qty);
   if (!qty || qty <= 0) throw new Error("Qty must be a positive number.");
-  if (!payload.to_substore_id) throw new Error("Please pick a destination substore.");
-  const record = {
-    id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    transfer_order_id: nextTransferOrderId(vendor),
-    created_at: new Date().toISOString(),
-    status: "pending",
-    from_email: keyOf(vendor),
-    from_name: payload.from_name || "",
-    to_substore_id: payload.to_substore_id,
-    to_email: (payload.to_email || "").toLowerCase(),
+  if (!payload.to_email) throw new Error("Please pick a destination substore.");
+
+  const body = {
+    to_email: (payload.to_email || "").trim().toLowerCase(),
     to_name: payload.to_name || "",
-    // Snapshot the product so the recipient sees a real entry even without a
-    // shared products endpoint.
-    product_id: payload.product_id || "",
+    product_id: payload.product_id || null,
     product_name: payload.product_name.trim(),
     image_url: payload.image_url || "",
     sku: payload.sku || "",
@@ -132,76 +109,84 @@ export function createTransfer(vendor, payload) {
     imei: payload.imei || "",
     qty,
     unit_price: Number(payload.unit_price) || 0,
-    total_value: (Number(payload.unit_price) || 0) * qty,
     note: payload.note || "",
-    accepted_at: null,
-    accepted_by: "",
   };
-  saveAllTransfers([record, ...loadAllTransfers()]);
-  return record;
+
+  try {
+    const { data } = await apiLocal.post("/vendor/me/transfers", body);
+    return data;
+  } catch (e) {
+    const detail = e?.response?.data?.detail;
+    if (detail === "cannot_transfer_to_self") throw new Error("You can't transfer to your own account.");
+    if (e?.response?.status === 401) throw new Error("Please sign in again to send transfers.");
+    throw new Error(detail || "Could not create the transfer. Try again in a moment.");
+  }
 }
 
-/** Mark a transfer as accepted. Must be called by the DESTINATION vendor. */
-export function acceptTransfer(vendor, id) {
-  const me = keyOf(vendor);
-  const all = loadAllTransfers();
-  const t = all.find((x) => x.id === id);
-  if (!t) throw new Error("Transfer not found.");
-  if (t.to_email !== me) throw new Error("Only the destination substore can accept this transfer.");
-  const updated = { ...t, status: "accepted", accepted_at: new Date().toISOString(), accepted_by: me };
-  const next = all.map((x) => (x.id === id ? updated : x));
-  saveAllTransfers(next);
-  // Push the transferred product into the recipient's "received" cache. Pass
-  // the UPDATED record so accepted_at is populated (fix from iter-16 review).
-  addReceivedProduct(me, updated);
-  return next.filter((x) => x.from_email === me || x.to_email === me);
+/** Mark a transfer as accepted. Caller must be the destination vendor. */
+export async function acceptTransfer(vendor, id) {
+  try {
+    await apiLocal.post(`/vendor/me/transfers/${encodeURIComponent(id)}/accept`);
+  } catch (e) {
+    const detail = e?.response?.data?.detail;
+    if (detail === "only_recipient_can_accept") throw new Error("Only the destination substore can accept this transfer.");
+    if (detail?.startsWith("transfer_already_")) throw new Error(`This transfer is already ${detail.replace("transfer_already_", "")}.`);
+    throw new Error(detail || "Accept failed. Please retry.");
+  }
+  return loadTransfers(vendor);
 }
 
-/** Cancel a transfer (only initiator, only while pending). */
-export function cancelTransfer(vendor, id) {
-  const me = keyOf(vendor);
-  const all = loadAllTransfers();
-  const next = all.map((x) => x.id === id && x.from_email === me && x.status === "pending"
-    ? { ...x, status: "cancelled" } : x);
-  saveAllTransfers(next);
-  return next.filter((x) => x.from_email === me || x.to_email === me);
+/** Cancel a transfer. Caller must be the sender and status must be pending. */
+export async function cancelTransfer(vendor, id) {
+  try {
+    await apiLocal.post(`/vendor/me/transfers/${encodeURIComponent(id)}/cancel`);
+  } catch (e) {
+    const detail = e?.response?.data?.detail;
+    if (detail === "only_sender_can_cancel") throw new Error("Only the sender can cancel this transfer.");
+    if (detail?.startsWith("transfer_already_")) throw new Error(`This transfer is already ${detail.replace("transfer_already_", "")}.`);
+    throw new Error(detail || "Cancel failed. Please retry.");
+  }
+  return loadTransfers(vendor);
+}
+
+/** Reject a transfer. Caller must be the recipient and status must be pending. */
+export async function rejectTransfer(vendor, id) {
+  try {
+    await apiLocal.post(`/vendor/me/transfers/${encodeURIComponent(id)}/reject`);
+  } catch (e) {
+    const detail = e?.response?.data?.detail;
+    if (detail === "only_recipient_can_reject") throw new Error("Only the destination substore can reject this transfer.");
+    if (detail?.startsWith("transfer_already_")) throw new Error(`This transfer is already ${detail.replace("transfer_already_", "")}.`);
+    throw new Error(detail || "Reject failed. Please retry.");
+  }
+  return loadTransfers(vendor);
 }
 
 /* -------------------------------------------------------------------------- */
-/*  "Received products" — surfaced on the recipient's My Shop products list    */
+/*  "Received products" — accepted transfers where I am the destination       */
 /* -------------------------------------------------------------------------- */
 
-export function loadReceivedProducts(vendor) {
-  try {
-    const raw = localStorage.getItem(`${LS_RECEIVED}:${keyOf(vendor)}`);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch { return []; }
-}
-
-function addReceivedProduct(email, transfer) {
-  try {
-    const key = `${LS_RECEIVED}:${email}`;
-    const list = JSON.parse(localStorage.getItem(key) || "[]");
-    list.unshift({
-      id: `recv-${transfer.id}`,
-      transfer_order_id: transfer.transfer_order_id,
-      product_id: transfer.product_id,
-      name: transfer.product_name,
-      image_url: transfer.image_url,
-      sku: transfer.sku,
-      serial_number: transfer.serial_number,
-      imei: transfer.imei,
-      stock: transfer.qty,
-      price: transfer.unit_price,
+export async function loadReceivedProducts(vendor) {
+  const me = keyOf(vendor);
+  const all = await loadTransfers(vendor);
+  return all
+    .filter((t) => t.status === "accepted" && (t.to_email || "").toLowerCase() === me)
+    .map((t) => ({
+      id: `recv-${t.id}`,
+      transfer_order_id: t.transfer_order_id,
+      product_id: t.product_id,
+      name: t.product_name,
+      image_url: t.image_url,
+      sku: t.sku,
+      serial_number: t.serial_number,
+      imei: t.imei,
+      stock: t.qty,
+      price: t.unit_price,
       source: "substore-transfer",
-      from_email: transfer.from_email,
-      from_name: transfer.from_name,
-      accepted_at: transfer.accepted_at,
-    });
-    localStorage.setItem(key, JSON.stringify(list));
-  } catch { /* quota */ }
+      from_email: t.from_email,
+      from_name: t.from_name,
+      accepted_at: t.accepted_at,
+    }));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -268,7 +253,7 @@ export function downloadTransfersCsv(transfers, shopName) {
 /* -------------------------------------------------------------------------- */
 
 export function transferSummary(transfers) {
-  const out = { total: 0, pending: 0, accepted: 0, cancelled: 0, total_value: 0, qty: 0 };
+  const out = { total: 0, pending: 0, accepted: 0, cancelled: 0, rejected: 0, total_value: 0, qty: 0 };
   for (const t of transfers) {
     out.total += 1;
     out[t.status] = (out[t.status] || 0) + 1;

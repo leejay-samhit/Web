@@ -7,11 +7,11 @@ import { log } from "@/lib/log";
 import api from "@/lib/api";
 import {
   Plus, Repeat, Download, CheckCircle2, XCircle, Search, ArrowRight,
-  Loader2, Package, Users, AlertTriangle,
+  Loader2, Package, Users,
 } from "lucide-react";
 import {
   loadSubstores, loadTransfers, createTransfer, acceptTransfer, cancelTransfer,
-  transferSummary, downloadTransfersCsv, loadReceivedProducts,
+  transferSummary, downloadTransfersCsv,
 } from "@/lib/vendorSubstore";
 
 /* -------------------------------------------------------------------------- */
@@ -29,28 +29,50 @@ export default function VendorSubstore() {
   const identity = user;
 
   const [substores, setSubstores] = useState(() => loadSubstores(identity));
-  const [transfers, setTransfers] = useState(() => loadTransfers(identity));
-  const [received, setReceived] = useState(() => loadReceivedProducts(identity));
+  const [transfers, setTransfers] = useState([]);
+  const [received, setReceived] = useState([]);
   const [products, setProducts] = useState([]);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const refresh = useCallback(async () => {
+    setLoadError("");
+    try {
+      const list = await loadTransfers(identity);
+      setTransfers(list);
+      // Derive received products from the same fetched list to avoid a
+      // second round trip.
+      const me = (identity?.email || "").toLowerCase();
+      setReceived(
+        list.filter((t) => t.status === "accepted" && (t.to_email || "").toLowerCase() === me)
+          .map((t) => ({
+            id: `recv-${t.id}`,
+            transfer_order_id: t.transfer_order_id,
+            name: t.product_name,
+            image_url: t.image_url,
+            stock: t.qty,
+            price: t.unit_price,
+            from_email: t.from_email,
+          }))
+      );
+    } catch (e) {
+      setLoadError(e?.message || "Could not load transfers.");
+    } finally {
+      setLoading(false);
+    }
+  }, [identity]);
 
   useEffect(() => {
     setSubstores(loadSubstores(identity));
-    setTransfers(loadTransfers(identity));
-    // Fetch this vendor's products so the transfer form can pick one instead
-    // of forcing free-text entry (fix for reported bug).
+    refresh();
     api.get("/vendor/me/products", { params: { limit: 200 } })
       .then((r) => setProducts(Array.isArray(r.data) ? r.data : r.data?.items || []))
       .catch((e) => log.info?.("VendorSubstore products fetch failed", e?.response?.status));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myEmail]);
-
-  const refresh = useCallback(() => {
-    setTransfers(loadTransfers(identity));
-    setReceived(loadReceivedProducts(identity));
-  }, [identity]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -66,16 +88,16 @@ export default function VendorSubstore() {
 
   const summary = useMemo(() => transferSummary(filtered), [filtered]);
 
-  const submit = (payload) => {
+  const submit = async (payload) => {
     setBusy(true);
     try {
-      const rec = createTransfer(identity, {
+      const rec = await createTransfer(identity, {
         ...payload,
         from_email: myEmail,
         from_name: shopName,
       });
       log.info?.("VendorSubstore.transfer created", rec.transfer_order_id);
-      refresh();
+      await refresh();
       setShowForm(false);
     } catch (e) {
       alert(e.message || "Could not create transfer.");
@@ -88,16 +110,23 @@ export default function VendorSubstore() {
     <Layout title="Vendor · Substore transfers">
       <VendorNav />
 
-      {/* Cross-vendor limitation banner — see SUBSTORE_TRANSFER_SPEC.md */}
-      <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 mb-4 flex items-start gap-3 text-sm" data-testid="vst-cross-vendor-warning">
-        <AlertTriangle size={16} className="mt-[2px] shrink-0" />
+      {/* Cross-vendor sync banner — backend endpoint now LIVE */}
+      <div className="rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-3 mb-4 flex items-start gap-3 text-sm" data-testid="vst-cross-vendor-warning">
+        <CheckCircle2 size={16} className="mt-[2px] shrink-0" />
         <div>
-          <div className="font-semibold">Cross-device sync needs the backend endpoint</div>
+          <div className="font-semibold">Live cross-device sync</div>
           <div className="text-xs mt-0.5">
-            Transfers between <b>different vendor accounts on different devices</b> won't sync until the backend ships <code className="px-1 py-0.5 rounded bg-white/60">/api/vendor/me/transfers</code>. Right now the ledger is stored per-browser: sender and receiver must sign in on the same browser to see each other's transfers. Same-account substores (e.g. Store A → Store B under the same GSTIN) work fine. Spec at <code className="px-1 py-0.5 rounded bg-white/60">/app/memory/SUBSTORE_TRANSFER_SPEC.md</code>.
+            Transfers now sync in real time between vendor accounts, even across different browsers and devices. The receiver sees new transfers instantly on refresh; both sender and receiver can accept or cancel from any device they're signed in on.
           </div>
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-xl bg-red-50 border border-red-200 text-red-800 px-4 py-3 mb-4 text-sm" data-testid="vst-load-error">
+          <div className="font-semibold">Couldn't load transfers</div>
+          <div className="text-xs mt-0.5">{loadError} — check your connection and try refreshing.</div>
+        </div>
+      )}
 
       {/* KPI strip */}
       <div className="grid sm:grid-cols-4 gap-3 mb-4" data-testid="vst-kpis">
@@ -217,7 +246,7 @@ export default function VendorSubstore() {
                       <div className="inline-flex gap-1.5">
                         <button
                           data-testid={`vst-accept-${t.id}`}
-                          onClick={() => { try { const list = acceptTransfer(identity, t.id); setTransfers(list); setReceived(loadReceivedProducts(identity)); } catch (e) { alert(e.message); } }}
+                          onClick={async () => { try { await acceptTransfer(identity, t.id); await refresh(); } catch (e) { alert(e.message); } }}
                           title="Accept as destination substore"
                           className="text-emerald-600 hover:text-emerald-700"
                         >
@@ -225,7 +254,7 @@ export default function VendorSubstore() {
                         </button>
                         <button
                           data-testid={`vst-cancel-${t.id}`}
-                          onClick={() => { if (window.confirm("Cancel this transfer?")) { const list = cancelTransfer(identity, t.id); setTransfers(list); } }}
+                          onClick={async () => { if (window.confirm("Cancel this transfer?")) { try { await cancelTransfer(identity, t.id); await refresh(); } catch (e) { alert(e.message); } } }}
                           title="Cancel"
                           className="text-rose-600 hover:text-rose-700"
                         >

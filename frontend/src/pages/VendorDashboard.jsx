@@ -168,10 +168,11 @@ export default function VendorDashboard() {
         // Merge in accepted substore transfers so the recipient sees the
         // transferred products in their My Shop list (see vendorSubstore.js).
         const backendProducts = p.value.data?.items || p.value.data || [];
-        const received = loadReceivedProducts(user).map((r) => ({
-          ...r,
-          is_from_substore: true,
-        }));
+        let received = [];
+        try {
+          const list = await loadReceivedProducts(user);
+          received = list.map((r) => ({ ...r, is_from_substore: true }));
+        } catch { /* backend hiccup — show only main products */ }
         setProducts([...received, ...backendProducts]);
       }
       if (sa.status === "fulfilled") setSales(sa.value.data?.items || sa.value.data || []);

@@ -170,6 +170,41 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 ## Verification status
 - 04-Jul-2026: iter-15 E2E validated admin+user login, shop, PDP, cart hydration, COD checkout, admin Treasury Group 1 exclusion, admin onboarding-terms stable-UID reorder, become-vendor + become-provider T&C gates. Post-hydration-fix screenshot confirms Cart + Checkout Order Summary + new "Review your order" panel all render product name/image/price correctly. Vendor Orders page will populate once backend ships `/vendor/me/orders`.
 
+## Substore Transfer — Cross-vendor sync SHIPPED (26-Jul-2026)
+
+**Trigger**: user asked for the implementation of `GET /api/vendor/me/transfers` and all backend pieces so Vendor A on device X and Vendor B on device Y see each other's transfers in real time.
+
+### Architecture
+- Frontend `api` client stays on **network-pay-1.emergent.host** (external, read-only) for products/POS/auth.
+- New Emergent-local backend `/app/backend/server.py` (served at `REACT_APP_BACKEND_URL`) now hosts the transfer service. Data lives in Mongo collection `vendor_transfers`.
+- **Identity delegation**: local backend forwards each request's Bearer token to `network-pay-1/api/auth/me`, caches identity 60s, and trusts the returned `{id,email,name}`. No signing key needed. Auth-failure at upstream → 401.
+- Frontend uses a new **second axios instance** `@/lib/apiLocal.js` targeting `process.env.REACT_APP_BACKEND_URL` only for transfer endpoints. All other calls remain unchanged.
+
+### Backend endpoints (all under `/api/vendor/me/transfers`)
+- `POST /` — create pending transfer. Assigns `TRF-YYYYMMDD-####` per sender, computes `total_value`, rejects self-transfer with 403.
+- `GET /?status=pending|accepted|cancelled|rejected|all&limit=1..500` — returns items where caller is sender OR receiver, sorted newest first. Isolation via `$or` on `from_email/to_email`.
+- `GET /{id}` — 404 unless caller is sender or receiver.
+- `POST /{id}/accept` — recipient only; 403/409 otherwise.
+- `POST /{id}/cancel` — sender only; 403/409 otherwise.
+- `POST /{id}/reject` — recipient only; 403/409 otherwise.
+- `GET /api/health` — Mongo ping smoke.
+- Indexes ensured on startup: `from_email`, `to_email`, `id` (unique), `created_at desc`.
+
+### Frontend changes
+- `src/lib/apiLocal.js` — new axios pointing at `REACT_APP_BACKEND_URL`.
+- `src/lib/vendorSubstore.js` — completely rewritten. `loadTransfers/createTransfer/acceptTransfer/cancelTransfer/rejectTransfer` are now `async` and hit the backend. `loadReceivedProducts` derives from the same fetched list. Substore *directory* (contact list) stays in localStorage.
+- `src/pages/vendor/VendorSubstore.jsx` — async `refresh()`, loading/error states, replaced amber "backend pending" banner with green **"Live cross-device sync"** confirmation, all button handlers made async.
+- `src/pages/VendorDashboard.jsx` — `loadReceivedProducts` awaited so "My Shop" list still surfaces accepted transfers.
+
+### Testing
+- `/app/backend/tests/test_transfers.py` — 7 integration tests, **all pass**. Covers: health, missing/invalid bearer → 401, create+dual-visibility+accept+duplicate accept→409+wrong-cancel→409, cancel flow with sender check, self-transfer blocked, reject flow with recipient check. Run via `pytest tests/test_transfers.py`.
+- **Live browser proof**: signed in as brightkittu@gmail.com in a fresh session and immediately saw 4 transfers created by support@slangcart.com — 2 accepted (Test Rice 5kg qty 10, Pytest Test Rice qty 5), 1 cancelled, 1 rejected. "Received via substore transfer" shows the accepted items with image/price/qty as required.
+
+### Backward compatibility
+- Same-account substores (same GSTIN, one email) still work — the backend treats them as any other cross-vendor transfer (their emails differ per Slangcart's model). No pre-existing flow removed.
+- CSV export, KPI aggregates, transfer status chips — unchanged.
+- Local per-vendor substore contact directory is untouched.
+
 ## ERP 3.0 — Pivot to real backend data (25-Jul-2026)
 
 **Trigger**: user report — every ERP page was showing yellow "Preview mode / running on local data" banners and none of the vendor's 4 real products (Banana, Potato, Onions, Tomato) were visible. Also: substore transfers between two different vendor accounts on different browsers were not syncing.
