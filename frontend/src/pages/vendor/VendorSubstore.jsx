@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
@@ -10,9 +10,12 @@ import {
   Loader2, Package, Users,
 } from "lucide-react";
 import {
-  loadSubstores, loadTransfers, createTransfer, acceptTransfer, cancelTransfer,
-  transferSummary, downloadTransfersCsv,
+  loadSubstores, fetchSubstores, loadTransfers, createTransfer, acceptTransfer, cancelTransfer,
+  subscribeTransfers, transferSummary, downloadTransfersCsv,
 } from "@/lib/vendorSubstore";
+import { getToken } from "@/lib/tokenStore";
+import { toast } from "sonner";
+import TransferTimeline from "@/components/vendor/TransferTimeline";
 
 /* -------------------------------------------------------------------------- */
 /*  Vendor · Substore transfer ledger                                          */
@@ -37,6 +40,7 @@ export default function VendorSubstore() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [expanded, setExpanded] = useState({});
 
   const refresh = useCallback(async () => {
     setLoadError("");
@@ -68,11 +72,35 @@ export default function VendorSubstore() {
   useEffect(() => {
     setSubstores(loadSubstores(identity));
     refresh();
+    // Server-authoritative substore directory (survives across devices).
+    fetchSubstores(identity).then(setSubstores).catch(() => {});
     api.get("/vendor/me/products", { params: { limit: 200 } })
       .then((r) => setProducts(Array.isArray(r.data) ? r.data : r.data?.items || []))
       .catch((e) => log.info?.("VendorSubstore products fetch failed", e?.response?.status));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myEmail]);
+
+  // Realtime push via SSE — receive transfer events without polling.
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return undefined;
+    const unsub = subscribeTransfers(token, (evt) => {
+      if (!evt || !evt.type) return;
+      // Refresh the ledger on any change we care about.
+      refresh();
+      const t = evt.transfer;
+      if (evt.type === "transfer.created" && t?.to_email?.toLowerCase() === myEmail) {
+        toast.info(`New transfer received: ${t.product_name} (qty ${t.qty}) from ${t.from_name || t.from_email}`);
+      } else if (evt.type === "transfer.accepted" && t?.from_email?.toLowerCase() === myEmail) {
+        toast.success(`${t.to_name || t.to_email} accepted transfer ${t.transfer_order_id}`);
+      } else if (evt.type === "transfer.rejected" && t?.from_email?.toLowerCase() === myEmail) {
+        toast.warning(`${t.to_name || t.to_email} rejected transfer ${t.transfer_order_id}`);
+      } else if (evt.type === "transfer.cancelled" && t?.to_email?.toLowerCase() === myEmail) {
+        toast.info(`Transfer ${t.transfer_order_id} was cancelled by the sender`);
+      }
+    });
+    return unsub;
+  }, [myEmail, refresh]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -228,8 +256,18 @@ export default function VendorSubstore() {
             </thead>
             <tbody>
               {filtered.map((t) => (
-                <tr key={t.id} className="border-t border-[color:var(--sc-border)]" data-testid={`vst-row-${t.transfer_order_id}`}>
-                  <td className="px-3 py-2 font-mono">{t.transfer_order_id}</td>
+                <Fragment key={t.id}>
+                <tr className="border-t border-[color:var(--sc-border)]" data-testid={`vst-row-${t.transfer_order_id}`}>
+                  <td className="px-3 py-2 font-mono">
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((s) => ({ ...s, [t.id]: !s[t.id] }))}
+                      className="hover:underline"
+                      data-testid={`vst-toggle-${t.id}`}
+                    >
+                      {t.transfer_order_id}
+                    </button>
+                  </td>
                   <td className="px-3 py-2 text-[color:var(--sc-ink-muted)]">{new Date(t.created_at).toLocaleString()}</td>
                   <td className="px-3 py-2">{t.product_name}{t.sku ? <span className="text-[10px] text-[color:var(--sc-ink-muted)]"> · {t.sku}</span> : null}</td>
                   <td className="px-3 py-2 hidden lg:table-cell text-[10px] text-[color:var(--sc-ink-muted)]">
@@ -264,6 +302,14 @@ export default function VendorSubstore() {
                     )}
                   </td>
                 </tr>
+                {expanded[t.id] && (
+                  <tr className="bg-[color:var(--sc-accent-light)]/30">
+                    <td colSpan={9}>
+                      <TransferTimeline events={t.timeline || []} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

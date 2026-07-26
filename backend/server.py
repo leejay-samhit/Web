@@ -1,26 +1,32 @@
 """
 Slangcart local backend — cross-vendor Substore Transfer service.
 
-Runs at REACT_APP_BACKEND_URL (this Emergent container). The main product
-backend (auth, products, POS) lives on `network-pay-1.emergent.host`. Since
-we don't have the main backend's JWT signing key, this service **delegates
-identity verification** by forwarding each request's Bearer token to
-`network-pay-1`'s `/api/auth/me` and trusting the returned identity.
+Runs at REACT_APP_BACKEND_URL. Delegates identity to `network-pay-1` via
+/auth/me (60s cache).  Also proxies stock mutations to the upstream vendor
+product endpoints so accepting a transfer really moves stock.
 
-Endpoints exposed here (spec: /app/memory/SUBSTORE_TRANSFER_SPEC.md):
-    POST   /api/vendor/me/transfers
-    GET    /api/vendor/me/transfers
-    POST   /api/vendor/me/transfers/{id}/accept
-    POST   /api/vendor/me/transfers/{id}/cancel
-    GET    /api/vendor/me/transfers/{id}
+Endpoints (spec: /app/memory/SUBSTORE_TRANSFER_SPEC.md):
+  POST   /api/vendor/me/transfers
+  GET    /api/vendor/me/transfers?status=…
+  GET    /api/vendor/me/transfers/{id}
+  POST   /api/vendor/me/transfers/{id}/accept
+  POST   /api/vendor/me/transfers/{id}/cancel
+  POST   /api/vendor/me/transfers/{id}/reject
+  GET    /api/vendor/me/transfers/stream         (SSE — realtime push)
+  GET    /api/vendor/me/substores                (contact directory)
+  POST   /api/vendor/me/substores
+  DELETE /api/vendor/me/substores/{id}
 """
 
-from fastapi import FastAPI, APIRouter, HTTPException, Header, Query, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Query, Depends, Request
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
+import json
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
@@ -33,42 +39,40 @@ import httpx
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# ─── MongoDB ──────────────────────────────────────────────────────────────
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# ─── FastAPI app ──────────────────────────────────────────────────────────
 app = FastAPI(title="Slangcart Transfer Service")
 api_router = APIRouter(prefix="/api")
 
-# Upstream identity provider (production auth backend)
 UPSTREAM_BASE = os.environ.get("UPSTREAM_AUTH_URL", "https://network-pay-1.emergent.host/api")
 
-# Simple 60-second in-memory identity cache to avoid a network hop per request.
+# ─── Identity cache ───────────────────────────────────────────────────────
 _identity_cache: dict[str, tuple[float, dict]] = {}
 _IDENTITY_TTL_SEC = 60
 
 
-async def resolve_vendor(authorization: Optional[str] = Header(default=None)) -> dict:
-    """Extract Bearer token, forward to network-pay-1's /auth/me, cache 60s."""
-    if not authorization or not authorization.lower().startswith("bearer "):
+async def _bearer_from(header: Optional[str]) -> str:
+    if not header or not header.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing_bearer_token")
-    token = authorization.split(" ", 1)[1].strip()
+    token = header.split(" ", 1)[1].strip()
     if not token:
         raise HTTPException(status_code=401, detail="missing_bearer_token")
+    return token
 
+
+async def resolve_vendor(authorization: Optional[str] = Header(default=None)) -> dict:
+    token = await _bearer_from(authorization)
     now = time.time()
     hit = _identity_cache.get(token)
     if hit and hit[0] > now:
-        return hit[1]
-
+        return {**hit[1], "_token": token}
     try:
         async with httpx.AsyncClient(timeout=8.0) as h:
             r = await h.get(f"{UPSTREAM_BASE}/auth/me", headers={"Authorization": f"Bearer {token}"})
-    except Exception as e:  # network hiccup
+    except Exception as e:
         raise HTTPException(status_code=502, detail="upstream_auth_unreachable") from e
-
     if r.status_code == 401:
         raise HTTPException(status_code=401, detail="invalid_bearer_token")
     if r.status_code != 200:
@@ -76,15 +80,22 @@ async def resolve_vendor(authorization: Optional[str] = Header(default=None)) ->
     identity = r.json()
     if not identity.get("id") or not identity.get("email"):
         raise HTTPException(status_code=502, detail="upstream_identity_missing_fields")
-
     _identity_cache[token] = (now + _IDENTITY_TTL_SEC, identity)
-    return identity
+    return {**identity, "_token": token}
 
 
-# ─── Data models ──────────────────────────────────────────────────────────
+# ─── Models ───────────────────────────────────────────────────────────────
+class TimelineEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    kind: str                                                  # created | seen | accepted | cancelled | rejected
+    at: str
+    actor_email: str = ""
+    actor_name: str = ""
+    detail: str = ""
+
+
 class Transfer(BaseModel):
     model_config = ConfigDict(extra="ignore")
-
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     transfer_order_id: str = ""
     from_email: str
@@ -101,10 +112,13 @@ class Transfer(BaseModel):
     unit_price: float = 0.0
     total_value: float = 0.0
     note: str = ""
-    status: str = "pending"  # pending | accepted | cancelled | rejected
+    status: str = "pending"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     accepted_at: Optional[str] = None
     accepted_by: Optional[str] = None
+    stock_deducted: bool = False
+    stock_added: bool = False
+    timeline: List[TimelineEvent] = Field(default_factory=list)
 
 
 class TransferCreate(BaseModel):
@@ -121,9 +135,32 @@ class TransferCreate(BaseModel):
     note: str = ""
 
 
+class Substore(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    owner_email: str
+    email: str
+    name: str = ""
+    gstin: str = ""
+    phone: str = ""
+    note: str = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class SubstoreCreate(BaseModel):
+    email: str
+    name: str = ""
+    gstin: str = ""
+    phone: str = ""
+    note: str = ""
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 async def next_transfer_order_id(from_email: str) -> str:
-    """TRF-YYYYMMDD-#### sequential per sender per day."""
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
     prefix = f"TRF-{today}-"
     count = await db.vendor_transfers.count_documents({
@@ -136,6 +173,91 @@ async def next_transfer_order_id(from_email: str) -> str:
 def _shape(doc: dict) -> dict:
     doc.pop("_id", None)
     return doc
+
+
+# ─── Upstream stock helpers (best-effort) ─────────────────────────────────
+async def _upstream_get_product(token: str, product_id: str) -> Optional[dict]:
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as h:
+            r = await h.get(f"{UPSTREAM_BASE}/vendor/me/products/{product_id}",
+                            headers={"Authorization": f"Bearer {token}"})
+        return r.json() if r.status_code == 200 else None
+    except Exception:
+        return None
+
+
+async def _upstream_patch_stock(token: str, product_id: str, new_stock: int) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as h:
+            r = await h.patch(f"{UPSTREAM_BASE}/vendor/me/products/{product_id}",
+                              headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                              json={"stock": new_stock})
+        return r.status_code in (200, 204)
+    except Exception:
+        return False
+
+
+async def _upstream_find_product_by_sku(token: str, sku: str) -> Optional[dict]:
+    if not sku:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as h:
+            r = await h.get(f"{UPSTREAM_BASE}/vendor/me/products", params={"limit": 500},
+                            headers={"Authorization": f"Bearer {token}"})
+        if r.status_code != 200:
+            return None
+        items = r.json() if isinstance(r.json(), list) else r.json().get("items", [])
+        for p in items:
+            if (p.get("sku") or "").strip().lower() == sku.strip().lower():
+                return p
+    except Exception:
+        pass
+    return None
+
+
+async def _upstream_create_product(token: str, payload: dict) -> Optional[dict]:
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as h:
+            r = await h.post(f"{UPSTREAM_BASE}/vendor/me/products",
+                             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                             json=payload)
+        return r.json() if r.status_code in (200, 201) else None
+    except Exception:
+        return None
+
+
+# ─── SSE broker (per-email fan-out) ───────────────────────────────────────
+class SseBroker:
+    def __init__(self):
+        # email -> list[asyncio.Queue]
+        self.subs: dict[str, list[asyncio.Queue]] = {}
+
+    def subscribe(self, email: str) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=100)
+        self.subs.setdefault(email, []).append(q)
+        return q
+
+    def unsubscribe(self, email: str, q: asyncio.Queue):
+        arr = self.subs.get(email)
+        if not arr:
+            return
+        try:
+            arr.remove(q)
+        except ValueError:
+            pass
+        if not arr:
+            self.subs.pop(email, None)
+
+    async def publish(self, emails: list[str], event: dict):
+        payload = json.dumps(event, default=str)
+        for e in {(e or "").strip().lower() for e in emails if e}:
+            for q in list(self.subs.get(e, [])):
+                if q.full():
+                    continue
+                await q.put(payload)
+
+
+broker = SseBroker()
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────
@@ -155,18 +277,30 @@ async def health():
 
 @api_router.post("/vendor/me/transfers", response_model=Transfer, status_code=201)
 async def create_transfer(payload: TransferCreate, me: dict = Depends(resolve_vendor)):
-    from_email = me["email"]
-    if payload.to_email.strip().lower() == from_email.strip().lower():
+    from_email = (me["email"] or "").strip().lower()
+    to_email = (payload.to_email or "").strip().lower()
+    if to_email == from_email:
         raise HTTPException(status_code=403, detail="cannot_transfer_to_self")
 
     order_id = await next_transfer_order_id(from_email)
     total_value = round(float(payload.qty) * float(payload.unit_price or 0), 2)
 
+    # Auto-deduct sender's stock (best effort — non-blocking on failure).
+    stock_deducted = False
+    if payload.product_id:
+        p = await _upstream_get_product(me["_token"], payload.product_id)
+        if p and isinstance(p.get("stock"), (int, float)):
+            cur = int(p["stock"])
+            if cur < payload.qty:
+                raise HTTPException(status_code=409, detail="insufficient_stock")
+            stock_deducted = await _upstream_patch_stock(me["_token"], payload.product_id, cur - payload.qty)
+
+    ts = now_iso()
     doc = Transfer(
         transfer_order_id=order_id,
         from_email=from_email,
         from_name=me.get("name", ""),
-        to_email=payload.to_email.strip().lower(),
+        to_email=to_email,
         to_name=payload.to_name,
         product_id=payload.product_id,
         product_name=payload.product_name,
@@ -178,10 +312,18 @@ async def create_transfer(payload: TransferCreate, me: dict = Depends(resolve_ve
         unit_price=payload.unit_price,
         total_value=total_value,
         note=payload.note,
+        stock_deducted=stock_deducted,
+        timeline=[TimelineEvent(
+            kind="created", at=ts,
+            actor_email=from_email, actor_name=me.get("name", ""),
+            detail=("Stock deducted from sender" if stock_deducted else ("Sender stock not linked" if not payload.product_id else "Stock deduction failed — retry later")),
+        )],
     ).model_dump()
 
     await db.vendor_transfers.insert_one(dict(doc))
-    return _shape(doc)
+    shaped = _shape(doc)
+    await broker.publish([from_email, to_email], {"type": "transfer.created", "transfer": shaped})
+    return shaped
 
 
 @api_router.get("/vendor/me/transfers")
@@ -194,10 +336,40 @@ async def list_transfers(
     query = {"$or": [{"from_email": email}, {"to_email": email}]}
     if status in ("pending", "accepted", "cancelled", "rejected"):
         query["status"] = status
-
     cursor = db.vendor_transfers.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
     items = await cursor.to_list(length=limit)
     return {"items": items, "cursor": None}
+
+
+@api_router.get("/vendor/me/transfers/stream")
+async def stream_transfers(request: Request, authorization: Optional[str] = Header(default=None), access_token: Optional[str] = Query(default=None)):
+    # EventSource cannot set Authorization; accept token via query string.
+    header = authorization or (f"Bearer {access_token}" if access_token else None)
+    me = await resolve_vendor(header)
+    email = me["email"].strip().lower()
+
+    async def gen():
+        q = broker.subscribe(email)
+        # Send a hello event so the client knows the stream is open.
+        yield f"event: hello\ndata: {json.dumps({'email': email, 'at': now_iso()})}\n\n"
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=25.0)
+                    yield f"event: transfer\ndata: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    # keepalive comment — nginx/proxies need periodic bytes.
+                    yield ": keepalive\n\n"
+        finally:
+            broker.unsubscribe(email, q)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    })
 
 
 @api_router.get("/vendor/me/transfers/{transfer_id}")
@@ -209,6 +381,18 @@ async def get_transfer(transfer_id: str, me: dict = Depends(resolve_vendor)):
     )
     if not doc:
         raise HTTPException(status_code=404, detail="transfer_not_found")
+
+    # Emit a "seen" timeline event the first time the recipient views a
+    # pending transfer, so senders know the receiver has laid eyes on it.
+    if doc.get("status") == "pending" and email == doc["to_email"]:
+        already_seen = any(ev.get("kind") == "seen" and ev.get("actor_email") == email for ev in (doc.get("timeline") or []))
+        if not already_seen:
+            ev = TimelineEvent(kind="seen", at=now_iso(), actor_email=email, actor_name=me.get("name", ""),
+                               detail="Recipient opened the transfer").model_dump()
+            await db.vendor_transfers.update_one({"id": transfer_id}, {"$push": {"timeline": ev}})
+            doc.setdefault("timeline", []).append(ev)
+            await broker.publish([doc["from_email"], doc["to_email"]],
+                                 {"type": "transfer.seen", "transfer_id": transfer_id, "event": ev})
     return doc
 
 
@@ -223,12 +407,41 @@ async def accept_transfer(transfer_id: str, me: dict = Depends(resolve_vendor)):
     if doc["status"] != "pending":
         raise HTTPException(status_code=409, detail=f"transfer_already_{doc['status']}")
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    # Auto-add to receiver's catalog (best effort).
+    stock_added = False
+    add_detail = "Receiver product not touched (upstream unavailable)"
+    try:
+        existing = await _upstream_find_product_by_sku(me["_token"], doc.get("sku", ""))
+        if existing and isinstance(existing.get("stock"), (int, float)):
+            new_stock = int(existing["stock"]) + int(doc["qty"])
+            stock_added = await _upstream_patch_stock(me["_token"], existing["id"], new_stock)
+            add_detail = f"Merged into existing SKU {doc.get('sku')} (+{doc['qty']} units)" if stock_added else "Merge failed — try refreshing"
+        else:
+            created = await _upstream_create_product(me["_token"], {
+                "name": doc["product_name"],
+                "price": doc.get("unit_price") or 0,
+                "mrp": doc.get("unit_price") or 0,
+                "stock": doc["qty"],
+                "image_url": doc.get("image_url") or "",
+                "sku": doc.get("sku") or "",
+                "description": f"Received via transfer {doc.get('transfer_order_id')} from {doc.get('from_name') or doc['from_email']}",
+            })
+            if created:
+                stock_added = True
+                add_detail = "New product created in receiver's catalog"
+    except Exception:
+        pass
+
+    ts = now_iso()
+    ev = TimelineEvent(kind="accepted", at=ts, actor_email=email, actor_name=me.get("name", ""), detail=add_detail).model_dump()
     await db.vendor_transfers.update_one(
         {"id": transfer_id},
-        {"$set": {"status": "accepted", "accepted_at": now_iso, "accepted_by": email}},
+        {"$set": {"status": "accepted", "accepted_at": ts, "accepted_by": email, "stock_added": stock_added},
+         "$push": {"timeline": ev}},
     )
-    doc.update({"status": "accepted", "accepted_at": now_iso, "accepted_by": email})
+    doc.update({"status": "accepted", "accepted_at": ts, "accepted_by": email, "stock_added": stock_added})
+    doc.setdefault("timeline", []).append(ev)
+    await broker.publish([doc["from_email"], doc["to_email"]], {"type": "transfer.accepted", "transfer": doc})
     return doc
 
 
@@ -243,12 +456,24 @@ async def cancel_transfer(transfer_id: str, me: dict = Depends(resolve_vendor)):
     if doc["status"] != "pending":
         raise HTTPException(status_code=409, detail=f"transfer_already_{doc['status']}")
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    # Refund sender stock if we deducted on create.
+    refunded = False
+    refund_detail = "No stock refund needed"
+    if doc.get("stock_deducted") and doc.get("product_id"):
+        p = await _upstream_get_product(me["_token"], doc["product_id"])
+        if p and isinstance(p.get("stock"), (int, float)):
+            refunded = await _upstream_patch_stock(me["_token"], doc["product_id"], int(p["stock"]) + int(doc["qty"]))
+            refund_detail = f"Refunded {doc['qty']} units to sender" if refunded else "Refund failed"
+
+    ts = now_iso()
+    ev = TimelineEvent(kind="cancelled", at=ts, actor_email=email, actor_name=me.get("name", ""), detail=refund_detail).model_dump()
     await db.vendor_transfers.update_one(
         {"id": transfer_id},
-        {"$set": {"status": "cancelled", "cancelled_at": now_iso}},
+        {"$set": {"status": "cancelled", "cancelled_at": ts}, "$push": {"timeline": ev}},
     )
     doc["status"] = "cancelled"
+    doc.setdefault("timeline", []).append(ev)
+    await broker.publish([doc["from_email"], doc["to_email"]], {"type": "transfer.cancelled", "transfer": doc})
     return doc
 
 
@@ -263,16 +488,61 @@ async def reject_transfer(transfer_id: str, me: dict = Depends(resolve_vendor)):
     if doc["status"] != "pending":
         raise HTTPException(status_code=409, detail=f"transfer_already_{doc['status']}")
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    # Refund sender stock — the transfer never lands.
+    refund_detail = "No stock refund needed"
+    if doc.get("stock_deducted") and doc.get("product_id"):
+        p = await _upstream_get_product(me["_token"], doc["product_id"])
+        if p and isinstance(p.get("stock"), (int, float)):
+            ok = await _upstream_patch_stock(me["_token"], doc["product_id"], int(p["stock"]) + int(doc["qty"]))
+            refund_detail = f"Refunded {doc['qty']} units to sender" if ok else "Refund failed"
+
+    ts = now_iso()
+    ev = TimelineEvent(kind="rejected", at=ts, actor_email=email, actor_name=me.get("name", ""), detail=refund_detail).model_dump()
     await db.vendor_transfers.update_one(
         {"id": transfer_id},
-        {"$set": {"status": "rejected", "rejected_at": now_iso}},
+        {"$set": {"status": "rejected", "rejected_at": ts}, "$push": {"timeline": ev}},
     )
     doc["status"] = "rejected"
+    doc.setdefault("timeline", []).append(ev)
+    await broker.publish([doc["from_email"], doc["to_email"]], {"type": "transfer.rejected", "transfer": doc})
     return doc
 
 
-# Legacy stub kept for existing platform health probes.
+# ─── Substore directory (server-persisted contact list) ──────────────────
+@api_router.get("/vendor/me/substores")
+async def list_substores(me: dict = Depends(resolve_vendor)):
+    email = me["email"].strip().lower()
+    items = await db.vendor_substores.find({"owner_email": email}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    return {"items": items}
+
+
+@api_router.post("/vendor/me/substores", response_model=Substore, status_code=201)
+async def add_substore_route(payload: SubstoreCreate, me: dict = Depends(resolve_vendor)):
+    owner = me["email"].strip().lower()
+    target = (payload.email or "").strip().lower()
+    if not target:
+        raise HTTPException(status_code=400, detail="substore_email_required")
+    if target == owner:
+        raise HTTPException(status_code=400, detail="cannot_add_self_as_substore")
+    dup = await db.vendor_substores.find_one({"owner_email": owner, "email": target})
+    if dup:
+        raise HTTPException(status_code=409, detail="substore_already_exists")
+    doc = Substore(owner_email=owner, email=target, name=payload.name or target,
+                   gstin=payload.gstin, phone=payload.phone, note=payload.note).model_dump()
+    await db.vendor_substores.insert_one(dict(doc))
+    return _shape(doc)
+
+
+@api_router.delete("/vendor/me/substores/{substore_id}")
+async def delete_substore_route(substore_id: str, me: dict = Depends(resolve_vendor)):
+    owner = me["email"].strip().lower()
+    res = await db.vendor_substores.delete_one({"id": substore_id, "owner_email": owner})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="substore_not_found")
+    return {"ok": True}
+
+
+# Legacy stub
 class StatusCheck(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -302,7 +572,6 @@ async def get_status_checks():
     return rows
 
 
-# ─── App wiring ───────────────────────────────────────────────────────────
 app.include_router(api_router)
 
 app.add_middleware(
@@ -313,10 +582,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("slangcart-transfers")
 
 
@@ -327,7 +593,9 @@ async def ensure_indexes():
         await db.vendor_transfers.create_index("to_email")
         await db.vendor_transfers.create_index("id", unique=True)
         await db.vendor_transfers.create_index([("created_at", -1)])
-        logger.info("vendor_transfers indexes ready")
+        await db.vendor_substores.create_index([("owner_email", 1), ("email", 1)], unique=True)
+        await db.vendor_substores.create_index("id", unique=True)
+        logger.info("indexes ready")
     except Exception as e:
         logger.warning("index_creation_failed: %s", e)
 

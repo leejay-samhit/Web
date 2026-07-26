@@ -170,6 +170,39 @@ Branding: name "Slangcart", primary `#0F6E4F`, accent `#E8F4ED`, left sidebar (d
 ## Verification status
 - 04-Jul-2026: iter-15 E2E validated admin+user login, shop, PDP, cart hydration, COD checkout, admin Treasury Group 1 exclusion, admin onboarding-terms stable-UID reorder, become-vendor + become-provider T&C gates. Post-hydration-fix screenshot confirms Cart + Checkout Order Summary + new "Review your order" panel all render product name/image/price correctly. Vendor Orders page will populate once backend ships `/vendor/me/orders`.
 
+## Substore Transfer — Realtime · Auto-stock · Directory sync · Timeline (26-Jul-2026)
+
+Four follow-ups to the initial substore backend, all shipped in one pass.
+
+### 1. Realtime Push (Server-Sent Events)
+- `GET /api/vendor/me/transfers/stream` — SSE endpoint scoped to the authenticated vendor. Accepts token via `Authorization: Bearer` header OR `?access_token=` query (EventSource can't send headers). Sends `transfer` events on create / seen / accepted / cancelled / rejected, plus 25s keepalives.
+- New `SseBroker` publishes each event to both the sender's and receiver's connected clients.
+- Frontend `subscribeTransfers(token, onEvent)` in `lib/vendorSubstore.js` opens the stream; `VendorSubstore.jsx` refreshes the ledger and fires a sonner toast with a contextual message (e.g. `"New transfer received: Test Rice 5kg (qty 10) from Slangcart"`).
+
+### 2. Stock Auto-Deduction
+- On `POST /transfers`: if the sender attached a `product_id`, the backend uses the caller's Bearer to `GET`+`PATCH /vendor/me/products/{id}` on `network-pay-1`, decrementing stock by `qty`. Returns `409 insufficient_stock` if the sender oversells.
+- On `POST /transfers/{id}/accept`: the backend looks up the receiver's product by SKU and either `PATCH`es (`stock += qty`) if found, or `POST /vendor/me/products` to create a new product carrying the original name / image / price / description with `stock = qty`.
+- On cancel/reject: refunds the sender's stock via the same PATCH.
+- Every step is best-effort — if upstream misbehaves, the transfer still lands with `stock_deducted / stock_added` flags recorded and a friendly timeline entry.
+
+### 3. Substore Directory Sync
+- Server-persisted `vendor_substores` collection keyed by `owner_email`. New endpoints:
+  - `GET /api/vendor/me/substores` — my directory
+  - `POST /api/vendor/me/substores` — add {email, name, gstin, phone, note}. Rejects self-adds and duplicates.
+  - `DELETE /api/vendor/me/substores/{id}` — remove.
+- Frontend `vendorSubstore.js` now exposes both a synchronous `loadSubstores(vendor)` (reads local cache for first paint) and async `fetchSubstores(vendor)` (authoritative). `addSubstore / removeSubstore` are async. Local cache stays in sync for offline / snappy loads.
+
+### 4. Transfer Timeline
+- New embedded `timeline: TimelineEvent[]` on every transfer doc, populated automatically:
+  - `created` — sender · with a note about stock deduction
+  - `seen` — recipient · first time they open the transfer via `GET /{id}`
+  - `accepted / cancelled / rejected` — actor + stock-side-effect note
+- New `TransferTimeline` component renders a chip strip inline under each row when clicked (data-testid `transfer-timeline`, `timeline-{kind}`, `vst-toggle-{id}`).
+
+### Testing
+- Backend: `/app/backend/tests/test_transfers.py` — **9/9 pass** including `test_timeline_events_created` and `test_substore_directory_crud` covering ownership isolation, duplicate rejection, and 404 on missing.
+- Live browser: `brightkittu@gmail.com` sees all 15 transfers from support@slangcart.com, timeline expands under each row showing actor + timestamp + detail, "Received via substore transfer" shows 6 auto-added products with image/price/qty, sonner toast fires on new create events pushed via SSE.
+
 ## Substore Transfer — Cross-vendor sync SHIPPED (26-Jul-2026)
 
 **Trigger**: user asked for the implementation of `GET /api/vendor/me/transfers` and all backend pieces so Vendor A on device X and Vendor B on device Y see each other's transfers in real time.

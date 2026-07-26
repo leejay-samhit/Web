@@ -21,12 +21,12 @@ function keyOf(vendor) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Substore directory  (local — personal contact list, not shared)           */
+/*  Substore directory  (server-persisted contact list, per vendor)           */
 /* -------------------------------------------------------------------------- */
 
-const LS_SUBSTORES = "slangcart_vendor_substores";
+const LS_SUBSTORES = "slangcart_vendor_substores";  // local cache for offline / snappy first paint
 
-export function loadSubstores(vendor) {
+function _cacheLoad(vendor) {
   try {
     const raw = localStorage.getItem(`${LS_SUBSTORES}:${keyOf(vendor)}`);
     if (!raw) return [];
@@ -34,34 +34,101 @@ export function loadSubstores(vendor) {
     return Array.isArray(arr) ? arr : [];
   } catch { return []; }
 }
-
-export function saveSubstores(vendor, substores) {
-  try {
-    localStorage.setItem(`${LS_SUBSTORES}:${keyOf(vendor)}`, JSON.stringify(substores || []));
-  } catch { /* quota */ }
+function _cacheSave(vendor, list) {
+  try { localStorage.setItem(`${LS_SUBSTORES}:${keyOf(vendor)}`, JSON.stringify(list || [])); } catch { /* quota */ }
 }
 
-export function addSubstore(vendor, substore) {
-  const list = loadSubstores(vendor);
-  const clean = {
-    id: substore.id || `ss-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+/** Synchronous initial render — reads the local cache. Pair with an async
+ *  fetchSubstores() call in useEffect for the authoritative server list. */
+export function loadSubstores(vendor) {
+  return _cacheLoad(vendor);
+}
+
+/** Fetch the authoritative substore directory from the backend. */
+export async function fetchSubstores(vendor) {
+  try {
+    const { data } = await apiLocal.get("/vendor/me/substores");
+    const list = Array.isArray(data?.items) ? data.items : [];
+    _cacheSave(vendor, list);
+    return list;
+  } catch {
+    return _cacheLoad(vendor);
+  }
+}
+
+export function saveSubstores(vendor, substores) {
+  // Kept for callers doing local reordering; the server is still the source
+  // of truth. This just refreshes the offline cache.
+  _cacheSave(vendor, substores);
+}
+
+export async function addSubstore(vendor, substore) {
+  const body = {
     email: (substore.email || "").trim().toLowerCase(),
     name: (substore.name || "").trim() || substore.email || "Substore",
     gstin: (substore.gstin || "").trim(),
     phone: (substore.phone || "").trim(),
     note: (substore.note || "").trim(),
   };
-  if (!clean.email) throw new Error("Substore email is required.");
-  if (list.some((s) => s.email === clean.email)) throw new Error("A substore with this email already exists.");
-  const next = [...list, clean];
-  saveSubstores(vendor, next);
-  return next;
+  if (!body.email) throw new Error("Substore email is required.");
+  try {
+    const { data } = await apiLocal.post("/vendor/me/substores", body);
+    const list = [..._cacheLoad(vendor).filter((s) => s.id !== data.id), data];
+    _cacheSave(vendor, list);
+    return list;
+  } catch (e) {
+    const detail = e?.response?.data?.detail;
+    if (detail === "substore_already_exists") throw new Error("A substore with this email already exists.");
+    if (detail === "cannot_add_self_as_substore") throw new Error("You can't add yourself as a substore.");
+    if (detail === "substore_email_required") throw new Error("Substore email is required.");
+    throw new Error(detail || "Could not add substore.");
+  }
 }
 
-export function removeSubstore(vendor, id) {
-  const list = loadSubstores(vendor).filter((s) => s.id !== id);
-  saveSubstores(vendor, list);
+export async function removeSubstore(vendor, id) {
+  try {
+    await apiLocal.delete(`/vendor/me/substores/${encodeURIComponent(id)}`);
+  } catch (e) {
+    if (e?.response?.status !== 404) throw new Error(e?.response?.data?.detail || "Could not remove substore.");
+  }
+  const list = _cacheLoad(vendor).filter((s) => s.id !== id);
+  _cacheSave(vendor, list);
   return list;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  SSE subscription — realtime push of transfer.* events                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Open an EventSource against /api/vendor/me/transfers/stream and pipe each
+ * event to `onEvent({type, transfer, transfer_id, event})`. Returns a
+ * teardown function.
+ *
+ * Because EventSource can't set custom headers (no Authorization), we pass
+ * the token as a query string. The backend still verifies via the same
+ * network-pay-1 /auth/me delegation.
+ */
+export function subscribeTransfers(token, onEvent) {
+  if (typeof window === "undefined" || !window.EventSource || !token) {
+    return () => {};
+  }
+  const base = process.env.REACT_APP_BACKEND_URL;
+  const url = `${base}/api/vendor/me/transfers/stream?access_token=${encodeURIComponent(token)}`;
+  let es;
+  try {
+    es = new EventSource(url, { withCredentials: false });
+  } catch {
+    return () => {};
+  }
+  const parse = (raw) => { try { return JSON.parse(raw); } catch { return null; } };
+  es.addEventListener("transfer", (e) => {
+    const evt = parse(e.data);
+    if (evt) onEvent(evt);
+  });
+  es.addEventListener("hello", () => { /* connection established */ });
+  es.onerror = () => { /* browser auto-reconnects on transient errors */ };
+  return () => { try { es.close(); } catch { /* noop */ } };
 }
 
 /* -------------------------------------------------------------------------- */

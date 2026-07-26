@@ -137,3 +137,37 @@ def test_reject_flow(tokens):
     assert r_bad.status_code == 403
     r_ok = httpx.post(f"{LOCAL}/vendor/me/transfers/{tid}/reject", headers=h(tokens["b"]), timeout=8.0)
     assert r_ok.status_code == 200 and r_ok.json()["status"] == "rejected"
+
+
+def test_timeline_events_created(tokens):
+    body = {"to_email": CREDS_B["email"], "product_name": "Timeline probe", "qty": 1, "unit_price": 10}
+    tid = httpx.post(f"{LOCAL}/vendor/me/transfers", json=body, headers=h(tokens["a"]), timeout=10.0).json()["id"]
+    # Recipient opens the transfer → adds a "seen" event
+    r_seen = httpx.get(f"{LOCAL}/vendor/me/transfers/{tid}", headers=h(tokens["b"]), timeout=8.0).json()
+    kinds = [ev["kind"] for ev in r_seen["timeline"]]
+    assert "created" in kinds and "seen" in kinds
+    # Accept → adds "accepted"
+    httpx.post(f"{LOCAL}/vendor/me/transfers/{tid}/accept", headers=h(tokens["b"]), timeout=8.0)
+    final = httpx.get(f"{LOCAL}/vendor/me/transfers/{tid}", headers=h(tokens["b"]), timeout=8.0).json()
+    assert any(ev["kind"] == "accepted" for ev in final["timeline"])
+
+
+def test_substore_directory_crud(tokens):
+    payload = {"email": "test-sub@example.com", "name": "Test Sub", "phone": "9999"}
+    r = httpx.post(f"{LOCAL}/vendor/me/substores", json=payload, headers=h(tokens["a"]), timeout=8.0)
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+    # Duplicate rejected
+    r_dup = httpx.post(f"{LOCAL}/vendor/me/substores", json=payload, headers=h(tokens["a"]), timeout=8.0)
+    assert r_dup.status_code == 409
+    # Listing scoped to owner
+    lst_a = httpx.get(f"{LOCAL}/vendor/me/substores", headers=h(tokens["a"]), timeout=8.0).json()["items"]
+    lst_b = httpx.get(f"{LOCAL}/vendor/me/substores", headers=h(tokens["b"]), timeout=8.0).json()["items"]
+    assert any(s["id"] == sid for s in lst_a)
+    assert not any(s["id"] == sid for s in lst_b)
+    # Delete
+    r_del = httpx.delete(f"{LOCAL}/vendor/me/substores/{sid}", headers=h(tokens["a"]), timeout=8.0)
+    assert r_del.status_code == 200
+    # Second delete = 404
+    r_del2 = httpx.delete(f"{LOCAL}/vendor/me/substores/{sid}", headers=h(tokens["a"]), timeout=8.0)
+    assert r_del2.status_code == 404
