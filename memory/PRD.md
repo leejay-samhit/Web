@@ -390,5 +390,37 @@ Four polish features shipped in a single pass, all frontend-first with graceful 
 - Test IDs: `vo-refresh`, `vo-last-synced`.
 - File: `src/pages/vendor/VendorOrders.jsx`.
 
+## Big UX Sweep (05-Feb-2026)
+
+### Dashboard (`src/pages/Dashboard.jsx`)
+- Removed "Users" and "Network" stat cards + Network quick-action tile.
+- New emphasis-piece hero: "Welcome back, {name}" + prominent referral code chip (copy + native share).
+- Wallet + lifetime-earned snapshot moved into hero's right pane.
+- Compact 2-tile stat strip (Wallet · Total earned).
+- **Referral tree** rendered directly on Dashboard as an iterative-flatten expandable tree (recursion avoided due to CRA visual-editor babel plugin). Auto-expands root. Uses `/users/me/network`.
+
+### Chat / Slang-Connect (`src/pages/Chat.jsx`)
+- **Search bar** to filter threads by name / email / referral code / last message.
+- **New Chat modal** (`+` button) — search users via `/users/search` (fallback `/chat/users/search`), POST `/chat/threads` to start.
+- Sync fixes: 20s thread-list polling, unread badges, ISO-sorted list (newest first), avatar fallback via initials, last-seen line in header when provided.
+
+### Wallet (`src/pages/Wallet.jsx`)
+- Removed "Send money" transfer button and modal.
+- Every transaction + withdrawal row now has a **Print Receipt** button that opens a new-window printable Slangcart receipt (auto-invokes `window.print`).
+- 30s auto-sync of `/transactions/me` + `/withdrawals/me` with pulse indicator + manual **Sync** button.
+
+### Layout (`src/components/Layout.jsx`)
+- **Desktop hamburger** in the top bar collapses/expands the left sidebar (16px icon rail ↔ 64px full). State persisted to `localStorage.sc_sidebar_collapsed_v1`. Test IDs: `topbar-sidebar-toggle`, `sidebar[data-collapsed]`.
+
+### Vendor Dashboard (`src/pages/VendorDashboard.jsx`)
+- Added **NewOrdersAlert** widget above the stats grid. Polls upstream `/vendor/me/orders?status=placed` + local mirror every 30s, pulses toast on new arrivals, links to `/vendor/orders`. Matches the mobile-app "New Order" behaviour.
+
+### Vendor Sales dashboard (`src/pages/vendor/VendorSales.jsx`)
+Full refactor:
+- Only **3 clickable KPI tiles**: Today's Sales · This Month Sales · Lifetime Sales — each opens a full-screen **drilldown modal** with search, channel filter (POS · Web/App), payment filter, and (for This Month) a **date-range calendar picker**.
+- **Payment method tiles restricted to CASH · UPI · DEBIT CARD · CREDIT CARD · WALLET** (Net-banking + credit-sale + GST + profit + bills cards removed per user's decision). Scope toggle (Today / Month / All time). Each tile is clickable → drilldown pre-filtered to that mode.
+- Unified sale rows combine **POS invoices (localStorage)** + **upstream `/vendor/me/sales`** + **local mirror `/vendor/me/orders`** with normalised payment-mode classification.
+- 30s auto-sync between web + app, tap-to-print thermal receipt on every row.
+
 ## Credentials
 See `/app/memory/test_credentials.md`.

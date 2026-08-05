@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import api from "@/lib/api";
+import apiLocal from "@/lib/apiLocal";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import { formatINR, formatDateTime } from "@/lib/utils";
-import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2, Search, Sparkles, Check, Info, Strikethrough } from "lucide-react";
+import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2, Search, Sparkles, Check, Info, Strikethrough, ClipboardList, BellRing, ArrowRight } from "lucide-react";
 import { log } from "@/lib/log";
 import { useAuth } from "@/context/AuthContext";
 import VendorNav from "@/components/vendor/VendorNav";
@@ -51,6 +54,110 @@ function Stats({ stats }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  New Orders alert — polls upstream + local mirror every 30s, matches app    */
+/* -------------------------------------------------------------------------- */
+function NewOrdersAlert() {
+  const [pending, setPending] = useState([]);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const prevIdsRef = useRef(new Set());
+  const initedRef = useRef(false);
+
+  const load = useCallback(async () => {
+    const params = { status: "placed" };
+    let merged = [];
+    const seen = new Set();
+    // Upstream
+    try {
+      const { data } = await api.get("/vendor/me/orders", { params });
+      const arr = Array.isArray(data) ? data : data?.items || [];
+      arr.forEach((o) => { if (o?.id && !seen.has(o.id)) { seen.add(o.id); merged.push(o); } });
+    } catch { /* ignore */ }
+    // Local mirror
+    try {
+      const { data } = await apiLocal.get("/vendor/me/orders", { params });
+      const arr = Array.isArray(data?.items) ? data.items : [];
+      arr.forEach((o) => { if (o?.id && !seen.has(o.id)) { seen.add(o.id); merged.push(o); } });
+    } catch { /* ignore */ }
+
+    // Detect newly-arrived orders and toast.
+    if (initedRef.current) {
+      const prev = prevIdsRef.current;
+      const brandNew = merged.filter((o) => !prev.has(o.id));
+      if (brandNew.length > 0) {
+        toast.success(
+          brandNew.length === 1
+            ? "🛎️  New order received!"
+            : `🛎️  ${brandNew.length} new orders received`,
+          { id: "vd-new-orders", description: "Open Orders to accept & ship" }
+        );
+      }
+    }
+    prevIdsRef.current = new Set(merged.map((o) => o.id));
+    initedRef.current = true;
+    setPending(merged);
+    setLastSyncedAt(new Date());
+  }, []);
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(() => document.visibilityState === "visible" && load(), 30000);
+    const onVis = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVis); };
+  }, [load]);
+
+  if (pending.length === 0) {
+    return (
+      <div className="sc-card p-3 mb-4 flex items-center gap-3" data-testid="vd-new-orders-empty">
+        <div className="w-9 h-9 rounded-xl bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)] shrink-0">
+          <ClipboardList size={16} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-extrabold text-[color:var(--sc-ink)]">All caught up — no new orders</div>
+          <div className="text-[11px] text-[color:var(--sc-ink-muted)]">
+            {lastSyncedAt ? <>Auto-syncing every 30s · last {lastSyncedAt.toLocaleTimeString()}</> : "Watching for orders from the app & web…"}
+          </div>
+        </div>
+        <Link to="/vendor/orders" className="text-xs font-bold text-[color:var(--sc-primary)] inline-flex items-center gap-1 hover:underline" data-testid="vd-orders-link">
+          Open orders <ArrowRight size={11} />
+        </Link>
+      </div>
+    );
+  }
+  const first = pending[0];
+  return (
+    <Link
+      to="/vendor/orders"
+      data-testid="vd-new-orders-alert"
+      className="block mb-4 rounded-2xl overflow-hidden ring-1 ring-amber-200 bg-gradient-to-r from-amber-50 to-white hover:from-amber-100 hover:to-white transition"
+    >
+      <div className="p-3 flex items-center gap-3">
+        <div className="relative">
+          <div className="w-11 h-11 rounded-xl bg-amber-500 text-white grid place-items-center shrink-0 shadow">
+            <BellRing size={18} />
+          </div>
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-extrabold grid place-items-center ring-2 ring-white">
+            {pending.length}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-extrabold text-amber-900 truncate">
+            {pending.length === 1 ? "New order awaiting your action" : `${pending.length} new orders awaiting action`}
+          </div>
+          <div className="text-[11px] text-amber-800/80 truncate">
+            #{(first.id || "").slice(0, 8)} · {formatINR(first.amount || first.total || 0)}
+            {lastSyncedAt && <> · synced {lastSyncedAt.toLocaleTimeString()}</>}
+          </div>
+        </div>
+        <div className="text-xs font-bold text-amber-900 inline-flex items-center gap-1">
+          Open orders <ArrowRight size={12} />
+        </div>
+      </div>
+    </Link>
   );
 }
 
@@ -457,6 +564,7 @@ export default function VendorDashboard() {
       <div className="flex items-center gap-2 mb-4 font-extrabold text-[color:var(--sc-ink)]">
         <Store size={18} className="text-[color:var(--sc-primary)]" /> {stats?.vendor?.shop_name || "My shop"}
       </div>
+      <NewOrdersAlert />
       <Stats stats={stats} />
 
       <div className="flex gap-2 mb-3 overflow-x-auto" data-testid="vd-tabs">

@@ -15,6 +15,8 @@ import {
   Calendar,
   Store,
   IdCard,
+  Menu,
+  X as CloseIcon,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
@@ -23,6 +25,8 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { log } from "@/lib/log";
 import { adminGroups } from "@/constants/adminNav";
+
+const SIDEBAR_STATE_KEY = "sc_sidebar_collapsed_v1";
 
 const navItems = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard", testid: "nav-dashboard" },
@@ -92,29 +96,68 @@ export default function Layout({ children, title }) {
   const nav = useNavigate();
   const admin = isAdmin(user);
 
+  // Persistent sidebar collapse (desktop only). Read once, persist on toggle.
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(SIDEBAR_STATE_KEY) === "1"; } catch { return false; }
+  });
+  const toggleSidebar = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      try { localStorage.setItem(SIDEBAR_STATE_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[color:var(--sc-bg)] flex">
-      {/* Sidebar */}
-      <aside className="hidden lg:flex w-64 shrink-0 border-r border-[color:var(--sc-border)] bg-white flex-col">
-        <div className="px-6 py-5 border-b border-[color:var(--sc-border)]">
-          <Link to="/dashboard" data-testid="brand-link" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[color:var(--sc-primary)] text-white grid place-items-center font-extrabold">
+      {/* Sidebar — collapses to icon rail on desktop when toggled */}
+      <aside
+        data-testid="sidebar"
+        data-collapsed={collapsed ? "1" : "0"}
+        className={`hidden lg:flex shrink-0 border-r border-[color:var(--sc-border)] bg-white flex-col transition-[width] duration-300 ease-out ${collapsed ? "w-16" : "w-64"}`}
+      >
+        <div className={`border-b border-[color:var(--sc-border)] flex items-center ${collapsed ? "px-2 py-4 justify-center" : "px-6 py-5 justify-between gap-2"}`}>
+          <Link to="/dashboard" data-testid="brand-link" className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[color:var(--sc-primary)] text-white grid place-items-center font-extrabold shrink-0">
               S
             </div>
-            <div className="leading-tight">
-              <div className="font-extrabold text-[color:var(--sc-ink)]">Slangcart</div>
-              <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Shop · Service · Connect</div>
-            </div>
+            {!collapsed && (
+              <div className="leading-tight min-w-0">
+                <div className="font-extrabold text-[color:var(--sc-ink)] truncate">Slangcart</div>
+                <div className="text-[11px] text-[color:var(--sc-ink-muted)] truncate">Shop · Service · Connect</div>
+              </div>
+            )}
           </Link>
+          {!collapsed && (
+            <button
+              onClick={toggleSidebar}
+              data-testid="sidebar-toggle"
+              title="Collapse sidebar"
+              className="w-8 h-8 rounded-lg hover:bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-ink-muted)] hover:text-[color:var(--sc-primary)] shrink-0"
+            >
+              <CloseIcon size={16} />
+            </button>
+          )}
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {collapsed && (
+          <button
+            onClick={toggleSidebar}
+            data-testid="sidebar-toggle"
+            title="Expand sidebar"
+            className="mx-2 my-2 w-12 h-9 rounded-lg hover:bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-ink-muted)] hover:text-[color:var(--sc-primary)]"
+          >
+            <Menu size={18} />
+          </button>
+        )}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-hidden">
           {navItems.map((it) => (
             <NavLink
               key={it.to}
               to={it.to}
               data-testid={it.testid}
+              title={collapsed ? it.label : undefined}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition ${
+                `flex items-center gap-3 rounded-xl text-sm font-semibold transition ${collapsed ? "px-0 py-2.5 justify-center" : "px-3 py-2.5"} ${
                   isActive
                     ? "bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]"
                     : "text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)]/60"
@@ -122,23 +165,27 @@ export default function Layout({ children, title }) {
               }
             >
               <it.icon size={18} />
-              {it.label}
+              {!collapsed && it.label}
             </NavLink>
           ))}
           {admin && (
             <>
               {adminGroups.map((group) => (
                 <div key={group.title}>
-                  <div className="pt-4 pb-1 px-3 text-[11px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] font-bold">
-                    {group.title}
-                  </div>
+                  {!collapsed && (
+                    <div className="pt-4 pb-1 px-3 text-[11px] uppercase tracking-wider text-[color:var(--sc-ink-muted)] font-bold">
+                      {group.title}
+                    </div>
+                  )}
+                  {collapsed && <div className="my-2 border-t border-[color:var(--sc-border)]" />}
                   {group.items.map((a) => (
                     <NavLink
                       key={a.to}
                       to={a.to}
+                      title={collapsed ? a.label : undefined}
                       data-testid={`admin-nav-${a.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold transition ${
+                        `flex items-center gap-3 rounded-xl text-sm font-semibold transition ${collapsed ? "px-0 py-2 justify-center" : "px-3 py-2"} ${
                           isActive
                             ? "bg-[color:var(--sc-accent-light)] text-[color:var(--sc-primary-700)]"
                             : "text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)]/60"
@@ -146,7 +193,7 @@ export default function Layout({ children, title }) {
                       }
                     >
                       <a.icon size={16} />
-                      {a.label}
+                      {!collapsed && a.label}
                     </NavLink>
                   ))}
                 </div>
@@ -161,9 +208,10 @@ export default function Layout({ children, title }) {
               await logout();
               nav("/login");
             }}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold text-[color:var(--sc-error)] hover:bg-red-50"
+            title={collapsed ? "Log out" : undefined}
+            className={`w-full flex items-center gap-2 rounded-xl text-sm font-semibold text-[color:var(--sc-error)] hover:bg-red-50 ${collapsed ? "justify-center py-2.5" : "px-3 py-2.5"}`}
           >
-            <LogOut size={16} /> Log out
+            <LogOut size={16} /> {!collapsed && "Log out"}
           </button>
         </div>
       </aside>
@@ -173,15 +221,26 @@ export default function Layout({ children, title }) {
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-white/85 backdrop-blur border-b border-[color:var(--sc-border)]">
           <div className="px-4 lg:px-8 h-16 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 lg:hidden">
-              <div className="w-8 h-8 rounded-lg bg-[color:var(--sc-primary)] text-white grid place-items-center font-extrabold">
-                S
+            <div className="flex items-center gap-2.5">
+              {/* Desktop hamburger toggle — expands sidebar to full or hides it */}
+              <button
+                onClick={toggleSidebar}
+                data-testid="topbar-sidebar-toggle"
+                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="hidden lg:grid w-10 h-10 rounded-lg border border-[color:var(--sc-border)] place-items-center text-[color:var(--sc-ink)] hover:bg-[color:var(--sc-accent-light)] hover:text-[color:var(--sc-primary)] transition"
+              >
+                <Menu size={18} />
+              </button>
+              <div className="flex items-center gap-2.5 lg:hidden">
+                <div className="w-8 h-8 rounded-lg bg-[color:var(--sc-primary)] text-white grid place-items-center font-extrabold">
+                  S
+                </div>
+                <span className="font-extrabold text-[color:var(--sc-ink)]">Slangcart</span>
               </div>
-              <span className="font-extrabold text-[color:var(--sc-ink)]">Slangcart</span>
+              <h1 data-testid="page-title" className="hidden lg:block text-lg font-extrabold text-[color:var(--sc-ink)] ml-1">
+                {title}
+              </h1>
             </div>
-            <h1 data-testid="page-title" className="hidden lg:block text-lg font-extrabold text-[color:var(--sc-ink)]">
-              {title}
-            </h1>
             <div className="flex items-center gap-2">
               <Link
                 to="/wishlist"
