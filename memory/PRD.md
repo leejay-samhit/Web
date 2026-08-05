@@ -422,5 +422,18 @@ Full refactor:
 - Unified sale rows combine **POS invoices (localStorage)** + **upstream `/vendor/me/sales`** + **local mirror `/vendor/me/orders`** with normalised payment-mode classification.
 - 30s auto-sync between web + app, tap-to-print thermal receipt on every row.
 
+## Deployment Fixes (05-Feb-2026)
+
+### Frontend build failure (blocker → fixed)
+- Root cause: `isomorphic-dompurify@3.20.0+` requires Node ^22.22.2, but cloud build image is Node 20.19.5. `yarn.lock` isn't tracked in git, so build regenerated it and picked the latest incompatible version.
+- Fix: pinned `isomorphic-dompurify` to exact `3.19.0` (last Node-20-compatible version) in both `dependencies` and `resolutions` in `frontend/package.json`. Fresh `yarn install --prefer-offline` + `CI=true yarn build` verified green.
+
+### Nginx `/health` upstream refused (blocker → fixed)
+- Root cause: backend only exposed `/api/health` under the `APIRouter(prefix="/api")`. Container-level nginx liveness probes hit `/health` (no /api) and got "connection refused" (interpreted as backend crash).
+- Fix: added a bare `/health` route on the FastAPI `app` in `backend/server.py`, mirroring `/api/health` (both `await db.command("ping")` and return `{"ok": true}`).
+
+### Frontend external-backend URL now env-configurable
+- `frontend/src/lib/api.js`: `BACKEND_URL` reads `process.env.REACT_APP_SLANGCART_API_URL` with a documented fallback default. Local backend (`apiLocal.js`) still uses `REACT_APP_BACKEND_URL` — dual-backend architecture preserved.
+
 ## Credentials
 See `/app/memory/test_credentials.md`.
