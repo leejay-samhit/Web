@@ -2,11 +2,14 @@ import axios from "axios";
 import { getToken, getRefresh, setTokens, clearTokens } from "@/lib/tokenStore";
 import { API_TIMEOUT_MS, HTTP_UNAUTHORIZED } from "@/constants/config";
 
-// Backend URL is intentionally hardcoded here. The Emergent Deploy pipeline was
-// failing to bake REACT_APP_BACKEND_URL into the slangcart.com production build
-// reliably (env-var save was silently no-op'd), so we pin the URL in source.
-// Backend lives in a separate Emergent job; mobile app talks to the same host.
-const BACKEND_URL = "https://network-pay-1.emergent.host";
+// External Slangcart backend (network-pay-1) — a separate Emergent job that
+// hosts products, auth, wallet, orders. Reads from REACT_APP_SLANGCART_API_URL
+// when set (so ops can rotate the upstream host) and falls back to the pinned
+// production hostname. The LOCAL container backend (REACT_APP_BACKEND_URL) is
+// used by `apiLocal.js` for substore transfers / mirrored orders / owner sec.
+const BACKEND_URL =
+  process.env.REACT_APP_SLANGCART_API_URL ||
+  "https://network-pay-1.emergent.host";
 export const API_BASE = `${BACKEND_URL}/api`;
 
 const api = axios.create({
