@@ -805,6 +805,19 @@ async def get_status_checks():
 
 app.include_router(api_router)
 
+
+# Bare `/health` route for platforms whose liveness probes hit /health directly
+# (e.g. nginx sidecar in the deployment container). Duplicates /api/health so
+# neither the ingress nor the container-level probe misses.
+@app.get("/health")
+async def health_root():
+    try:
+        await db.command("ping")
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
