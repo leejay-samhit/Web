@@ -62,11 +62,9 @@ export default function VendorCashSummary() {
             <Row label="Cash sales (+)" value={summary.cash_sales} />
             <Row label="UPI sales" value={summary.upi_sales} />
             <Row label="Card sales" value={summary.card_sales} />
-            <Row label="Net banking" value={summary.netbank_sales} />
             <Row label="Wallet sales" value={summary.wallet_sales} />
           </div>
           <div>
-            <Row label="Credit sales (pending)" value={summary.credit_sales} />
             <Row label="Total collections" value={summary.total_collections} />
             <Row label="Bills generated" value={summary.bills_count} isCount />
             <Row label="Refunds (−)" value={summary.refunds} sign="-" />
@@ -77,7 +75,7 @@ export default function VendorCashSummary() {
           </div>
         </div>
         <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-3 italic">
-          Closing = Opening + Cash sales − Refunds. This is a vendor business report only and does NOT affect any Slangcart wallet or platform settlement.
+          Closing = Opening + Cash sales − Refunds. POS (offline / walk-in) transactions only — online shop sales are NOT included here. Does NOT affect any Slangcart wallet or platform settlement.
         </div>
       </div>
 

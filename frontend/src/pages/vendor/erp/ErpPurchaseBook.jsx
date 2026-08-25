@@ -3,12 +3,11 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
 import DashboardCard from "@/components/erp/DashboardCard";
-import BackendPendingBanner from "@/components/erp/BackendPendingBanner";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDate } from "@/lib/utils";
-import { listPurchases, purchaseSummary, createPurchase, paiseToRupees, rupeesToPaise } from "@/lib/erp";
-import { BookOpen, Plus, Package, ShoppingCart, IndianRupee, Users, Percent, X, Save } from "lucide-react";
+import { listPurchases, purchaseSummary, createPurchase, updatePurchase, deletePurchase, paiseToRupees, rupeesToPaise } from "@/lib/erp";
+import { BookOpen, Plus, Package, ShoppingCart, IndianRupee, Users, Percent, X, Save, Pencil, Trash2 } from "lucide-react";
 
 export default function ErpPurchaseBook() {
   return (
@@ -45,6 +44,7 @@ function PurchaseBookInner({ ownerPassword }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingRow, setEditingRow] = useState(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -59,16 +59,20 @@ function PurchaseBookInner({ ownerPassword }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const onDeleteRow = async (row) => {
+    if (!window.confirm(`Delete purchase entry "${row.productName}"?`)) return;
+    await deletePurchase(vendorId, row._id);
+    await refresh();
+  };
+
   return (
     <>
-      <BackendPendingBanner endpoint="/api/erp/purchases" note="Local records will sync to the server once available." />
-
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-          <DashboardCard icon={ShoppingCart} label="Total purchase value" value={formatINR(paiseToRupees(summary.totalPurchaseValue_paise))} tone="purchase" testId="pb-total-value" />
+          <DashboardCard icon={ShoppingCart} label="Total purchase value" value={formatINR(paiseToRupees(summary.totalPurchaseValue_paise))} tone="purchase" testId="pb-total-value" hint={`Master ${formatINR(paiseToRupees(summary.masterPurchaseValue_paise || 0))} + Entries ${formatINR(paiseToRupees(summary.purchasesValue_paise || 0))}`} />
           <DashboardCard icon={Package}       label="Inventory value"      value={formatINR(paiseToRupees(summary.currentInventoryValue_paise))} tone="stock" testId="pb-inv-value" />
-          <DashboardCard icon={IndianRupee}   label="Purchase GST"         value={formatINR(paiseToRupees(summary.totalGstPaid_paise))} tone="gst" testId="pb-gst" />
-          <DashboardCard icon={Package}       label="Products"             value={summary.totalProducts} tone="default" testId="pb-products" />
+          <DashboardCard icon={IndianRupee}   label="Purchase GST"         value={formatINR(paiseToRupees(summary.totalGstPaid_paise))} tone="gst" testId="pb-gst" hint={`Master ${formatINR(paiseToRupees(summary.masterPurchaseGst_paise || 0))} + Entries ${formatINR(paiseToRupees(summary.purchasesGst_paise || 0))}`} />
+          <DashboardCard icon={Package}       label="Products"             value={summary.totalProducts} tone="default" testId="pb-products" hint={`Master ${summary.masterProducts || 0} + Entries ${summary.purchaseProducts || 0}`} />
           <DashboardCard icon={Users}         label="Suppliers"            value={summary.totalSuppliers} tone="default" testId="pb-suppliers" />
           <DashboardCard icon={Percent}       label="Avg profit margin"    value={`${(summary.avgProfitMarginPct || 0).toFixed(1)}%`} tone="profit" testId="pb-margin" />
         </div>
@@ -107,6 +111,7 @@ function PurchaseBookInner({ ownerPassword }) {
                 <th className="text-right px-3 py-2">GST</th>
                 <th className="text-right px-3 py-2">Total</th>
                 <th className="text-right px-3 py-2">Margin</th>
+                <th className="text-right px-3 py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -127,6 +132,22 @@ function PurchaseBookInner({ ownerPassword }) {
                   <td className="px-3 py-2 text-right text-amber-700">{r.gstPct}%</td>
                   <td className="px-3 py-2 text-right font-semibold">{formatINR(paiseToRupees(r.totalPurchaseValue_paise))}</td>
                   <td className="px-3 py-2 text-right text-emerald-700">{(r.profitMarginPct || 0).toFixed(1)}%</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => setEditingRow(r)}
+                        data-testid={`pb-edit-${r._id}`}
+                        title="Edit"
+                        className="w-7 h-7 rounded-md text-sky-700 hover:bg-sky-50 grid place-items-center"
+                      ><Pencil size={13} /></button>
+                      <button
+                        onClick={() => onDeleteRow(r)}
+                        data-testid={`pb-del-${r._id}`}
+                        title="Delete"
+                        className="w-7 h-7 rounded-md text-rose-700 hover:bg-rose-50 grid place-items-center"
+                      ><Trash2 size={13} /></button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -142,12 +163,50 @@ function PurchaseBookInner({ ownerPassword }) {
           onSaved={async () => { setShowForm(false); await refresh(); }}
         />
       )}
+      {editingRow && (
+        <NewPurchaseModal
+          ownerPassword={ownerPassword}
+          vendorId={vendorId}
+          initialRow={editingRow}
+          onClose={() => setEditingRow(null)}
+          onSaved={async () => { setEditingRow(null); await refresh(); }}
+        />
+      )}
     </>
   );
 }
 
-function NewPurchaseModal({ ownerPassword, vendorId, onClose, onSaved }) {
-  const [draft, setDraft] = useState(EMPTY_PURCHASE);
+function NewPurchaseModal({ ownerPassword, vendorId, initialRow = null, onClose, onSaved }) {
+  const isEdit = !!initialRow;
+  const [draft, setDraft] = useState(() => {
+    if (!initialRow) return EMPTY_PURCHASE;
+    // Rehydrate a single-row edit into the modal shape.
+    return {
+      purchaseDate: initialRow.purchaseDate || new Date().toISOString().slice(0, 10),
+      invoiceNumber: initialRow.invoiceNumber || "",
+      supplier: {
+        name: initialRow.supplierName || "",
+        gstin: initialRow.supplierGstin || "",
+        mobile: initialRow.supplierMobile || "",
+        address: initialRow.supplierAddress || "",
+      },
+      items: [{
+        productName: initialRow.productName || "",
+        barcode: initialRow.barcode || "",
+        category: initialRow.category || "",
+        hsnCode: initialRow.hsnCode || "",
+        quantity: initialRow.quantity || 1,
+        freeQuantity: initialRow.freeQuantity || 0,
+        purchasePriceExGst: paiseToRupees(initialRow.purchasePriceExGst_paise || 0),
+        gstPct: initialRow.gstPct || 0,
+        gstType: initialRow.gstType || "CGST_SGST",
+        sellingPrice: paiseToRupees(initialRow.sellingPrice_paise || 0),
+        mrp: paiseToRupees(initialRow.mrp_paise || 0),
+        batchNumber: initialRow.batchNumber || "",
+        expiryDate: initialRow.expiryDate || "",
+      }],
+    };
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -197,11 +256,40 @@ function NewPurchaseModal({ ownerPassword, vendorId, onClose, onSaved }) {
     }
   };
 
+  // Route through updatePurchase when editing an existing row.
+  const saveEdit = async () => {
+    setErr(""); setBusy(true);
+    try {
+      const it = draft.items[0];
+      const payload = {
+        purchaseDate: draft.purchaseDate,
+        invoiceNumber: draft.invoiceNumber,
+        supplier: draft.supplier,
+        items: [{
+          productName: it.productName, barcode: it.barcode, category: it.category, hsnCode: it.hsnCode,
+          quantity: Number(it.quantity), freeQuantity: Number(it.freeQuantity),
+          purchasePriceExGst_paise: rupeesToPaise(it.purchasePriceExGst),
+          gstPct: Number(it.gstPct), gstType: it.gstType,
+          sellingPrice_paise: rupeesToPaise(it.sellingPrice),
+          mrp_paise: rupeesToPaise(it.mrp),
+          batchNumber: it.batchNumber,
+          expiryDate: it.expiryDate || null,
+        }],
+      };
+      await updatePurchase(vendorId, initialRow._id, payload);
+      await onSaved();
+    } catch (e) {
+      setErr(e?.response?.data?.detail || "Could not save purchase");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 z-40 grid place-items-center p-4 overflow-y-auto">
       <div className="sc-card w-full max-w-4xl p-5 my-6" data-testid="pb-form">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-lg font-extrabold">New purchase invoice</div>
+          <div className="text-lg font-extrabold">{isEdit ? "Edit purchase entry" : "New purchase invoice"}</div>
           <button onClick={onClose}><X size={18} /></button>
         </div>
 
@@ -250,8 +338,8 @@ function NewPurchaseModal({ ownerPassword, vendorId, onClose, onSaved }) {
 
         <div className="flex items-center justify-end gap-2">
           <button onClick={onClose} className="rounded-full px-4 py-2 text-sm border border-[color:var(--sc-border)]">Cancel</button>
-          <button onClick={save} disabled={busy || !draft.invoiceNumber} className="rounded-full px-4 py-2 text-sm bg-[color:var(--sc-primary)] text-white font-semibold inline-flex items-center gap-1.5 disabled:opacity-50" data-testid="pb-save-btn">
-            <Save size={14} /> {busy ? "Saving…" : "Save purchase"}
+          <button onClick={isEdit ? saveEdit : save} disabled={busy || !draft.invoiceNumber} className="rounded-full px-4 py-2 text-sm bg-[color:var(--sc-primary)] text-white font-semibold inline-flex items-center gap-1.5 disabled:opacity-50" data-testid="pb-save-btn">
+            <Save size={14} /> {busy ? "Saving…" : (isEdit ? "Save changes" : "Save purchase")}
           </button>
         </div>
       </div>

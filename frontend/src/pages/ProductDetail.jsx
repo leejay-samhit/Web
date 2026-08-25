@@ -3,7 +3,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
-import { formatINR } from "@/lib/utils";
+import { formatINR, resolveImageUrl } from "@/lib/utils";
 import {
   ArrowLeft, Check, Heart, Hand, Plus, Minus, ShoppingBag, Tag, Truck, ShieldCheck,
   Star, Award, Zap, ChevronRight, Store, Share2,
@@ -674,7 +674,7 @@ export default function ProductDetail() {
     if (product.image_url) list.push(product.image_url);
     if (Array.isArray(product.images)) list.push(...product.images.filter(Boolean));
     if (Array.isArray(product.gallery)) list.push(...product.gallery.filter(Boolean));
-    return Array.from(new Set(list));
+    return Array.from(new Set(list)).map(resolveImageUrl);
   }, [product]);
 
   return (

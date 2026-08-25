@@ -435,5 +435,34 @@ Full refactor:
 ### Frontend external-backend URL now env-configurable
 - `frontend/src/lib/api.js`: `BACKEND_URL` reads `process.env.REACT_APP_SLANGCART_API_URL` with a documented fallback default. Local backend (`apiLocal.js`) still uses `REACT_APP_BACKEND_URL` — dual-backend architecture preserved.
 
+## Batch 1 — Critical Bugs & ERP Rebrand (25-Aug-2026)
+
+### Fixes
+- **Shop / Cart / Checkout / Wishlist / PDP images**: added `resolveImageUrl()` in `lib/utils.js` and applied to every `src={p.image_url}`. Relative `/api/products/{id}/image?...` responses now resolve to the external Slangcart backend.
+- **Chat New-Chat search**: modal now tries `/users/search`, `/chat/users/search`, `/admin/users`, `/users` in sequence; when none return results, offers a direct "Start chat with `<code>`" button that POSTs `/chat/threads` with either `referral_code` or `email` (Enter key also triggers).
+- **Product Master save**: `saveProduct()` now re-throws real backend errors (only falls back to localStorage on 404/405). Users see genuine failures instead of silent losses.
+- **Purchase Book "Rate Inc GST" = 0**: `_buildPurchaseRow()` coerces `Number()` on every input; edit + delete rows supported via `updatePurchase()`/`deletePurchase()`; preview-mode banner removed. Totals aggregate Product Master + Purchase Entries (Total Purchase Value, Purchase GST, Products count).
+- **Sales Dashboard "Recent" click**: `openReceipt()` in `VendorSales.jsx` now renders full item breakdown when the row has `raw.items` (POS invoices) — no more blank receipts.
+- **Invoices page**: merges POS invoices + upstream `/vendor/me/sales` + local mirror `/vendor/me/orders`; 30s auto-sync + Sync button; payment mode dropdown filters out Net Banking + Credit Sale.
+- **Vendor POS checkout modal**: payment mode dropdown filters out Net Banking + Credit Sale.
+
+### ERP → "GST and Tax Return"
+- `VendorNav` label renamed. `ErpNav` tab list reduced to 12: GST Hub, Product Master, Purchase Book, Inventory, Accounts, Smart GST, Reminders, Income Tax, Reports, Roles & Staff, Audit, Owner Settings, Learn. `ErpHub` tiles + hero text updated.
+- Deleted: Billing, Price Lock, Profit, GST, Business Profile, Compliance, Financial Health, Search (routes still exist but no longer in nav).
+
+### Vendor Products
+- **Stock Report** download button on the products tab — CSV with Stock qty · Name · Price · MRP · Category · Sub-category · Brand · HSN · SKU · Pincode · Updated.
+
+### Cash Summary
+- Net Banking + Credit Sales rows removed. Note now explicitly says "POS (offline / walk-in) transactions only".
+
+### Deferred (larger scope, not in this batch)
+- POS billing GST-inclusive toggle in UI (math already correct in `computeTotals`)
+- POS billing price lock (UI change only)
+- Collect Payment modal redesign + save-customer-list + download
+- Full offline POS mode (IndexedDB queue + service worker)
+- Order status button removal / app sync
+- Preview vs Production shop-open speed (production perf tuning)
+
 ## Credentials
 See `/app/memory/test_credentials.md`.

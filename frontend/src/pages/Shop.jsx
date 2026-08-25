@@ -5,7 +5,7 @@ import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import LocationBanner from "@/components/LocationBanner";
-import { formatINR } from "@/lib/utils";
+import { formatINR, resolveImageUrl } from "@/lib/utils";
 import { Search, ShoppingBag, Plus, Check } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
@@ -31,7 +31,7 @@ function ProductCard({ p, inCart, busy, onAdd }) {
       {/* Hero image with badges */}
       <Link to={`/product/${p.id}`} className="relative aspect-square bg-white overflow-hidden block">
         {p.image_url ? (
-          <img alt="" src={p.image_url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+          <img alt="" src={resolveImageUrl(p.image_url)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         ) : (
           <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]/40 bg-[color:var(--sc-accent-light)]"><ShoppingBag size={40} /></div>
         )}

@@ -335,18 +335,31 @@ function SalesDrilldown({ open, title, rows, from, to, onClose, onChangeRange, a
  *  Print a POS-style thermal receipt for any row
  * ============================================================ */
 function openReceipt(row) {
+  const items = Array.isArray(row?.raw?.items) ? row.raw.items : [];
+  const itemsRows = items.map((it) => {
+    const name = it.product_name || it.name || "Item";
+    const qty = Number(it.qty || 1);
+    const price = Number(it.price || 0);
+    const line = Number(it.line_total ?? qty * price);
+    return `<tr><td style="padding:4px 0;">${name}</td><td style="text-align:right;padding:4px 0;">${qty}</td><td style="text-align:right;padding:4px 0;">${formatINR(price)}</td><td style="text-align:right;padding:4px 0;font-weight:600;">${formatINR(line)}</td></tr>`;
+  }).join("");
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"/><title>Receipt · ${row.invoice_no || row.id}</title>
 <style>
-  body{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;color:#0F172A;margin:0;padding:24px;max-width:420px;}
+  body{font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;color:#0F172A;margin:0;padding:24px;max-width:520px;}
   .brand{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-  .logo{width:38px;height:38px;border-radius:10px;background:#0F6E4F;color:#fff;font-weight:800;display:grid;place-items:center;font-size:18px;}
-  h1{font-size:16px;margin:12px 0 4px;}
+  .logo{width:40px;height:40px;border-radius:10px;background:#0F6E4F;color:#fff;font-weight:800;display:grid;place-items:center;font-size:18px;}
+  h1{font-size:16px;margin:14px 0 4px;}
   .muted{color:#64748B;font-size:11px;}
   .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #E2E8F0;font-size:12px;}
   .row:last-child{border-bottom:0;}
   .k{color:#64748B;}
   .v{font-weight:600;}
+  table.items{width:100%;font-size:12px;border-collapse:collapse;margin-top:10px;}
+  table.items thead{background:#F1F5F9;color:#334155;text-transform:uppercase;font-size:10px;}
+  table.items th{padding:6px 8px;text-align:right;}
+  table.items th:first-child{text-align:left;}
+  table.items td{padding:6px 8px;border-bottom:1px dashed #E2E8F0;}
   .amt{font-size:22px;font-weight:800;color:#0F6E4F;margin-top:8px;text-align:right;border-top:2px solid #0F6E4F;padding-top:6px;}
   .chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:#E8F4ED;color:#0F6E4F;letter-spacing:.05em;text-transform:uppercase;}
   @media print { body { padding: 8px; } .noprint { display:none; } }
@@ -354,9 +367,7 @@ function openReceipt(row) {
   <div class="brand"><div class="logo">S</div><div><b>Slangcart</b><div class="muted">Shop · Service · Connect</div></div></div>
   <h1>Sales receipt</h1>
   <div class="muted">${formatDateTime(row.when) || ""}</div>
-  <div style="margin-top:12px;">
-    <div class="chip">${(row.channel || "").toUpperCase()}</div>
-  </div>
+  <div style="margin-top:10px;"><div class="chip">${(row.channel || "").toUpperCase()}</div></div>
   <div style="margin-top:12px;">
     <div class="row"><span class="k">Invoice</span><span class="v">${row.invoice_no || row.id}</span></div>
     <div class="row"><span class="k">Customer</span><span class="v">${row.customer || "Walk-in"}</span></div>
@@ -364,6 +375,12 @@ function openReceipt(row) {
     <div class="row"><span class="k">Payment</span><span class="v">${(PAY_META[row.mode]?.label) || row.mode || "—"}</span></div>
     <div class="row"><span class="k">Status</span><span class="v">${row.status || "posted"}</span></div>
   </div>
+  ${items.length ? `
+    <table class="items">
+      <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+      <tbody>${itemsRows}</tbody>
+    </table>
+  ` : `<div class="muted" style="margin-top:14px;text-align:center;">No item breakdown available for this ${row.channel || "sale"}.</div>`}
   <div class="amt">${formatINR(row.amount).replace(/[^\d.,₹\-\+ ]/g, "")}</div>
   <div class="muted" style="margin-top:14px;text-align:center;">Thank you for your business — Slangcart</div>
   <div class="noprint" style="text-align:center;margin-top:16px;">
@@ -371,7 +388,7 @@ function openReceipt(row) {
   </div>
   <script>window.onload=()=>setTimeout(()=>window.print(),200);</script>
 </body></html>`;
-  const w = window.open("", "_blank", "noopener,noreferrer,width=520,height=780");
+  const w = window.open("", "_blank", "noopener,noreferrer,width=580,height=820");
   if (!w) { alert("Please allow pop-ups to print the receipt."); return; }
   w.document.write(html);
   w.document.close();

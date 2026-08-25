@@ -144,9 +144,15 @@ export async function saveProduct(vendorId, payload, ownerPassword) {
     return fromProdProduct(data);
   } catch (e) {
     if (isOwnerRequired(e)) throw e;
-    if (e?.response?.status !== 404 && e?.response?.status !== 405) log.error("saveProduct", e);
-    // fallback local (used for demos or when the create endpoint is
-    // temporarily unavailable)
+    const status = e?.response?.status;
+    // Only fall back to local when the endpoint truly doesn't exist (create
+    // route not shipped yet). Any real backend rejection (400/401/403/409/422/500)
+    // must surface to the user so they know the change didn't persist.
+    if (status !== 404 && status !== 405) {
+      log.error("saveProduct", e);
+      throw e;
+    }
+    // Local fallback (only when the create/update route is 404/405)
     const list = lsGet(vendorId, "products", []);
     const p = isNew
       ? [...list, { ...payload, _id: `local-${Date.now()}`, createdAt: new Date().toISOString() }]
@@ -166,13 +172,20 @@ export async function deleteProduct(vendorId, id, ownerPassword) {
   }
 }
 
-// ─── Purchase Book (still local — no backend endpoint yet) ─────────────────
+// ─── Purchase Book (localStorage-backed; edit/delete supported) ────────────
 export async function listPurchases(vendorId /*, params, ownerPassword */) {
   return lsGet(vendorId, "purchases", []);
 }
-export async function createPurchase(vendorId, payload /*, ownerPassword */) {
-  const rows = (payload.items || []).map((it, i) => ({
-    _id: `local-${Date.now()}-${i}`,
+
+function _buildPurchaseRow(vendorId, payload, it, i, existingId) {
+  const exGst = Math.max(0, Number(it.purchasePriceExGst_paise) || 0);
+  const gstPct = Math.max(0, Number(it.gstPct) || 0);
+  const gstAmount = Math.round(exGst * gstPct / 100);
+  const incGst = exGst + gstAmount;
+  const qty = Math.max(0, Number(it.quantity) || 0);
+  const sell = Math.max(0, Number(it.sellingPrice_paise) || 0);
+  return {
+    _id: existingId || `local-${Date.now()}-${i}`,
     vendorId,
     purchaseDate: payload.purchaseDate,
     invoiceNumber: payload.invoiceNumber,
@@ -184,41 +197,81 @@ export async function createPurchase(vendorId, payload /*, ownerPassword */) {
     barcode: it.barcode || "",
     category: it.category || "",
     hsnCode: it.hsnCode || "",
-    quantity: it.quantity,
-    freeQuantity: it.freeQuantity || 0,
-    purchasePriceExGst_paise: it.purchasePriceExGst_paise,
-    gstPct: it.gstPct,
+    quantity: qty,
+    freeQuantity: Math.max(0, Number(it.freeQuantity) || 0),
+    purchasePriceExGst_paise: exGst,
+    gstPct,
     gstType: it.gstType,
-    gstAmount_paise: Math.round(it.purchasePriceExGst_paise * it.gstPct / 100),
-    purchasePriceIncGst_paise: it.purchasePriceExGst_paise + Math.round(it.purchasePriceExGst_paise * it.gstPct / 100),
-    totalPurchaseValue_paise: (it.purchasePriceExGst_paise + Math.round(it.purchasePriceExGst_paise * it.gstPct / 100)) * it.quantity,
-    sellingPrice_paise: it.sellingPrice_paise,
-    mrp_paise: it.mrp_paise,
-    profitMarginPct: it.sellingPrice_paise && it.purchasePriceExGst_paise
-      ? ((it.sellingPrice_paise - it.purchasePriceExGst_paise) / it.sellingPrice_paise) * 100 : 0,
-    createdAt: new Date().toISOString(),
-  }));
+    gstAmount_paise: gstAmount,
+    purchasePriceIncGst_paise: incGst,
+    totalPurchaseValue_paise: incGst * qty,
+    sellingPrice_paise: sell,
+    mrp_paise: Math.max(0, Number(it.mrp_paise) || 0),
+    profitMarginPct: sell && exGst ? ((sell - exGst) / sell) * 100 : 0,
+    createdAt: existingId ? undefined : new Date().toISOString(),
+    updatedAt: existingId ? new Date().toISOString() : undefined,
+  };
+}
+
+export async function createPurchase(vendorId, payload /*, ownerPassword */) {
+  const rows = (payload.items || []).map((it, i) => _buildPurchaseRow(vendorId, payload, it, i, null));
   lsSet(vendorId, "purchases", [...lsGet(vendorId, "purchases", []), ...rows]);
   return { ok: true, rows };
 }
+
+export async function updatePurchase(vendorId, purchaseId, payload) {
+  const list = lsGet(vendorId, "purchases", []);
+  const it = (payload.items || [])[0] || payload;
+  const next = list.map((r) => r._id === purchaseId ? _buildPurchaseRow(vendorId, payload, it, 0, purchaseId) : r);
+  lsSet(vendorId, "purchases", next);
+  return { ok: true };
+}
+
+export async function deletePurchase(vendorId, purchaseId) {
+  const list = lsGet(vendorId, "purchases", []).filter((r) => r._id !== purchaseId);
+  lsSet(vendorId, "purchases", list);
+  return { ok: true };
+}
+
 export async function purchaseSummary(vendorId) {
   const rows = lsGet(vendorId, "purchases", []);
-  const totalPurchaseValue_paise = rows.reduce((s, r) => s + (r.totalPurchaseValue_paise || 0), 0);
-  const totalGstPaid_paise = rows.reduce((s, r) => s + (r.gstAmount_paise || 0) * (r.quantity || 0), 0);
+  const purchasesValue_paise = rows.reduce((s, r) => s + (r.totalPurchaseValue_paise || 0), 0);
+  const purchasesGst_paise = rows.reduce((s, r) => s + (r.gstAmount_paise || 0) * (r.quantity || 0), 0);
   const suppliers = new Set(rows.map((r) => r.supplierName).filter(Boolean));
-  const products = new Set(rows.map((r) => r.productName));
+  const purchaseProducts = new Set(rows.map((r) => r.productName));
   const margins = rows.map((r) => r.profitMarginPct || 0);
   const avgProfitMarginPct = margins.length ? margins.reduce((s, m) => s + m, 0) / margins.length : 0;
-  // Prefer live inventory value from real products
-  let inventoryValue_paise = totalPurchaseValue_paise;
+
+  // Aggregate with Product Master (live catalog) — user decision Feb-2026:
+  //   Total Purchase Value = Product Master (purchase price × current stock) + Purchase Book entries
+  //   Purchase GST = Product Master GST (on purchase cost × stock) + Purchase Book GST
+  //   Products = master product count + unique purchase products
+  let masterPurchaseValue_paise = 0;
+  let masterPurchaseGst_paise = 0;
+  let masterProducts = 0;
+  let inventoryValue_paise = purchasesValue_paise;
   try {
     const live = await listProducts(vendorId);
-    inventoryValue_paise = live.reduce((s, p) => s + (p.sellingPrice_paise || 0) * (p.currentStock || 0), 0);
-  } catch { /* keep default */ }
+    masterProducts = live.length;
+    live.forEach((p) => {
+      const cost = Number(p.purchasePriceExGst_paise || 0);
+      const stock = Number(p.currentStock || 0);
+      const gstPct = Number(p.gstPct || 0);
+      masterPurchaseValue_paise += cost * stock;
+      masterPurchaseGst_paise += Math.round(cost * gstPct / 100) * stock;
+    });
+    inventoryValue_paise = live.reduce((s, p) => s + (Number(p.sellingPrice_paise) || 0) * (Number(p.currentStock) || 0), 0);
+  } catch { /* keep defaults */ }
+
   return {
-    totalPurchaseValue_paise,
-    totalGstPaid_paise,
-    totalProducts: products.size,
+    // Aggregated totals (Product Master + Purchase entries) — new per user decision
+    totalPurchaseValue_paise: masterPurchaseValue_paise + purchasesValue_paise,
+    totalGstPaid_paise: masterPurchaseGst_paise + purchasesGst_paise,
+    totalProducts: masterProducts + purchaseProducts.size,
+    // Individual splits (so UI can hint "master + entries")
+    masterPurchaseValue_paise, purchasesValue_paise,
+    masterPurchaseGst_paise, purchasesGst_paise,
+    masterProducts, purchaseProducts: purchaseProducts.size,
     totalSuppliers: suppliers.size,
     avgProfitMarginPct,
     currentInventoryValue_paise: inventoryValue_paise,

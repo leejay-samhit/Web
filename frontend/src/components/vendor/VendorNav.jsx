@@ -9,7 +9,7 @@ const ITEMS = [
   { to: "/vendor/invoices",   label: "Invoices",           icon: FileSpreadsheet },
   { to: "/vendor/cash",       label: "Cash summary",       icon: IndianRupee },
   { to: "/vendor/substore",   label: "Vendor → Substore",  icon: Repeat },
-  { to: "/vendor/erp",        label: "ERP 3.0",            icon: Rocket },
+  { to: "/vendor/erp",        label: "GST and Tax Return", icon: Rocket },
   { to: "/vendor/analytics",  label: "Analytics",          icon: BarChart3 },
   { to: "/vendor/settings",   label: "Shop settings",      icon: SettingsIcon },
 ];

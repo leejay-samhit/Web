@@ -6,7 +6,7 @@ import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import Spinner from "@/components/Spinner";
 import { useAuth } from "@/context/AuthContext";
-import { formatINR, formatDateTime } from "@/lib/utils";
+import { formatINR, formatDateTime, resolveImageUrl } from "@/lib/utils";
 import { log } from "@/lib/log";
 import { Download, Search, ArrowRight, Package, Phone, MapPin, User as UserIcon, RefreshCw } from "lucide-react";
 import {
@@ -407,7 +407,7 @@ function OrderCard({ order, busy, onAdvance }) {
         {items.map((it, i) => (
           <div key={`${it.product_id || it.id || i}`} className="flex items-center gap-3 p-2 border border-[color:var(--sc-border)] rounded-lg">
             <div className="w-12 h-12 rounded-lg bg-[color:var(--sc-accent-light)] overflow-hidden shrink-0 grid place-items-center border border-[color:var(--sc-border)]">
-              {it.image_url ? <img alt="" src={it.image_url} className="w-full h-full object-cover" /> : <Package size={18} className="text-[color:var(--sc-primary)]/60" />}
+              {it.image_url ? <img alt="" src={resolveImageUrl(it.image_url)} className="w-full h-full object-cover" /> : <Package size={18} className="text-[color:var(--sc-primary)]/60" />}
             </div>
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-sm text-[color:var(--sc-ink)] truncate">{it.product_name || it.name || "Product"}</div>

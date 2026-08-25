@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
-import { formatINR } from "@/lib/utils";
+import { formatINR, resolveImageUrl } from "@/lib/utils";
 import { Plus, Trash2, X, Loader2 } from "lucide-react";
 import { log } from "@/lib/log";
 import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
@@ -165,7 +165,7 @@ export default function AdminProducts() {
             <div key={p.id} className="sc-card overflow-hidden flex flex-col" data-testid={`ap-card-${p.id}`}>
               <div className="aspect-square bg-[color:var(--sc-accent-light)]">
                 {p.image_url && (
-                  <img alt="" src={p.image_url} className="w-full h-full object-cover" />
+                  <img alt="" src={resolveImageUrl(p.image_url)} className="w-full h-full object-cover" />
                 )}
               </div>
               <div className="p-3 flex-1 flex flex-col">

@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import EmptyState from "@/components/EmptyState";
 import { useCart } from "@/context/CartContext";
-import { formatINR } from "@/lib/utils";
+import { formatINR, resolveImageUrl } from "@/lib/utils";
 import { Trash2, ShoppingBag, ArrowRight } from "lucide-react";
 
 export default function Cart() {
@@ -34,7 +34,7 @@ export default function Cart() {
             <div key={it.product_id} className="py-3 flex items-center gap-3" data-testid={`cart-item-${it.product_id}`}>
               <div className="w-16 h-16 rounded-xl bg-[color:var(--sc-accent-light)] overflow-hidden shrink-0">
                 {it.image_url && (
-                  <img alt="" src={it.image_url} className="w-full h-full object-cover" />
+                  <img alt="" src={resolveImageUrl(it.image_url)} className="w-full h-full object-cover" />
                 )}
               </div>
               <div className="flex-1 min-w-0">

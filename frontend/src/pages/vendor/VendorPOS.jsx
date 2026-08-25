@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import { useAuth } from "@/context/AuthContext";
-import { formatINR } from "@/lib/utils";
+import { formatINR, resolveImageUrl } from "@/lib/utils";
 import { log } from "@/lib/log";
 import { printInvoice } from "@/lib/invoicePrint";
 import {
@@ -194,7 +194,7 @@ export default function VendorPOS() {
                       className={`w-full text-left px-3 py-2 flex items-center gap-3 ${oos ? "opacity-50 cursor-not-allowed" : "hover:bg-[color:var(--sc-accent-light)]/40"}`}
                     >
                       <div className="w-10 h-10 rounded-lg bg-[color:var(--sc-accent-light)] overflow-hidden shrink-0">
-                        {p.image_url && <img alt="" src={p.image_url} className="w-full h-full object-cover" />}
+                        {p.image_url && <img alt="" src={resolveImageUrl(p.image_url)} className="w-full h-full object-cover" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold truncate">{p.name}</div>
@@ -377,7 +377,7 @@ export default function VendorPOS() {
                     className="sc-input text-xs flex-1"
                     data-testid={`pos-pay-mode-${idx}`}
                   >
-                    {POS_PAYMENT_MODES.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                    {POS_PAYMENT_MODES.filter((m) => m.key !== "netbank" && m.key !== "credit_sale").map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
                   </select>
                   <input
                     type="number"

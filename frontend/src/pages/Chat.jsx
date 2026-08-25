@@ -113,6 +113,7 @@ function NewChatModal({ open, onClose, onOpenThread }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [starting, setStarting] = useState(false);
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -125,37 +126,48 @@ function NewChatModal({ open, onClose, onOpenThread }) {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setLoading(true); setErr("");
-      try {
-        // Try a users-search endpoint; fall back to chat-search if provided.
-        const paths = ["/users/search", "/chat/users/search"];
-        let data = null;
-        for (const p of paths) {
-          try {
-            const res = await api.get(p, { params: { q: q.trim(), limit: 20 } });
-            data = res.data;
-            break;
-          } catch (e) {
-            const s = e?.response?.status;
-            if (s && s !== 404 && s !== 405 && s !== 501) throw e;
+      const needle = q.trim();
+      const collected = [];
+      const seen = new Set();
+      // Try every plausible search endpoint on the upstream backend.
+      const attempts = [
+        ["/users/search", { q: needle, limit: 20 }],
+        ["/chat/users/search", { q: needle, limit: 20 }],
+        ["/admin/users", { q: needle, limit: 20 }],
+        ["/users", { q: needle, limit: 20 }],
+      ];
+      for (const [p, params] of attempts) {
+        try {
+          const res = await api.get(p, { params });
+          const arr = Array.isArray(res.data) ? res.data : res.data?.users || res.data?.items || [];
+          for (const u of arr) {
+            const key = u.id || u.email || u.referral_code;
+            if (!key || seen.has(key)) continue;
+            // Only include users whose fields actually match the query (some endpoints ignore `q`).
+            const bag = `${u.name || ""} ${u.email || ""} ${u.referral_code || ""}`.toLowerCase();
+            if (bag.includes(needle.toLowerCase())) {
+              seen.add(key);
+              collected.push(u);
+            }
+          }
+          if (collected.length > 0) break;
+        } catch (e) {
+          const s = e?.response?.status;
+          if (s && s !== 404 && s !== 405 && s !== 501 && s !== 403) {
+            log.error("NewChat.search fallthrough", p, e);
           }
         }
-        const arr = Array.isArray(data) ? data : data?.users || data?.items || [];
-        setResults(arr);
-      } catch (e) {
-        log.error("NewChat.search", e);
-        setErr(e?.response?.data?.detail || "Search unavailable — try a referral code instead.");
-      } finally {
-        setLoading(false);
       }
+      setResults(collected);
+      setLoading(false);
     }, 320);
     return () => clearTimeout(debounceRef.current);
   }, [q, open]);
 
   const startChatWith = async (u) => {
-    setErr("");
+    setErr(""); setStarting(true);
     try {
-      // Try POST /chat/threads with the counterparty id / referral code.
-      const body = u.id ? { user_id: u.id } : { referral_code: u.referral_code };
+      const body = u.id ? { user_id: u.id } : (u.referral_code ? { referral_code: u.referral_code } : { email: u.email });
       const { data } = await api.post("/chat/threads", body);
       const threadId = data?.id || data?.thread_id || data?.thread?.id;
       if (threadId) {
@@ -163,10 +175,46 @@ function NewChatModal({ open, onClose, onOpenThread }) {
         onClose();
         return;
       }
-      setErr("Could not open thread — backend did not return a thread id.");
+      setErr("Backend didn't return a thread id — check /chat/threads response.");
     } catch (e) {
       setErr(e?.response?.data?.detail || "Could not start chat.");
+    } finally {
+      setStarting(false);
     }
+  };
+
+  // Direct-start fallback — when the user has an exact referral code / email
+  // but our search endpoints didn't return anything.
+  const startByRawInput = async () => {
+    const raw = q.trim();
+    if (!raw) return;
+    setErr(""); setStarting(true);
+    // Guess whether it looks like an email or a referral code.
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw);
+    const bodies = isEmail
+      ? [{ email: raw }, { referral_code: raw }]
+      : [{ referral_code: raw }, { email: raw }];
+    for (const body of bodies) {
+      try {
+        const { data } = await api.post("/chat/threads", body);
+        const threadId = data?.id || data?.thread_id || data?.thread?.id;
+        if (threadId) {
+          onOpenThread({ id: threadId, other: { name: raw, referral_code: !isEmail ? raw : undefined, email: isEmail ? raw : undefined } });
+          onClose();
+          setStarting(false);
+          return;
+        }
+      } catch (e) {
+        const s = e?.response?.status;
+        if (s && s !== 404 && s !== 400 && s !== 422) {
+          setErr(e?.response?.data?.detail || "Could not start chat.");
+          setStarting(false);
+          return;
+        }
+      }
+    }
+    setErr(`No user found with "${raw}". Ask them to share their exact referral code.`);
+    setStarting(false);
   };
 
   if (!open) return null;
@@ -176,7 +224,7 @@ function NewChatModal({ open, onClose, onOpenThread }) {
         <div className="p-4 border-b border-[color:var(--sc-border)] flex items-center justify-between">
           <div>
             <div className="font-extrabold text-[color:var(--sc-ink)]">Start a new chat</div>
-            <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Search by name, email or referral code</div>
+            <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Type an email or exact referral code (e.g. EARN)</div>
           </div>
           <button onClick={onClose} className="text-[color:var(--sc-ink-muted)]" data-testid="new-chat-close">
             <X size={18} />
@@ -189,23 +237,35 @@ function NewChatModal({ open, onClose, onOpenThread }) {
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") startByRawInput(); }}
               data-testid="new-chat-search"
-              placeholder="Search users to chat with…"
+              placeholder="Email or referral code"
               className="flex-1 text-sm bg-transparent outline-none"
             />
             {loading && <Loader2 size={14} className="animate-spin text-[color:var(--sc-ink-muted)]" />}
           </div>
+          {q.trim() && !loading && (
+            <button
+              onClick={startByRawInput}
+              disabled={starting}
+              data-testid="new-chat-direct-start"
+              className="mt-2 w-full sc-btn-primary text-xs inline-flex items-center justify-center gap-1.5 disabled:opacity-70"
+            >
+              {starting ? <Loader2 size={12} className="animate-spin" /> : <MessageCircle size={12} />}
+              Start chat with "<b className="ml-1">{q.trim()}</b>"
+            </button>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto">
           {err && <div className="p-3 text-xs text-[color:var(--sc-error)]" data-testid="new-chat-err">{err}</div>}
           {!q.trim() && !results.length && (
             <div className="p-8 text-center text-sm text-[color:var(--sc-ink-muted)]">
-              Type a name, email, or referral code to find someone.
+              Type an email or referral code, then tap <b>Start chat</b>.
             </div>
           )}
           {q.trim() && !loading && results.length === 0 && !err && (
-            <div className="p-8 text-center text-sm text-[color:var(--sc-ink-muted)]">
-              No users matched "<b>{q}</b>". Try their referral code.
+            <div className="px-5 py-6 text-center text-xs text-[color:var(--sc-ink-muted)]">
+              No live search results — tap <b>Start chat with "{q}"</b> above to open the thread directly.
             </div>
           )}
           {results.map((u) => (

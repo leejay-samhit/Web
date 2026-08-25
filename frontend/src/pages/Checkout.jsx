@@ -4,7 +4,7 @@ import Layout from "@/components/Layout";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import useRazorpayCheckout from "@/hooks/useRazorpayCheckout";
-import { formatINR } from "@/lib/utils";
+import { formatINR, resolveImageUrl } from "@/lib/utils";
 import api from "@/lib/api";
 import apiLocal from "@/lib/apiLocal";
 import { log } from "@/lib/log";
@@ -50,7 +50,7 @@ function ItemsPanel({ cart }) {
               {/* Thumbnail */}
               <div className="w-20 h-20 rounded-xl bg-[color:var(--sc-accent-light)] overflow-hidden shrink-0 border border-[color:var(--sc-border)] grid place-items-center">
                 {it.image_url ? (
-                  <img alt="" src={it.image_url} className="w-full h-full object-cover" />
+                  <img alt="" src={resolveImageUrl(it.image_url)} className="w-full h-full object-cover" />
                 ) : (
                   <ShoppingBag size={22} className="text-[color:var(--sc-primary)]/60" />
                 )}
@@ -277,7 +277,7 @@ function OrderSummary({ cart, method, busy, onPay, disabled }) {
           <div key={it.product_id} className="flex items-start gap-3" data-testid={`checkout-item-${it.product_id}`}>
             <div className="w-14 h-14 rounded-xl bg-[color:var(--sc-accent-light)] overflow-hidden shrink-0 border border-[color:var(--sc-border)] grid place-items-center">
               {it.image_url ? (
-                <img alt="" src={it.image_url} className="w-full h-full object-cover" />
+                <img alt="" src={resolveImageUrl(it.image_url)} className="w-full h-full object-cover" />
               ) : (
                 <ShoppingBag size={18} className="text-[color:var(--sc-primary)]/60" />
               )}

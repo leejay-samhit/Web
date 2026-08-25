@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
+import api from "@/lib/api";
+import apiLocal from "@/lib/apiLocal";
 import { listInvoices, cancelInvoice, refundInvoice, toCSV, getSettings, POS_PAYMENT_MODES } from "@/lib/vendorSales";
 import { printInvoice } from "@/lib/invoicePrint";
 import { formatINR, formatDateTime } from "@/lib/utils";
-import { Search, Printer, RotateCcw, X, Download, Eye } from "lucide-react";
+import { Search, Printer, RotateCcw, X, Download, Eye, RefreshCw } from "lucide-react";
 
 export default function VendorInvoices() {
   const { user } = useAuth();
@@ -20,10 +22,77 @@ export default function VendorInvoices() {
   const [maxAmt, setMaxAmt] = useState("");
   const [view, setView] = useState(null);
 
+  // Fetch online shop orders (upstream + local mirror) and normalise to the
+  // invoice row shape so POS + web + app all appear in ONE list — user
+  // decision Feb-2026.
+  const [online, setOnline] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const loadOnline = useCallback(async () => {
+    setSyncing(true);
+    const merged = [];
+    const seen = new Set();
+    const push = (arr, source) => {
+      arr.forEach((o) => {
+        const key = o.id || o._id || o.order_id;
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        merged.push({ ...o, _source: source });
+      });
+    };
+    try {
+      const { data } = await api.get("/vendor/me/sales");
+      push(Array.isArray(data) ? data : (data?.items || data?.sales || []), "upstream");
+    } catch { /* ignore */ }
+    try {
+      const { data } = await apiLocal.get("/vendor/me/orders");
+      push(Array.isArray(data?.items) ? data.items : [], "local");
+    } catch { /* ignore */ }
+    // Convert to invoice-like rows
+    const rows = merged.map((o) => ({
+      id: o.id || o._id || o.order_id,
+      invoice_no: o.invoice_no || `WEB-${(o.id || "").toString().slice(0, 8).toUpperCase()}`,
+      created_at: o.created_at || o.placed_at || o.updated_at || null,
+      customer: {
+        name: o.customer?.name || o.customer_name || o.user?.name || "Online buyer",
+        phone: o.customer?.phone || o.buyer_phone || "",
+        address: [o.shipping_address?.line1, o.shipping_address?.city, o.shipping_address?.pincode].filter(Boolean).join(", "),
+        gstin: o.customer?.gstin || "",
+      },
+      items: Array.isArray(o.items) ? o.items.map((it) => ({
+        name: it.product_name || it.name || "Item", qty: it.qty || 1,
+        price: it.price || 0, gst_pct: it.gst || it.gst_pct || 0,
+        line_total: (it.price || 0) * (it.qty || 1),
+      })) : [],
+      payments: [{ mode: (String(o.payment_method || o.mode || "").toLowerCase().includes("cod") ? "cash" : "upi"), mode_label: (String(o.payment_method || o.mode || "").toLowerCase().includes("cod") ? "Cash" : "UPI"), amount: Number(o.amount || o.total || o.grand_total || 0) }],
+      totals: {
+        subtotal: Number(o.subtotal ?? o.amount ?? o.total ?? 0),
+        gst_total: Number(o.gst_total ?? 0),
+        discount_total: Number(o.discount ?? 0),
+        grand_total: Number(o.amount ?? o.total ?? o.grand_total ?? 0),
+      },
+      status: o.status === "delivered" ? "completed" : (o.status || "placed"),
+      _channel: o._source === "local" ? "Web / App" : "Web / App",
+      _readonly: true, // no cancel/refund from POS panel
+    }));
+    setOnline(rows);
+    setSyncing(false);
+  }, []);
+  useEffect(() => { loadOnline(); }, [loadOnline]);
+  useEffect(() => {
+    const t = setInterval(() => document.visibilityState === "visible" && loadOnline(), 30000);
+    return () => clearInterval(t);
+  }, [loadOnline]);
+
   // `bump` is an intentional manual re-render trigger after local-storage
   // writes — eslint can't see the side-effect, so silence the false positive.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const all = useMemo(() => listInvoices(uid), [uid, bump]);
+  const posInvoices = useMemo(() => listInvoices(uid).map((i) => ({ ...i, _channel: "POS · Walk-in" })), [uid, bump]);
+  const all = useMemo(() => {
+    // Sort by created_at desc (POS + web/app unified)
+    const merged = [...posInvoices, ...online];
+    merged.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    return merged;
+  }, [posInvoices, online]);
   const filtered = useMemo(() => {
     return all.filter((i) => {
       if (q) {
@@ -99,7 +168,7 @@ export default function VendorInvoices() {
         </div>
         <select data-testid="vi-mode" value={mode} onChange={(e) => setMode(e.target.value)} className="sc-input text-xs">
           <option value="">All payments</option>
-          {POS_PAYMENT_MODES.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+          {POS_PAYMENT_MODES.filter((m) => m.key !== "netbank" && m.key !== "credit_sale").map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
         </select>
         <input type="date" data-testid="vi-from" value={from} onChange={(e) => setFrom(e.target.value)} className="sc-input text-xs" />
         <input type="date" data-testid="vi-to" value={to} onChange={(e) => setTo(e.target.value)} className="sc-input text-xs" />
@@ -110,8 +179,13 @@ export default function VendorInvoices() {
       </div>
 
       <div className="flex justify-between items-center mb-2 text-xs">
-        <div className="text-[color:var(--sc-ink-muted)]" data-testid="vi-count">{filtered.length} of {all.length} invoices</div>
-        <button data-testid="vi-export" onClick={exportCsv} className="sc-btn-outline inline-flex items-center gap-1 text-xs"><Download size={12} /> Export CSV</button>
+        <div className="text-[color:var(--sc-ink-muted)]" data-testid="vi-count">{filtered.length} of {all.length} invoices (POS + Web + App)</div>
+        <div className="flex items-center gap-2">
+          <button data-testid="vi-sync" onClick={loadOnline} disabled={syncing} className="sc-btn-outline inline-flex items-center gap-1 text-xs disabled:opacity-60">
+            <RefreshCw size={12} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing…" : "Sync web+app"}
+          </button>
+          <button data-testid="vi-export" onClick={exportCsv} className="sc-btn-outline inline-flex items-center gap-1 text-xs"><Download size={12} /> Export CSV</button>
+        </div>
       </div>
 
       <div className="sc-card p-0 overflow-x-auto" data-testid="vi-list">

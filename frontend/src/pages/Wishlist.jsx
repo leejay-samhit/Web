@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
-import { formatINR } from "@/lib/utils";
+import { formatINR, resolveImageUrl } from "@/lib/utils";
 import { Heart, ShoppingBag } from "lucide-react";
 import { log } from "@/lib/log";
 
@@ -60,7 +60,7 @@ export default function Wishlist() {
         {items.map((p) => (
           <div key={p.id} className="sc-card overflow-hidden flex flex-col" data-testid={`wl-card-${p.id}`}>
             <Link to={`/product/${p.id}`} className="aspect-square bg-[color:var(--sc-accent-light)]">
-              {p.image_url && <img alt="" src={p.image_url} className="w-full h-full object-cover" />}
+              {p.image_url && <img alt="" src={resolveImageUrl(p.image_url)} className="w-full h-full object-cover" />}
               {!p.image_url && <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]"><ShoppingBag size={28} /></div>}
             </Link>
             <div className="p-3 flex-1 flex flex-col">

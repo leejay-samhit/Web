@@ -6,8 +6,8 @@ import apiLocal from "@/lib/apiLocal";
 import Layout from "@/components/Layout";
 import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
-import { formatINR, formatDateTime } from "@/lib/utils";
-import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2, Search, Sparkles, Check, Info, Strikethrough, ClipboardList, BellRing, ArrowRight } from "lucide-react";
+import { formatINR, formatDateTime, resolveImageUrl } from "@/lib/utils";
+import { Store, Package, TrendingUp, MessageSquare, Plus, X, Loader2, Pencil, Trash2, Search, Sparkles, Check, Info, Strikethrough, ClipboardList, BellRing, ArrowRight, Download } from "lucide-react";
 import { log } from "@/lib/log";
 import { useAuth } from "@/context/AuthContext";
 import VendorNav from "@/components/vendor/VendorNav";
@@ -582,7 +582,43 @@ export default function VendorDashboard() {
 
       {tab === "products" && (
         <>
-          <div className="flex justify-end mb-2">
+          <div className="flex justify-end mb-2 gap-2">
+            <button
+              data-testid="vd-download-stock"
+              onClick={() => {
+                // Export CSV: Stock qty · Name · Price · Category · Sub-category · Pincode
+                const rows = products.map((p) => ({
+                  name: p.name || "",
+                  stock: p.stock ?? 0,
+                  price: p.price ?? 0,
+                  mrp: p.mrp ?? "",
+                  category: p.category || "",
+                  sub_category: p.sub_category || p.subCategory || "",
+                  brand: p.brand || "",
+                  hsn: p.hsn || "",
+                  sku: p.sku || "",
+                  pincode: p.pincode || p.location?.pincode || "",
+                  updated_at: p.updated_at || p.updatedAt || "",
+                }));
+                const headers = ["name","stock","price","mrp","category","sub_category","brand","hsn","sku","pincode","updated_at"];
+                const escape = (v) => {
+                  const s = String(v ?? "");
+                  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+                };
+                const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => escape(r[h])).join(","))].join("\n");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `stock_report_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+              }}
+              disabled={products.length === 0}
+              className="sc-btn-outline inline-flex items-center gap-1.5 text-sm disabled:opacity-60"
+              title="Download stock report — synced to admin (same data)"
+            >
+              <Download size={14} /> Stock report ({products.length})
+            </button>
             <button data-testid="vd-new" onClick={openNew} className="sc-btn-primary inline-flex items-center gap-1.5 text-sm">
               <Plus size={14} /> Add product
             </button>
@@ -593,7 +629,7 @@ export default function VendorDashboard() {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3" data-testid="vd-products">
               {products.map((p) => (
                 <div key={p.id} className="sc-card overflow-hidden flex flex-col" data-testid={`vd-prod-${p.id}`}>
-                  <div className="aspect-square bg-[color:var(--sc-accent-light)]">{p.image_url && <img alt="" src={p.image_url} className="w-full h-full object-cover" />}</div>
+                  <div className="aspect-square bg-[color:var(--sc-accent-light)]">{p.image_url && <img alt="" src={resolveImageUrl(p.image_url)} className="w-full h-full object-cover" />}</div>
                   <div className="p-3 flex-1 flex flex-col">
                     <div className="text-sm font-semibold line-clamp-2">{p.name}</div>
                     <div className="text-xs text-[color:var(--sc-ink-muted)] mt-0.5">Stock: {p.stock ?? "—"}</div>

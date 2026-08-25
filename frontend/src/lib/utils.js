@@ -1,5 +1,23 @@
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { API_BASE } from "@/lib/api";
+
+// Strip trailing "/api" so we can prefix relative "/api/..." image URLs.
+const ORIGIN = API_BASE.replace(/\/api\/?$/, "");
+
+/**
+ * resolveImageUrl — safe resolver for product / message image URLs.
+ * Backend sometimes returns relative paths like "/api/products/{id}/image?…".
+ * On the deployed slangcart.com those resolve to the frontend's origin (404).
+ * Prefix them with the external backend origin. Absolute + data URLs pass through.
+ */
+export function resolveImageUrl(u) {
+  if (!u) return "";
+  if (typeof u !== "string") return "";
+  if (u.startsWith("data:") || u.startsWith("blob:") || u.startsWith("http://") || u.startsWith("https://")) return u;
+  if (u.startsWith("/")) return `${ORIGIN}${u}`;
+  return u;
+}
 
 export function cn(...inputs) {
   return twMerge(clsx(inputs));

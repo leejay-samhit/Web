@@ -4,7 +4,7 @@
 import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, ShoppingBag } from "lucide-react";
-import { formatINR } from "@/lib/utils";
+import { formatINR, resolveImageUrl } from "@/lib/utils";
 
 const cardCls = "sc-card p-4 mb-3";
 
@@ -42,7 +42,7 @@ function MiniProductCard({ p }) {
   return (
     <Link to={`/product/${p.id}`} className="sc-card overflow-hidden flex flex-col shrink-0 w-36" data-testid={`shop-mini-${p.id}`}>
       <div className="aspect-square bg-[color:var(--sc-accent-light)] overflow-hidden">
-        {p.image_url ? <img alt="" src={p.image_url} className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]"><ShoppingBag size={20} /></div>}
+        {p.image_url ? <img alt="" src={resolveImageUrl(p.image_url)} className="w-full h-full object-cover" /> : <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]"><ShoppingBag size={20} /></div>}
       </div>
       <div className="p-2">
         <div className="text-xs font-semibold line-clamp-2">{p.name}</div>
