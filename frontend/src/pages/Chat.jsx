@@ -106,69 +106,67 @@ function ThreadListItem({ thread, meId, active, onSelect }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  New-chat modal — search users to start a chat                              */
+/*  New-chat modal — look up a user by their exact referral code               */
 /* -------------------------------------------------------------------------- */
 function NewChatModal({ open, onClose, onOpenThread }) {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState([]);
+  const [result, setResult] = useState(null); // { user, relationship, thread_id, request_id }
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [starting, setStarting] = useState(false);
   const debounceRef = useRef(null);
 
   useEffect(() => {
-    if (!open) { setQ(""); setResults([]); setErr(""); }
+    if (!open) { setQ(""); setResult(null); setErr(""); }
   }, [open]);
+
+  const doSearch = useCallback(async (code) => {
+    const raw = (code || "").trim();
+    if (!raw) { setResult(null); setErr(""); return; }
+    setLoading(true); setErr(""); setResult(null);
+    try {
+      // The backend exposes exactly one connect-lookup: by exact referral
+      // code. It returns the user + our relationship + any existing thread.
+      const { data } = await api.get("/chat/search", { params: { code: raw } });
+      if (data?.user) setResult(data);
+      else setErr(`No user found with referral code "${raw}".`);
+    } catch (e) {
+      const s = e?.response?.status;
+      if (s === 404) {
+        const looksLikeEmail = raw.includes("@");
+        const looksLikeName = /\s/.test(raw) || (!looksLikeEmail && /[^A-Za-z0-9]/.test(raw));
+        setErr(
+          looksLikeEmail || looksLikeName
+            ? `Users can only be found by their exact referral code (e.g. EARN), not by name or email. Ask "${raw}" to share their referral code.`
+            : `No user found with referral code "${raw}". Double-check the exact code.`
+        );
+      } else {
+        setErr(e?.response?.data?.detail || "Search failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    if (!q.trim()) { setResults([]); return; }
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true); setErr("");
-      const needle = q.trim();
-      const collected = [];
-      const seen = new Set();
-      // Try every plausible search endpoint on the upstream backend.
-      const attempts = [
-        ["/users/search", { q: needle, limit: 20 }],
-        ["/chat/users/search", { q: needle, limit: 20 }],
-        ["/admin/users", { q: needle, limit: 20 }],
-        ["/users", { q: needle, limit: 20 }],
-      ];
-      for (const [p, params] of attempts) {
-        try {
-          const res = await api.get(p, { params });
-          const arr = Array.isArray(res.data) ? res.data : res.data?.users || res.data?.items || [];
-          for (const u of arr) {
-            const key = u.id || u.email || u.referral_code;
-            if (!key || seen.has(key)) continue;
-            // Only include users whose fields actually match the query (some endpoints ignore `q`).
-            const bag = `${u.name || ""} ${u.email || ""} ${u.referral_code || ""}`.toLowerCase();
-            if (bag.includes(needle.toLowerCase())) {
-              seen.add(key);
-              collected.push(u);
-            }
-          }
-          if (collected.length > 0) break;
-        } catch (e) {
-          const s = e?.response?.status;
-          if (s && s !== 404 && s !== 405 && s !== 501 && s !== 403) {
-            log.error("NewChat.search fallthrough", p, e);
-          }
-        }
-      }
-      setResults(collected);
-      setLoading(false);
-    }, 320);
+    if (!q.trim()) { setResult(null); setErr(""); return; }
+    debounceRef.current = setTimeout(() => doSearch(q), 400);
     return () => clearTimeout(debounceRef.current);
-  }, [q, open]);
+  }, [q, open, doSearch]);
 
-  const startChatWith = async (u) => {
+  const startChat = async () => {
+    if (!result?.user) return;
     setErr(""); setStarting(true);
+    const u = result.user;
     try {
-      const body = u.id ? { user_id: u.id } : (u.referral_code ? { referral_code: u.referral_code } : { email: u.email });
-      const { data } = await api.post("/chat/threads", body);
+      if (result.thread_id) {
+        onOpenThread({ id: result.thread_id, other: u });
+        onClose();
+        return;
+      }
+      const { data } = await api.post("/chat/threads", { other_user_id: u.id });
       const threadId = data?.id || data?.thread_id || data?.thread?.id;
       if (threadId) {
         onOpenThread({ id: threadId, other: u });
@@ -183,40 +181,6 @@ function NewChatModal({ open, onClose, onOpenThread }) {
     }
   };
 
-  // Direct-start fallback — when the user has an exact referral code / email
-  // but our search endpoints didn't return anything.
-  const startByRawInput = async () => {
-    const raw = q.trim();
-    if (!raw) return;
-    setErr(""); setStarting(true);
-    // Guess whether it looks like an email or a referral code.
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw);
-    const bodies = isEmail
-      ? [{ email: raw }, { referral_code: raw }]
-      : [{ referral_code: raw }, { email: raw }];
-    for (const body of bodies) {
-      try {
-        const { data } = await api.post("/chat/threads", body);
-        const threadId = data?.id || data?.thread_id || data?.thread?.id;
-        if (threadId) {
-          onOpenThread({ id: threadId, other: { name: raw, referral_code: !isEmail ? raw : undefined, email: isEmail ? raw : undefined } });
-          onClose();
-          setStarting(false);
-          return;
-        }
-      } catch (e) {
-        const s = e?.response?.status;
-        if (s && s !== 404 && s !== 400 && s !== 422) {
-          setErr(e?.response?.data?.detail || "Could not start chat.");
-          setStarting(false);
-          return;
-        }
-      }
-    }
-    setErr(`No user found with "${raw}". Ask them to share their exact referral code.`);
-    setStarting(false);
-  };
-
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
@@ -224,7 +188,7 @@ function NewChatModal({ open, onClose, onOpenThread }) {
         <div className="p-4 border-b border-[color:var(--sc-border)] flex items-center justify-between">
           <div>
             <div className="font-extrabold text-[color:var(--sc-ink)]">Start a new chat</div>
-            <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Type an email or exact referral code (e.g. EARN)</div>
+            <div className="text-[11px] text-[color:var(--sc-ink-muted)]">Enter the person's exact referral code (e.g. EARN)</div>
           </div>
           <button onClick={onClose} className="text-[color:var(--sc-ink-muted)]" data-testid="new-chat-close">
             <X size={18} />
@@ -236,55 +200,46 @@ function NewChatModal({ open, onClose, onOpenThread }) {
             <input
               autoFocus
               value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") startByRawInput(); }}
+              onChange={(e) => setQ(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === "Enter") doSearch(q); }}
               data-testid="new-chat-search"
-              placeholder="Email or referral code"
-              className="flex-1 text-sm bg-transparent outline-none"
+              placeholder="Referral code"
+              className="flex-1 text-sm bg-transparent outline-none uppercase tracking-wide"
             />
             {loading && <Loader2 size={14} className="animate-spin text-[color:var(--sc-ink-muted)]" />}
           </div>
-          {q.trim() && !loading && (
-            <button
-              onClick={startByRawInput}
-              disabled={starting}
-              data-testid="new-chat-direct-start"
-              className="mt-2 w-full sc-btn-primary text-xs inline-flex items-center justify-center gap-1.5 disabled:opacity-70"
-            >
-              {starting ? <Loader2 size={12} className="animate-spin" /> : <MessageCircle size={12} />}
-              Start chat with "<b className="ml-1">{q.trim()}</b>"
-            </button>
-          )}
         </div>
         <div className="flex-1 overflow-y-auto">
           {err && <div className="p-3 text-xs text-[color:var(--sc-error)]" data-testid="new-chat-err">{err}</div>}
-          {!q.trim() && !results.length && (
+          {!q.trim() && !result && (
             <div className="p-8 text-center text-sm text-[color:var(--sc-ink-muted)]">
-              Type an email or referral code, then tap <b>Start chat</b>.
+              Type a <b>referral code</b> to find that user, then tap <b>Chat</b>.
             </div>
           )}
-          {q.trim() && !loading && results.length === 0 && !err && (
-            <div className="px-5 py-6 text-center text-xs text-[color:var(--sc-ink-muted)]">
-              No live search results — tap <b>Start chat with "{q}"</b> above to open the thread directly.
-            </div>
-          )}
-          {results.map((u) => (
+          {result?.user && (
             <button
-              key={u.id || u.referral_code || u.email}
-              onClick={() => startChatWith(u)}
-              data-testid={`new-chat-user-${u.id || u.referral_code}`}
-              className="w-full text-left px-3 py-2.5 flex items-center gap-2.5 border-b border-[color:var(--sc-border)]/60 hover:bg-[color:var(--sc-accent-light)]/60"
+              onClick={startChat}
+              disabled={starting}
+              data-testid={`new-chat-user-${result.user.id || result.user.referral_code}`}
+              className="w-full text-left px-3 py-3 flex items-center gap-2.5 border-b border-[color:var(--sc-border)]/60 hover:bg-[color:var(--sc-accent-light)]/60 disabled:opacity-60"
             >
-              <div className="w-9 h-9 rounded-full sc-avatar text-white text-xs font-bold grid place-items-center overflow-hidden">
-                {u.profile_image ? <img alt="" src={u.profile_image} className="w-full h-full object-cover" /> : initials(u.name)}
+              <div className="w-11 h-11 rounded-full sc-avatar text-white text-sm font-bold grid place-items-center overflow-hidden">
+                {result.user.profile_image ? <img alt="" src={result.user.profile_image} className="w-full h-full object-cover" /> : initials(result.user.name)}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold truncate">{u.name || "User"}</div>
-                <div className="text-[11px] text-[color:var(--sc-ink-muted)] truncate">{u.referral_code || u.email}</div>
+                <div className="text-sm font-bold truncate">{result.user.name || "User"}</div>
+                <div className="text-[11px] text-[color:var(--sc-ink-muted)] truncate">
+                  Code: {result.user.referral_code}
+                  {result.user.is_vendor ? " · Vendor" : ""}
+                  {result.relationship === "already_chatting" ? " · Already chatting" : ""}
+                </div>
               </div>
-              <span className="text-xs font-bold text-[color:var(--sc-primary)]">Chat →</span>
+              <span className="text-xs font-bold text-[color:var(--sc-primary)] inline-flex items-center gap-1">
+                {starting ? <Loader2 size={12} className="animate-spin" /> : <MessageCircle size={12} />}
+                {result.thread_id ? "Open" : "Chat"} →
+              </span>
             </button>
-          ))}
+          )}
         </div>
       </div>
     </div>

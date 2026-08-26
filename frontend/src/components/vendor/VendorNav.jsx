@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Store, Package, ClipboardList, Receipt, IndianRupee, FileSpreadsheet, BarChart3, Settings as SettingsIcon, TrendingUp, Repeat, Rocket } from "lucide-react";
+import { Store, Package, ClipboardList, Receipt, IndianRupee, FileSpreadsheet, BarChart3, Settings as SettingsIcon, TrendingUp, Repeat, Rocket, BookUser } from "lucide-react";
 
 const ITEMS = [
   { to: "/vendor",            label: "Products",           icon: Package },
@@ -7,6 +7,7 @@ const ITEMS = [
   { to: "/vendor/sales",      label: "Sales dashboard",    icon: TrendingUp },
   { to: "/vendor/pos",        label: "Billing (POS)",      icon: Receipt },
   { to: "/vendor/invoices",   label: "Invoices",           icon: FileSpreadsheet },
+  { to: "/vendor/customers",  label: "Customer Book",      icon: BookUser },
   { to: "/vendor/cash",       label: "Cash summary",       icon: IndianRupee },
   { to: "/vendor/substore",   label: "Vendor → Substore",  icon: Repeat },
   { to: "/vendor/erp",        label: "GST and Tax Return", icon: Rocket },

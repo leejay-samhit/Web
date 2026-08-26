@@ -46,6 +46,11 @@ const orderCustomer = (o) =>
   o?.customer?.name || o?.customer_name || o?.user?.name || o?.buyer_name || "Walk-in / online";
 const orderTime = (o) => o?.created_at || o?.placed_at || o?.updated_at || null;
 
+/** Cancelled / refunded / returned orders must never count towards sales,
+ *  payment breakdowns or accounts (user rule Aug-2026). */
+const VOID_STATUSES = ["cancelled", "canceled", "refunded", "returned", "rejected", "failed", "void"];
+const isVoided = (status) => VOID_STATUSES.includes(String(status || "").toLowerCase());
+
 /** Build a unified Sale row from any source (POS invoice OR online order). */
 function toSaleRow(src, source /* 'pos' | 'online' */) {
   if (source === "pos") {
@@ -454,14 +459,16 @@ export default function VendorSales() {
     return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
   }, [loadOnline]);
 
-  /* Unify all sales into one list of rows */
+  /* Unify all sales into one list of rows (excluding voided orders) */
   const allSales = useMemo(() => {
     const rows = [];
     posInvoices.forEach((inv) => rows.push(toSaleRow(inv, "pos")));
     onlineRows.forEach((o) => rows.push(toSaleRow(o, "online")));
     // Sort newest first
     rows.sort((a, b) => new Date(b.when || 0) - new Date(a.when || 0));
-    return rows;
+    // Drop cancelled / refunded / returned — they must not inflate sales,
+    // payment tiles or accounts.
+    return rows.filter((r) => !isVoided(r.status));
   }, [posInvoices, onlineRows]);
 
   /* Range aggregates */

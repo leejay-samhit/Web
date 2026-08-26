@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only regression of the 6-item vendor/chat batch on https://slang-commerce.preview.emergentagent.com as vendor ali@gmail.com. All 7 requested behaviours PASS: (1) Slang-Connect New Chat referral-code search shows 'Mr Lee' card for EARN, auto-uppercases input, opens the existing thread on click, and shows a friendly non-crash message for emails/non-codes; (2) POS GST-inclusive math correct — product ₹100 @18%: inclusive => subtotal(taxable) ₹84.75 + GST ₹15.25 = grand ₹100 (= MRP, no double GST), exclusive => ₹100 + ₹18 = ₹118; (3) pos-gst-0 is a <select> with exactly 0/5/12/18/28/40% and updates line tax; (4) Collect Payment modal has green hero card (pos-hero-amount) and exactly 3 modes cash/upi/card, UPI shows 'UPI reference / txn ID', Card shows 'Card reference / last 4 digits', Cash hides ref, remarks textarea present, confirm saves and shows pos-success-modal (invoice SLG-INV-2026-000001); (5) vnav-customers tab exists, named-customer POS sale created a Customer Book row (visits 1, ₹100), vc-search filters, vc-export enabled; (6) /vendor/orders renders 6 external feed cards (vo-order-<id>) with buyer name/phone/address/items and filter chips are ONLY All/Placed/Shipped/Delivered/Cancelled (legacy chips gone); (7) /vendor/sales excludes cancelled orders — with 6 cancelled external orders (₹48,349+ each) KPIs stayed ₹0, and after a POS UPI sale KPIs correctly showed ₹118 / UPI tile ₹118 (positive control).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "VendorCustomers (Customer Book)", "issue": "'Lifetime value' tile is computed from the FILTERED list while the 'Customers' tile uses the full list. Searching a non-matching term shows 'Customers 1 / Lifetime value ₹0', which reads as a data inconsistency.", "selector": "[data-testid=\"vc-total-spent\"]", "priority": "LOW"},
+      {"component": "VendorPOS GST select", "issue": "Dev console React warning: 'In HTML, <span> cannot be a child of <option> ... This will cause a hydration error' pointing at VendorPOS line ~180. Caused by the dev code-tagger wrapping option text; harmless in prod build but pollutes console.", "selector": "[data-testid=\"pos-gst-0\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "POS Collect & complete", "issue": "Confirm can take >8s before pos-success-modal appears (external PATCH /vendor/me/products stock write per line). Invoice does save correctly; only slow with no explicit progress text beyond the button state.", "affected_selectors": ["pos-checkout-confirm", "pos-success-modal"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: make the Customer Book 'Lifetime value' tile use the same scope as the 'Customers' tile (or label it 'Filtered value').",
+    "Optional: silence the <option> DOM-nesting dev warning on the POS GST select."
+  ],
+  "critical_code_review_comments": [
+    "vendorSales.computeTotals GST-inclusive branch is correct (subtotal = net-of-GST taxable, line net = base) so grand_total = MRP; verified numerically in the UI.",
+    "orders.js ORDER_STAGES is reduced to placed/shipped/delivered/cancelled and legacy statuses render read-only via LEGACY_LABELS — good. Note: ali's 6 orders are all 'cancelled' (final), so no advance buttons could be exercised live; the reduced advance set was verified by code only.",
+    "Chat.jsx 404 handler shows the explanatory 'exact referral code' message only when the query has '@' or whitespace/punctuation; a plain alphanumeric miss like 'SHIVA' falls back to 'No user found with referral code \"SHIVA\". Double-check the exact code.' — acceptable (not scary) but not the explanatory copy."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only request)", "frontend": "100% (7/7 requested items pass)"},
+  "seed_data_creation": "Created localStorage POS invoices in throwaway browser sessions: SLG-INV-2026-000001 (₹100 cash, named customer 'TEST_QA Customer' / 9998887771) and SLG-INV-2026-000001 (₹118 UPI, walk-in). No external backend order/product data was mutated except stock decrement on 'Priya combo pickle' / 'Priya tomato pickle' (1 unit each) which is expected POS behaviour.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "ali@gmail.com / 1234567890 (vendor, from /app/memory/test_credentials.md)",
+  "context_for_next_testing_agent": "POS + Customer Book persist in localStorage per browser profile, so each automation run starts empty — create a POS sale in the SAME script before asserting /vendor/customers or /vendor/sales. Product 'Priya combo pickle' is ₹100 @18% GST, handy for GST math checks. There is no pos-subtotal data-testid; read the pos-totals card inner_text instead. All 6 of ali's external orders are 'cancelled' (final), so no vo-*-advance-* buttons render — status-advance flow cannot be exercised with this account.",
+  "rca_of_the_issue": "N/A — no functional defects reproduced in this batch."
+}

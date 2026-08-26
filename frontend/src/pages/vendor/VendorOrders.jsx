@@ -51,15 +51,22 @@ export default function VendorOrders() {
     if (!silent) setLoading(true);
     else setSyncing(true);
     setErrorMsg("");
-    const params = statusFilter ? { status: statusFilter } : {};
-    // Merge upstream (network-pay-1) and local mirror (this container) so
-    // web-side vendors see checkout orders whether the mobile backend has
-    // wired them up or not.
+    // Primary source = the external backend's real shop-order feed
+    // (`/vendor/me/sales`) — this is exactly what the mobile app shows under
+    // "Shop Orders". We key each row on `order_id` so the status PATCH targets
+    // the same order the app manages. Local mirror orders (web checkout) are
+    // merged in as a supplement.
     let merged = [];
     let sawAny = false;
     try {
-      const { data } = await api.get("/vendor/me/orders", { params });
-      merged = Array.isArray(data) ? data : data?.items || [];
+      const { data } = await api.get("/vendor/me/sales");
+      const sales = Array.isArray(data) ? data : data?.items || data?.sales || [];
+      merged = sales.map((s) => ({
+        ...s,
+        id: s.order_id || s.id,   // PATCH /vendor/orders/{order_id}/status
+        sale_id: s.id,
+        source: "app",
+      }));
       sawAny = true;
     } catch (error) {
       const status = error?.response?.status;
@@ -68,12 +75,15 @@ export default function VendorOrders() {
       }
     }
     try {
-      const { data } = await apiLocal.get("/vendor/me/orders", { params });
+      const { data } = await apiLocal.get("/vendor/me/orders");
       const local = Array.isArray(data?.items) ? data.items : [];
       const seen = new Set(merged.map((o) => o.id));
-      merged = [...merged, ...local.filter((o) => !seen.has(o.id))];
+      merged = [...merged, ...local.filter((o) => !seen.has(o.id)).map((o) => ({ ...o, source: "web" }))];
       sawAny = sawAny || local.length > 0;
     } catch { /* local backend may be offline */ }
+
+    // Client-side status filter (the sales feed doesn't accept a status param).
+    if (statusFilter) merged = merged.filter((o) => o.status === statusFilter);
 
     // Diff against previous snapshot to notify on new orders / status changes.
     const prev = prevOrdersRef.current;
@@ -139,7 +149,9 @@ export default function VendorOrders() {
     }
     setBusy(orderId);
     try {
-      // Try upstream first; if not implemented, patch the local mirror.
+      // The external Slangcart backend owns order status
+      // (`PATCH /vendor/orders/{order_id}/status`). Fall back to the local
+      // mirror only for web-placed orders it doesn't know about.
       try {
         await api.patch(`/vendor/orders/${orderId}/status`, { status: nextStatus });
       } catch (e) {
@@ -151,12 +163,13 @@ export default function VendorOrders() {
         }
       }
       await load({ silent: true });
+      toast.success(`Order updated → ${stageMeta(nextStatus).label}`, { id: `vo-adv-${orderId}` });
     } catch (e) {
       const status = e?.response?.status;
       if (status === 404 || status === 405) {
         setBackendReady(false);
       } else {
-        alert(e?.response?.data?.detail || "Could not update status.");
+        toast.error(e?.response?.data?.detail || "Could not update this order status.");
       }
     } finally {
       setBusy(null);
@@ -169,15 +182,21 @@ export default function VendorOrders() {
     setDeliverConfirm(null);
     setBusy(orderId);
     try {
-      // Backend should also flip payment_status to "paid" (or
-      // "collected_on_delivery" for COD) on this transition — see spec.
-      await api.patch(`/vendor/orders/${orderId}/status`, {
-        status: "delivered",
-        mark_paid: true,
-      });
+      // Also flip payment status to paid/collected on delivery.
+      try {
+        await api.patch(`/vendor/orders/${orderId}/status`, { status: "delivered", mark_paid: true });
+      } catch (e) {
+        const st = e?.response?.status;
+        if (st === 404 || st === 405 || st === 501) {
+          await apiLocal.patch(`/vendor/orders/${orderId}/status`, { status: "delivered", mark_paid: true });
+        } else {
+          throw e;
+        }
+      }
       await load({ silent: true });
+      toast.success("Order marked delivered", { id: `vo-deliver-${orderId}` });
     } catch (e) {
-      alert(e?.response?.data?.detail || "Could not update status.");
+      toast.error(e?.response?.data?.detail || "Could not update status.");
     } finally {
       setBusy(null);
     }
@@ -324,7 +343,7 @@ export default function VendorOrders() {
 /* -------------------------------------------------------------------------- */
 function DeliveredConfirmModal({ order, onConfirm, onCancel }) {
   const amt = orderAmount(order);
-  const isCOD = String(order?.payment_method || order?.mode || "").toLowerCase().includes("cod");
+  const isCOD = String(order?.paid_via || order?.payment_method || order?.mode || "").toLowerCase().includes("cod");
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onCancel}>
       <div

@@ -12,19 +12,28 @@ import * as XLSX from "xlsx";
 /*  Order stage catalogue                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** Ordered list of allowed order stages — matches the backend's `status` field. */
+/** Ordered list of allowed order stages — matches the backend's `status` field.
+ *  The external Slangcart backend (`PATCH /vendor/orders/{id}/status`) only
+ *  accepts these four values, so the app and web stay in perfect sync. */
 export const ORDER_STAGES = [
-  { key: "placed",            label: "Placed",          tone: "amber",   final: false },
-  { key: "confirmed",         label: "Confirmed",       tone: "sky",     final: false },
-  { key: "paid",              label: "Paid",            tone: "sky",     final: false },
-  { key: "processing",        label: "Processing",      tone: "indigo",  final: false },
-  { key: "packed",            label: "Packed",          tone: "indigo",  final: false },
-  { key: "shipped",           label: "Shipped",         tone: "violet",  final: false },
-  { key: "out_for_delivery",  label: "Out for delivery", tone: "violet", final: false },
-  { key: "delivered",         label: "Delivered",       tone: "green",   final: true  },
-  { key: "cancelled",         label: "Cancelled",       tone: "red",     final: true  },
-  { key: "returned",          label: "Returned",        tone: "red",     final: true  },
+  { key: "placed",    label: "Placed",    tone: "amber",  final: false },
+  { key: "shipped",   label: "Shipped",   tone: "violet", final: false },
+  { key: "delivered", label: "Delivered", tone: "green",  final: true  },
+  { key: "cancelled", label: "Cancelled", tone: "red",    final: true  },
 ];
+
+// Legacy / mobile-app statuses we still render (read-only) but never offer as
+// an advance action because the backend rejects them.
+const LEGACY_LABELS = {
+  confirmed: { label: "Confirmed", tone: "sky" },
+  paid: { label: "Paid", tone: "sky" },
+  processing: { label: "Processing", tone: "indigo" },
+  packed: { label: "Packed", tone: "indigo" },
+  out_for_delivery: { label: "Out for delivery", tone: "violet" },
+  returned: { label: "Returned", tone: "red" },
+  refunded: { label: "Refunded", tone: "red" },
+  pending_cod: { label: "Placed", tone: "amber" },
+};
 
 const STAGE_INDEX = Object.fromEntries(ORDER_STAGES.map((s, i) => [s.key, i]));
 
@@ -40,7 +49,11 @@ const TONE_CLS = {
 };
 
 export function stageMeta(key) {
-  return ORDER_STAGES.find((s) => s.key === key) || { key, label: key || "unknown", tone: "gray", final: false };
+  const found = ORDER_STAGES.find((s) => s.key === key);
+  if (found) return found;
+  const legacy = LEGACY_LABELS[key];
+  if (legacy) return { key, label: legacy.label, tone: legacy.tone, final: false };
+  return { key, label: key || "unknown", tone: "gray", final: false };
 }
 
 export function stageChipClass(key) {
@@ -48,14 +61,18 @@ export function stageChipClass(key) {
   return "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold capitalize " + (TONE_CLS[t] || TONE_CLS.gray);
 }
 
-/** Given the current stage, what stages can it advance to? Excludes final states. */
+/** Given the current stage, what stages can it advance to?
+ *  Only the four backend-accepted stages are offered. From any non-final
+ *  status the vendor can move forward (shipped → delivered) or cancel. */
 export function nextStages(currentKey) {
-  const idx = STAGE_INDEX[currentKey] ?? -1;
   const cur = stageMeta(currentKey);
   if (cur.final) return [];
-  // Non-final stages can advance to any following non-final OR to the two
-  // final states (delivered/cancelled/returned) directly.
-  return ORDER_STAGES.filter((s, i) => i > idx || s.final);
+  const idx = STAGE_INDEX[currentKey];
+  if (idx == null) {
+    // Legacy / unknown status → allow moving to any actionable stage.
+    return ORDER_STAGES.filter((s) => s.key !== currentKey);
+  }
+  return ORDER_STAGES.filter((s, i) => i > idx);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -64,9 +81,9 @@ export function nextStages(currentKey) {
 
 /** Extract the human-readable customer name from an order object. */
 export const orderCustomerName = (o) =>
-  o?.user_name || o?.customer_name || o?.shipping_address?.name || o?.user?.name || "";
+  o?.buyer_name || o?.user_name || o?.customer_name || o?.shipping_address?.name || o?.user?.name || "";
 export const orderCustomerPhone = (o) =>
-  o?.user_phone || o?.customer_phone || o?.shipping_address?.phone || o?.user?.phone || o?.phone || "";
+  o?.buyer_phone || o?.user_phone || o?.customer_phone || o?.shipping_address?.phone || o?.user?.phone || o?.phone || "";
 export const orderAmount = (o) =>
   Number(o?.total ?? o?.amount ?? o?.grand_total ?? o?.order_total ?? o?.totals?.grand_total ?? 0);
 export const orderVendorName = (o) =>

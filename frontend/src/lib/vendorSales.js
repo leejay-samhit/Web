@@ -47,6 +47,9 @@ export const POS_PAYMENT_MODES = [
   { key: "credit_sale", label: "Credit Sale" },
 ];
 
+// GST slabs offered in the POS line-item dropdown (India standard rates).
+export const GST_SLABS = [0, 5, 12, 18, 28, 40];
+
 /* -------------------------------------------------------------------------- */
 /*  Settings (invoice prefix etc.)                                            */
 /* -------------------------------------------------------------------------- */
@@ -104,19 +107,23 @@ export function computeTotals(items, opts = {}) {
     const gross = round2(qty * price);
     const disc = applyDiscount(gross, it.discount);
     const base = round2(gross - disc);
-    let net, tax;
+    const gstPct = Number(it.gst_pct || 0);
+    let taxable, tax, net;
     if (gstInclusive) {
-      // price already includes GST → tax = base − base/(1+gst/100)
-      tax = round2(base - base / (1 + (Number(it.gst_pct || 0) / 100)));
+      // Price already includes GST → split it out. The taxable value is the
+      // net-of-GST portion; the line total the customer pays stays = base.
+      taxable = round2(base / (1 + gstPct / 100));
+      tax = round2(base - taxable);
       net = base;
     } else {
-      tax = round2(base * (Number(it.gst_pct || 0) / 100));
+      taxable = base;
+      tax = round2(base * (gstPct / 100));
       net = round2(base + tax);
     }
-    subtotal += base;
+    subtotal += taxable;
     gstTotal += tax;
     discTotal += disc;
-    return { ...it, gross, discount_amount: disc, taxable: base, tax_amount: tax, line_total: net };
+    return { ...it, gross, discount_amount: disc, taxable, tax_amount: tax, line_total: net };
   });
   subtotal = round2(subtotal);
   gstTotal = round2(gstTotal);
@@ -358,6 +365,63 @@ export function getAnalytics(uid) {
     highest_gst: [...arr].sort((a, b) => b.gst - a.gst).slice(0, 10),
     least_sold: [...arr].sort((a, b) => a.qty - b.qty).slice(0, 5),
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Customer Book — named customers saved on every Collect & Complete         */
+/* -------------------------------------------------------------------------- */
+const CUSTOMERS_KEY = (uid) => `sc_vendor_customers_v1_${uid || "anon"}`;
+
+export const listCustomers = (uid) => safeParse(localStorage.getItem(CUSTOMERS_KEY(uid)), []);
+
+/**
+ * Upsert a customer into the vendor's Customer Book.
+ * Dedupes by phone (preferred) else by case-insensitive name.
+ * Tracks visits, total_spent and last_purchase_at.
+ */
+export function saveCustomer(uid, cust) {
+  const name = (cust?.name || "").trim();
+  const phone = (cust?.phone || "").trim();
+  if (!name && !phone) return null;
+  const list = listCustomers(uid);
+  const now = new Date().toISOString();
+  const amount = Number(cust?.amount) || 0;
+  const idx = list.findIndex((c) =>
+    (phone && (c.phone || "").trim() === phone) ||
+    (!phone && (c.name || "").trim().toLowerCase() === name.toLowerCase())
+  );
+  if (idx >= 0) {
+    const ex = list[idx];
+    list[idx] = {
+      ...ex,
+      name: name || ex.name,
+      phone: phone || ex.phone,
+      gstin: cust.gstin || ex.gstin || "",
+      address: cust.address || ex.address || "",
+      last_purchase_at: now,
+      visits: (ex.visits || 1) + 1,
+      total_spent: round2((ex.total_spent || 0) + amount),
+    };
+  } else {
+    list.unshift({
+      id: `cust_${Date.now()}_${Math.floor(Math.random() * 999)}`,
+      name, phone,
+      gstin: cust.gstin || "",
+      address: cust.address || "",
+      created_at: now,
+      last_purchase_at: now,
+      visits: 1,
+      total_spent: round2(amount),
+    });
+  }
+  localStorage.setItem(CUSTOMERS_KEY(uid), JSON.stringify(list));
+  return list;
+}
+
+export function deleteCustomer(uid, id) {
+  const list = listCustomers(uid).filter((c) => c.id !== id);
+  localStorage.setItem(CUSTOMERS_KEY(uid), JSON.stringify(list));
+  return list;
 }
 
 /* -------------------------------------------------------------------------- */

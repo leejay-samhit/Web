@@ -466,3 +466,22 @@ Full refactor:
 
 ## Credentials
 See `/app/memory/test_credentials.md`.
+
+## Batch 2 — POS/Chat/Orders fixes (June 2026)
+
+Verified end-to-end at **100% (7/7)** — see `/app/test_reports/iteration_22.json`. Test vendor: `ali@gmail.com` / `1234567890`.
+
+### Fixes shipped
+- **Slang-Connect New Chat** (`Chat.jsx`): rewired to the only backend lookup that exists — `GET /chat/search?code=<referral_code>` (exact referral code) → shows the user card → opens existing `thread_id` or `POST /chat/threads {other_user_id}`. Input auto-uppercases. Friendly non-crash message when someone types a name/email (backend can't search those). Removed the old 4-endpoint fallback that always 404'd and produced the scary "Ask them to share their exact referral code" error.
+- **POS GST-inclusive math** (`vendorSales.computeTotals`): fixed double-counting. Inclusive branch now sets `subtotal = taxable (net-of-GST)`, `tax = base − taxable`, `net = base`, so **grand total = MRP** (e.g. ₹100 @18% → taxable ₹84.75 + GST ₹15.25 = ₹100). Exclusive still ₹100 + ₹18 = ₹118.
+- **POS GST dropdown** (`VendorPOS.jsx`): per-line GST is now a `<select>` of the standard slabs `GST_SLABS = [0,5,12,18,28,40]` (was free-text).
+- **Collect Payment redesign** (`VendorPOS.jsx`): green hero-card modal, exactly 3 modes **Cash / UPI / Card**, contextual reference input (UPI txn / Card last-4), Remarks textarea. Removed the multi-mode split UI + netbanking/wallet/debit.
+- **Customer Book** (new `VendorCustomers.jsx` at `/vendor/customers`, nav tab `vnav-customers`): every "Named customer" Collect & Complete upserts into a localStorage book (dedup by phone→name, tracks visits + total_spent). Searchable, CSV download. Data layer `listCustomers/saveCustomer/deleteCustomer` in `vendorSales.js`.
+- **Vendor Orders app↔web sync** (`VendorOrders.jsx`): primary feed switched from the never-shipped `/vendor/me/orders` to the external **`/vendor/me/sales`** (the app's real "Shop Orders"), keyed on `order_id`. Status advance uses `PATCH /vendor/orders/{order_id}/status` on the external backend (confirmed working). Local mirror merged as supplement.
+- **Order stages reduced** (`orders.js`): `ORDER_STAGES` now only the 4 the external backend accepts — **placed / shipped / delivered / cancelled**. Legacy statuses (confirmed/paid/processing/packed/out_for_delivery/returned) still render read-only via `LEGACY_LABELS` but are never offered as an advance action. This is exactly what the user asked ("delete Confirmed/Paid/… options").
+- **Cancelled orders excluded from Sales** (`VendorSales.jsx`): `allSales` now filters out voided statuses (cancelled/refunded/returned/rejected/failed) so KPI tiles and payment tiles don't count them.
+
+### Known non-blocking notes
+- Dev-only console warning `<span> cannot be a child of <option>` on the POS GST select (code-tagger artefact; clean in prod build).
+- POS Confirm can take a few seconds (per-line external stock PATCH); button shows a spinner meanwhile.
+- Backend limitation: user search is referral-code-only (no name/email lookup for regular users). External order status PATCH only accepts placed/shipped/delivered/cancelled.

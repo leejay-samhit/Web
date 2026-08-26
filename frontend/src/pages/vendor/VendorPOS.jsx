@@ -8,14 +8,22 @@ import { formatINR, resolveImageUrl } from "@/lib/utils";
 import { log } from "@/lib/log";
 import { printInvoice } from "@/lib/invoicePrint";
 import {
-  POS_PAYMENT_MODES, computeTotals, createInvoice, getSettings, peekNextInvoiceNumber,
+  GST_SLABS, computeTotals, createInvoice, getSettings, peekNextInvoiceNumber, saveCustomer,
 } from "@/lib/vendorSales";
 import {
-  Search, Plus, Minus, Trash2, X, Receipt, Wallet, Banknote, CheckCircle2, Loader2, ShoppingCart, IndianRupee, Printer,
+  Search, Plus, Minus, Trash2, X, Receipt, CheckCircle2, Loader2, ShoppingCart, IndianRupee, Printer,
+  Banknote, Smartphone, CreditCard, BookUser,
 } from "lucide-react";
 import VendorNav from "@/components/vendor/VendorNav";
 
-const FIRST_PAYMENT = { mode: "cash", mode_label: "Cash", amount: 0 };
+// Collect-payment options — Cash / UPI / Card only (user decision Aug-2026).
+// Card is stored under the "credit" ledger key so it still lands in the
+// Sales-dashboard payment breakdown.
+const PAY_OPTIONS = [
+  { key: "cash", label: "Cash", store: "cash", icon: Banknote, color: "#0F6E4F", refLabel: "" },
+  { key: "upi", label: "UPI", store: "upi", icon: Smartphone, color: "#0891B2", refLabel: "UPI reference / txn ID" },
+  { key: "card", label: "Card", store: "credit", icon: CreditCard, color: "#7C3AED", refLabel: "Card reference / last 4 digits" },
+];
 
 export default function VendorPOS() {
   const { user } = useAuth();
@@ -30,7 +38,10 @@ export default function VendorPOS() {
   const [roundOff, setRoundOff] = useState(true);
   const [gstInclusive, setGstInclusive] = useState(false);
   const [customer, setCustomer] = useState({ kind: "walkin", name: "", phone: "", gstin: "", address: "" });
-  const [payments, setPayments] = useState([{ ...FIRST_PAYMENT }]);
+  // Collect-payment state (single mode + reference + remarks)
+  const [payMode, setPayMode] = useState("cash");
+  const [payRef, setPayRef] = useState("");
+  const [payRemarks, setPayRemarks] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(null);
@@ -109,30 +120,29 @@ export default function VendorPOS() {
     [items, billDiscount, roundOff, gstInclusive]
   );
 
-  // Keep first payment in sync with grand total when only 1 mode
-  useEffect(() => {
-    if (payments.length === 1) setPayments([{ ...payments[0], amount: totals.grand_total }]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [totals.grand_total]);
-
-  const paidTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const balance = Number((totals.grand_total - paidTotal).toFixed(2));
-
-  const addPaymentMode = () => setPayments((cur) => [...cur, { mode: "upi", mode_label: "UPI", amount: 0 }]);
-  const updatePayment = (idx, patch) => {
-    setPayments((cur) => cur.map((p, i) => (i === idx ? { ...p, ...patch, mode_label: patch.mode ? POS_PAYMENT_MODES.find((m) => m.key === patch.mode)?.label : p.mode_label } : p)));
-  };
-  const removePayment = (idx) => setPayments((cur) => cur.filter((_, i) => i !== idx));
-
   const reset = () => {
     setItems([]); setBillDiscount(""); setCustomer({ kind: "walkin", name: "", phone: "", gstin: "", address: "" });
-    setPayments([{ ...FIRST_PAYMENT }]); setError(""); setShowCheckout(false);
+    setPayMode("cash"); setPayRef(""); setPayRemarks(""); setError(""); setShowCheckout(false);
   };
+
+  const openCheckout = () => {
+    setPayMode("cash"); setPayRef(""); setPayRemarks(""); setError("");
+    setShowCheckout(true);
+  };
+
+  const activeOption = PAY_OPTIONS.find((o) => o.key === payMode) || PAY_OPTIONS[0];
 
   const checkout = async () => {
     setError("");
     if (items.length === 0) return setError("Add at least one item to the bill.");
-    if (Math.abs(balance) > 0.5) return setError(`Payment ₹${paidTotal} doesn't match grand total ₹${totals.grand_total}. Balance: ₹${balance}`);
+    const opt = activeOption;
+    const payments = [{
+      mode: opt.store,
+      mode_label: opt.label,
+      amount: totals.grand_total,
+      reference: payRef.trim(),
+      remarks: payRemarks.trim(),
+    }];
     // Compute profit (revenue - cost) using line cost when available.
     const profit = items.reduce((s, it) => s + ((Number(it.line_total || 0) - Number(it.cost || 0) * Number(it.qty || 0))), 0);
     const draft = {
@@ -142,11 +152,18 @@ export default function VendorPOS() {
       customer: customer.kind === "walkin" ? { kind: "walkin", name: "Walk-in Customer" } : customer,
       gst_inclusive: gstInclusive,
       vendor_id: uid,
-      notes: "",
+      notes: payRemarks.trim(),
     };
     setSaving(true);
     try {
       const inv = await createInvoice(uid, draft);
+      // Save named customer to the Customer Book on every Collect & Complete.
+      if (customer.kind === "named" && (customer.name.trim() || customer.phone.trim())) {
+        saveCustomer(uid, {
+          name: customer.name, phone: customer.phone, gstin: customer.gstin,
+          address: customer.address, amount: totals.grand_total,
+        });
+      }
       setSuccess(inv);
       // Refresh products to reflect updated stock counts coming back from the API.
       loadProducts();
@@ -282,13 +299,15 @@ export default function VendorPOS() {
                           />
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <input
-                            type="number"
+                          <select
                             data-testid={`pos-gst-${idx}`}
-                            value={it.gst_pct}
-                            onChange={(e) => updateItem(idx, { gst_pct: Number(e.target.value || 0) })}
-                            className="w-12 text-right border border-[color:var(--sc-border)] rounded px-1 py-0.5 text-xs"
-                          />
+                            value={Number(it.gst_pct)}
+                            onChange={(e) => updateItem(idx, { gst_pct: Number(e.target.value) })}
+                            className="w-16 text-right border border-[color:var(--sc-border)] rounded px-1 py-1 text-xs bg-white"
+                          >
+                            {GST_SLABS.map((g) => <option key={g} value={g}>{g}%</option>)}
+                            {!GST_SLABS.includes(Number(it.gst_pct)) && <option value={Number(it.gst_pct)}>{it.gst_pct}%</option>}
+                          </select>
                           <div className="text-[10px] text-[color:var(--sc-ink-muted)]">{formatINR(it.tax_amount)}</div>
                         </td>
                         <td className="px-2 py-2 text-right font-bold">{formatINR(it.line_total)}</td>
@@ -309,10 +328,11 @@ export default function VendorPOS() {
           <div className="sc-card p-4" data-testid="pos-totals">
             <div className="font-extrabold text-sm mb-2">Totals</div>
             <div className="text-xs space-y-1">
-              <div className="flex justify-between"><span>Subtotal</span><span className="font-semibold">{formatINR(totals.subtotal)}</span></div>
+              <div className="flex justify-between"><span>Subtotal (taxable)</span><span className="font-semibold">{formatINR(totals.subtotal)}</span></div>
               {totals.discount_total > 0 && <div className="flex justify-between"><span>Discount</span><span className="font-semibold text-[color:var(--sc-error)]">-{formatINR(totals.discount_total)}</span></div>}
               <div className="flex justify-between"><span>GST total</span><span className="font-semibold">{formatINR(totals.gst_total)}</span></div>
               {totals.round_off !== 0 && <div className="flex justify-between"><span>Round off</span><span className="font-semibold">{formatINR(totals.round_off)}</span></div>}
+              {gstInclusive && <div className="text-[10px] text-[color:var(--sc-ink-muted)]">Prices are GST-inclusive · grand total = MRP shown on items.</div>}
               <div className="flex justify-between text-base border-t border-[color:var(--sc-border)] pt-1.5 mt-1.5"><span className="font-extrabold">Grand total</span><span className="font-extrabold text-[color:var(--sc-primary)]" data-testid="pos-grand-total">{formatINR(totals.grand_total)}</span></div>
             </div>
             <div className="flex items-center gap-2 mt-3">
@@ -336,75 +356,107 @@ export default function VendorPOS() {
               <button data-testid="pos-cust-walkin" onClick={() => setCustomer({ ...customer, kind: "walkin" })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${customer.kind === "walkin" ? "bg-[color:var(--sc-primary)] text-white border-[color:var(--sc-primary)]" : "bg-white border-[color:var(--sc-border)]"}`}>Walk-in</button>
               <button data-testid="pos-cust-named" onClick={() => setCustomer({ ...customer, kind: "named" })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${customer.kind === "named" ? "bg-[color:var(--sc-primary)] text-white border-[color:var(--sc-primary)]" : "bg-white border-[color:var(--sc-border)]"}`}>Named customer</button>
             </div>
-            {customer.kind === "named" && (
+            {customer.kind === "named" ? (
               <div className="space-y-2">
                 <input data-testid="pos-cust-name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Name" className="sc-input text-xs" />
                 <input data-testid="pos-cust-phone" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} placeholder="Phone" className="sc-input text-xs" />
                 <input data-testid="pos-cust-gstin" value={customer.gstin} onChange={(e) => setCustomer({ ...customer, gstin: e.target.value })} placeholder="GSTIN (optional)" className="sc-input text-xs" />
                 <input data-testid="pos-cust-address" value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} placeholder="Address" className="sc-input text-xs" />
+                <div className="text-[10px] text-[color:var(--sc-primary)] inline-flex items-center gap-1"><BookUser size={11} /> Saved to your Customer Book on complete.</div>
               </div>
-            )}
+            ) : null}
           </div>
 
           <button
             data-testid="pos-checkout-open"
             disabled={items.length === 0}
-            onClick={() => { setPayments([{ mode: "cash", mode_label: "Cash", amount: totals.grand_total }]); setShowCheckout(true); }}
+            onClick={openCheckout}
             className="sc-btn-primary w-full text-sm inline-flex items-center justify-center gap-1.5"
           >
             <IndianRupee size={14} /> Collect & complete · {formatINR(totals.grand_total)}
           </button>
 
-          {error && <div data-testid="pos-error" className="sc-card p-3 text-xs font-semibold text-[color:var(--sc-error)] bg-red-50 border-red-100">{error}</div>}
+          {error && !showCheckout && <div data-testid="pos-error" className="sc-card p-3 text-xs font-semibold text-[color:var(--sc-error)] bg-red-50 border-red-100">{error}</div>}
         </div>
       </div>
 
-      {/* ============================ Checkout modal ============================ */}
+      {/* ============================ Collect Payment — hero card ============================ */}
       {showCheckout && !success && (
-        <div className="fixed inset-0 z-50 bg-black/50 grid place-items-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-5 sc-fade-in" data-testid="pos-checkout-modal">
-            <div className="flex justify-between items-center mb-3">
-              <div className="font-extrabold flex items-center gap-1.5"><Wallet size={16} /> Collect payment</div>
-              <button onClick={() => setShowCheckout(false)}><X size={16} /></button>
+        <div className="fixed inset-0 z-50 bg-black/50 grid place-items-center p-4" onClick={() => setShowCheckout(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden sc-fade-in shadow-2xl" data-testid="pos-checkout-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Hero header */}
+            <div className="relative p-6 text-white" style={{ background: "linear-gradient(135deg,#0F6E4F 0%,#0B5A40 100%)" }}>
+              <button onClick={() => setShowCheckout(false)} className="absolute top-4 right-4 text-white/80 hover:text-white" data-testid="pos-checkout-close"><X size={18} /></button>
+              <div className="text-[11px] uppercase tracking-widest font-bold opacity-80">Amount to collect</div>
+              <div className="text-4xl font-extrabold mt-1" data-testid="pos-hero-amount">{formatINR(totals.grand_total)}</div>
+              <div className="text-[11px] opacity-80 mt-1">
+                {customer.kind === "named" ? (customer.name || "Named customer") : "Walk-in customer"} · {items.length} item{items.length !== 1 ? "s" : ""}
+              </div>
             </div>
-            <div className="text-2xl font-extrabold text-[color:var(--sc-primary)] mb-3">{formatINR(totals.grand_total)}</div>
-            <div className="space-y-2">
-              {payments.map((p, idx) => (
-                <div key={idx} className="flex items-center gap-2" data-testid={`pos-pay-${idx}`}>
-                  <select
-                    value={p.mode}
-                    onChange={(e) => updatePayment(idx, { mode: e.target.value })}
-                    className="sc-input text-xs flex-1"
-                    data-testid={`pos-pay-mode-${idx}`}
-                  >
-                    {POS_PAYMENT_MODES.filter((m) => m.key !== "netbank" && m.key !== "credit_sale").map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-                  </select>
-                  <input
-                    type="number"
-                    value={p.amount}
-                    onChange={(e) => updatePayment(idx, { amount: Number(e.target.value || 0) })}
-                    className="sc-input text-xs w-32 text-right"
-                    data-testid={`pos-pay-amount-${idx}`}
-                  />
-                  {payments.length > 1 && <button onClick={() => removePayment(idx)} className="text-[color:var(--sc-error)]"><Trash2 size={14} /></button>}
+
+            <div className="p-5 space-y-4">
+              {/* Payment mode chooser */}
+              <div>
+                <div className="text-[11px] uppercase tracking-widest font-bold text-[color:var(--sc-ink-muted)] mb-2">Payment mode</div>
+                <div className="grid grid-cols-3 gap-2" data-testid="pos-pay-modes">
+                  {PAY_OPTIONS.map((o) => {
+                    const active = payMode === o.key;
+                    return (
+                      <button
+                        key={o.key}
+                        data-testid={`pos-pay-mode-${o.key}`}
+                        onClick={() => { setPayMode(o.key); setPayRef(""); }}
+                        className={`rounded-2xl border-2 p-3 flex flex-col items-center gap-1.5 transition ${active ? "text-white shadow-md" : "bg-white text-[color:var(--sc-ink)] border-[color:var(--sc-border)] hover:border-[color:var(--sc-primary)]"}`}
+                        style={active ? { background: o.color, borderColor: o.color } : {}}
+                      >
+                        <o.icon size={20} />
+                        <span className="text-xs font-bold">{o.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
-              <button data-testid="pos-pay-add" onClick={addPaymentMode} className="text-xs font-semibold text-[color:var(--sc-primary)] inline-flex items-center gap-1"><Plus size={12} /> Split / add another mode</button>
+              </div>
+
+              {/* Reference (UPI / Card only) */}
+              {activeOption.refLabel && (
+                <div>
+                  <label className="text-[11px] uppercase tracking-widest font-bold text-[color:var(--sc-ink-muted)]">{activeOption.refLabel}</label>
+                  <input
+                    data-testid="pos-pay-ref"
+                    value={payRef}
+                    onChange={(e) => setPayRef(e.target.value)}
+                    placeholder={activeOption.key === "upi" ? "e.g. 4021XXXX / UTR" : "e.g. **** 1234"}
+                    className="sc-input text-sm mt-1"
+                  />
+                </div>
+              )}
+
+              {/* Remarks */}
+              <div>
+                <label className="text-[11px] uppercase tracking-widest font-bold text-[color:var(--sc-ink-muted)]">Remarks (optional)</label>
+                <textarea
+                  data-testid="pos-pay-remarks"
+                  value={payRemarks}
+                  onChange={(e) => setPayRemarks(e.target.value)}
+                  rows={2}
+                  placeholder="Any note for this bill…"
+                  className="sc-input text-sm mt-1 resize-none"
+                />
+              </div>
+
+              {error && <div data-testid="pos-checkout-error" className="text-xs font-semibold text-[color:var(--sc-error)] bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">{error}</div>}
+
+              <button
+                data-testid="pos-checkout-confirm"
+                disabled={saving}
+                onClick={checkout}
+                className="sc-btn-primary w-full inline-flex items-center justify-center gap-1.5 py-3 text-sm"
+              >
+                {saving ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                Confirm {activeOption.label} · {formatINR(totals.grand_total)}
+              </button>
+              <div className="text-[10px] text-[color:var(--sc-ink-muted)] text-center">Stock will be deducted from your live inventory once the bill is saved.</div>
             </div>
-            <div className="border-t border-[color:var(--sc-border)] mt-3 pt-3 text-xs space-y-1">
-              <div className="flex justify-between"><span>Paid</span><span className="font-semibold">{formatINR(paidTotal)}</span></div>
-              <div className="flex justify-between"><span>Balance</span><span data-testid="pos-balance" className={`font-extrabold ${Math.abs(balance) < 0.5 ? "text-[color:var(--sc-primary)]" : "text-[color:var(--sc-error)]"}`}>{formatINR(balance)}</span></div>
-            </div>
-            {error && <div data-testid="pos-checkout-error" className="text-xs font-semibold text-[color:var(--sc-error)] mt-2">{error}</div>}
-            <button
-              data-testid="pos-checkout-confirm"
-              disabled={saving}
-              onClick={checkout}
-              className="sc-btn-primary w-full mt-3 inline-flex items-center justify-center gap-1.5"
-            >
-              {saving ? <Loader2 className="animate-spin" size={14} /> : <Banknote size={14} />} Confirm · save bill
-            </button>
-            <div className="text-[10px] text-[color:var(--sc-ink-muted)] mt-2 text-center">Stock will be deducted from your live inventory once the bill is saved.</div>
           </div>
         </div>
       )}

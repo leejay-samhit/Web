@@ -22,6 +22,7 @@ import VendorSales from "@/pages/vendor/VendorSales";
 import VendorSubstore from "@/pages/vendor/VendorSubstore";
 import VendorPOS from "@/pages/vendor/VendorPOS";
 import VendorInvoices from "@/pages/vendor/VendorInvoices";
+import VendorCustomers from "@/pages/vendor/VendorCustomers";
 import VendorCashSummary from "@/pages/vendor/VendorCashSummary";
 import VendorAnalytics from "@/pages/vendor/VendorAnalytics";
 import VendorSettings from "@/pages/vendor/VendorSettings";
@@ -94,6 +95,7 @@ function App() {
               <Route path="/vendor/sales" element={userGuard(<VendorSales />)} />
               <Route path="/vendor/pos" element={userGuard(<VendorPOS />)} />
               <Route path="/vendor/invoices" element={userGuard(<VendorInvoices />)} />
+              <Route path="/vendor/customers" element={userGuard(<VendorCustomers />)} />
               <Route path="/vendor/cash" element={userGuard(<VendorCashSummary />)} />
               <Route path="/vendor/substore" element={userGuard(<VendorSubstore />)} />
               <Route path="/vendor/analytics" element={userGuard(<VendorAnalytics />)} />
