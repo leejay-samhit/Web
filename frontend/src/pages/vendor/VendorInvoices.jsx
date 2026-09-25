@@ -88,8 +88,12 @@ export default function VendorInvoices() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const posInvoices = useMemo(() => listInvoices(uid).map((i) => ({ ...i, _channel: "POS · Walk-in" })), [uid, bump]);
   const all = useMemo(() => {
-    // Sort by created_at desc (POS + web/app unified)
-    const merged = [...posInvoices, ...online];
+    // Dedupe: a POS bill that was previously mirrored to the cloud also comes
+    // back in the online feed — drop the online copy so it isn't shown twice.
+    const posCloudIds = new Set(posInvoices.map((i) => i.cloud_id).filter(Boolean));
+    const posNos = new Set(posInvoices.map((i) => i.invoice_no).filter(Boolean));
+    const onlineDedup = online.filter((o) => !posCloudIds.has(o.id) && !posNos.has(o.invoice_no));
+    const merged = [...posInvoices, ...onlineDedup];
     merged.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
     return merged;
   }, [posInvoices, online]);
@@ -111,7 +115,20 @@ export default function VendorInvoices() {
   }, [all, q, mode, from, to, minAmt, maxAmt]);
 
   const handleCancel = (id) => { if (window.confirm("Cancel this invoice?")) { cancelInvoice(uid, id); setBump((b) => b + 1); } };
-  const handleRefund = (id) => { const reason = window.prompt("Refund reason"); if (reason !== null) { refundInvoice(uid, id, reason); setBump((b) => b + 1); } };
+  const handleRefund = async (id) => {
+    const pwd = window.prompt("Enter your owner password to confirm this refund:");
+    if (pwd == null || pwd === "") return;
+    try {
+      await apiLocal.post("/erp/owner-security/verify", { password: pwd });
+    } catch {
+      window.alert("Incorrect owner password — refund cancelled.");
+      return;
+    }
+    const reason = window.prompt("Refund reason (optional):");
+    if (reason === null) return;
+    refundInvoice(uid, id, reason || "");
+    setBump((b) => b + 1);
+  };
   const exportCsv = () => {
     // Business rule (04-Jul-2026): CSV must include CGST/SGST split + customer
     // GSTIN + Order Number/Date/Time so vendors can reconcile GSTR-1 filings.
@@ -219,9 +236,9 @@ export default function VendorInvoices() {
                     <div className="flex justify-end gap-1.5">
                       <button data-testid={`vi-view-${i.id}`} onClick={() => setView(i)} className="text-[color:var(--sc-primary)]"><Eye size={14} /></button>
                       <button data-testid={`vi-print-${i.id}`} onClick={() => printInvoice(i, settings)} className="text-[color:var(--sc-ink-muted)]"><Printer size={14} /></button>
-                      {i.status === "completed" && (
+                      {i.status === "completed" && !i._readonly && (
                         <>
-                          <button data-testid={`vi-refund-${i.id}`} onClick={() => handleRefund(i.id)} title="Refund" className="text-orange-600"><RotateCcw size={14} /></button>
+                          <button data-testid={`vi-refund-${i.id}`} onClick={() => handleRefund(i.id)} title="Refund (password protected)" className="text-orange-600"><RotateCcw size={14} /></button>
                           <button data-testid={`vi-cancel-${i.id}`} onClick={() => handleCancel(i.id)} title="Cancel" className="text-[color:var(--sc-error)]"><X size={14} /></button>
                         </>
                       )}

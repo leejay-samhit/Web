@@ -18,7 +18,7 @@ import {
  *  Only these methods are surfaced (user decision, Feb-2026):
  *  CASH · UPI · DEBIT · CREDIT · WALLET
  * ============================================================ */
-const PAY_KEYS = ["cash", "upi", "debit", "credit", "wallet"];
+const PAY_KEYS = ["cash", "upi", "debit", "wallet"];
 const PAY_META = {
   cash:   { label: "Cash",        icon: Banknote,   color: "#0F6E4F" },
   upi:    { label: "UPI",         icon: IndianRupee, color: "#0891B2" },
@@ -26,6 +26,16 @@ const PAY_META = {
   credit: { label: "Credit Card", icon: CreditCard, color: "#DB2777" },
   wallet: { label: "Wallet",      icon: WalletIcon, color: "#F59E0B" },
 };
+
+/** Friendly payment label for online/app orders (COD / Online / Wallet). */
+function displayPayLabel(o) {
+  const s = String(o?.paid_via || o?.payment_method || o?.payment_status || o?.mode || o?.payment_mode || "").toLowerCase();
+  if (!s) return null;
+  if (s.includes("cod") || s.includes("cash_on_delivery")) return "COD";
+  if (s.includes("wallet")) return "Wallet";
+  if (s.includes("razor") || s.includes("online") || s.includes("upi") || s.includes("prepaid") || s.includes("gpay") || s.includes("phonepe") || s === "paid") return "Online";
+  return null;
+}
 
 /** Normalise any raw mode/method string to one of PAY_KEYS or null. */
 function normaliseMode(raw) {
@@ -70,14 +80,16 @@ function toSaleRow(src, source /* 'pos' | 'online' */) {
       customer_phone: inv.customer?.phone || "",
       amount: inv.totals?.grand_total || 0,
       mode: primaryMode,
+      mode_label: PAY_META[primaryMode]?.label || "Cash",
       status: inv.status || "completed",
-      invoice_no: inv.invoice_no,
+      invoice_no: (inv.invoice_no || "").toUpperCase(),
       raw: inv,
     };
   }
   // online (upstream or local mirror)
   const o = src;
-  const mode = normaliseMode(o?.payment_method || o?.payment_mode || o?.mode || o?.gateway || o?.paymentType) || "upi";
+  const mode = normaliseMode(o?.paid_via || o?.payment_method || o?.payment_mode || o?.mode || o?.gateway || o?.paymentType || o?.payment_status) || "upi";
+  const modeLabel = displayPayLabel(o) || PAY_META[mode]?.label || "Online";
   return {
     id: o.id || o._id || `${o.order_id}-${o.product_id}`,
     channel: o.source === "local" ? "Web (mirror)" : "Web / App",
@@ -87,8 +99,9 @@ function toSaleRow(src, source /* 'pos' | 'online' */) {
     customer_phone: o?.customer?.phone || o?.buyer_phone || "",
     amount: orderAmount(o),
     mode,
+    mode_label: modeLabel,
     status: o.status || o.payment_status || "placed",
-    invoice_no: o.invoice_no || (o.id || "").toString().slice(0, 8),
+    invoice_no: (o.invoice_no || `SLG-${(o.order_id || o.id || "").toString().slice(0, 8)}`).toUpperCase(),
     raw: o,
   };
 }
@@ -283,7 +296,7 @@ function SalesDrilldown({ open, title, rows, from, to, onClose, onChangeRange, a
                   const meta = PAY_META[r.mode];
                   return (
                     <tr key={r.id} className="border-t border-[color:var(--sc-border)] hover:bg-[color:var(--sc-accent-light)]/30" data-testid={`vs-row-${r.id}`}>
-                      <td className="px-4 py-2 font-mono">{r.invoice_no || r.id?.toString().slice(0, 8)}</td>
+                      <td className="px-4 py-2 font-mono">{(r.invoice_no || r.id?.toString().slice(0, 8) || "").toUpperCase()}</td>
                       <td className="px-4 py-2 text-[color:var(--sc-ink-muted)]">{formatDateTime(r.when)}</td>
                       <td className="px-4 py-2">
                         <span className="sc-chip">{r.channel}</span>
@@ -295,7 +308,7 @@ function SalesDrilldown({ open, title, rows, from, to, onClose, onChangeRange, a
                       <td className="px-4 py-2">
                         {meta ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: meta.color + "18", color: meta.color }}>
-                            <meta.icon size={11} /> {meta.label}
+                            <meta.icon size={11} /> {r.mode_label || meta.label}
                           </span>
                         ) : "—"}
                       </td>
@@ -461,9 +474,13 @@ export default function VendorSales() {
 
   /* Unify all sales into one list of rows (excluding voided orders) */
   const allSales = useMemo(() => {
+    // Dedupe cloud-mirrored POS bills that also come back in the online feed.
+    const posCloudIds = new Set(posInvoices.map((i) => i.cloud_id).filter(Boolean));
     const rows = [];
     posInvoices.forEach((inv) => rows.push(toSaleRow(inv, "pos")));
-    onlineRows.forEach((o) => rows.push(toSaleRow(o, "online")));
+    onlineRows
+      .filter((o) => !posCloudIds.has(o.id) && !posCloudIds.has(o.order_id))
+      .forEach((o) => rows.push(toSaleRow(o, "online")));
     // Sort newest first
     rows.sort((a, b) => new Date(b.when || 0) - new Date(a.when || 0));
     // Drop cancelled / refunded / returned — they must not inflate sales,
@@ -654,13 +671,13 @@ export default function VendorSales() {
                 const meta = PAY_META[r.mode];
                 return (
                   <tr key={r.id} className="border-t border-[color:var(--sc-border)] hover:bg-[color:var(--sc-accent-light)]/20 cursor-pointer" onClick={() => openReceipt(r)} data-testid={`vs-recent-${r.id}`}>
-                    <td className="px-3 py-2 font-mono">{r.invoice_no || r.id?.toString().slice(0, 8)}</td>
+                    <td className="px-3 py-2 font-mono">{(r.invoice_no || r.id?.toString().slice(0, 8) || "").toUpperCase()}</td>
                     <td className="px-3 py-2"><span className="sc-chip">{r.channel}</span></td>
                     <td className="px-3 py-2">{r.customer || "—"}</td>
                     <td className="px-3 py-2">
                       {meta ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: meta.color + "18", color: meta.color }}>
-                          <meta.icon size={11} /> {meta.label}
+                          <meta.icon size={11} /> {r.mode_label || meta.label}
                         </span>
                       ) : "—"}
                     </td>

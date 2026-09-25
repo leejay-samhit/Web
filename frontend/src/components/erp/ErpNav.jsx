@@ -1,23 +1,13 @@
 import { NavLink } from "react-router-dom";
 import {
-  LayoutDashboard, Package, BookOpen, Boxes, Receipt, Lock,
-  Wallet as WalletIcon, TrendingUp, Percent, Sparkles, Building2,
-  ShieldAlert, BellRing, LineChart, FileBarChart, Search, UserCog,
-  ScrollText, KeyRound, GraduationCap,
+  LayoutDashboard, BookOpen, Lock, Sparkles, UserCog, KeyRound, GraduationCap,
 } from "lucide-react";
 
 const ITEMS = [
   { to: "/vendor/erp",                  label: "GST Hub",           icon: LayoutDashboard,  end: true },
-  { to: "/vendor/erp/products",         label: "Product Master",    icon: Package },
   { to: "/vendor/erp/purchase-book",    label: "Purchase Book",     icon: BookOpen,        lock: true },
-  { to: "/vendor/erp/inventory",        label: "Inventory",         icon: Boxes },
-  { to: "/vendor/erp/accounts",         label: "Accounts",          icon: WalletIcon,      lock: true },
   { to: "/vendor/erp/gst-assistant",    label: "Smart GST",         icon: Sparkles,        lock: true },
-  { to: "/vendor/erp/reminders",        label: "Reminders",         icon: BellRing },
-  { to: "/vendor/erp/income-tax",       label: "Income Tax",        icon: FileBarChart,    lock: true },
-  { to: "/vendor/erp/reports",          label: "Reports",           icon: FileBarChart,    lock: true },
   { to: "/vendor/erp/roles",            label: "Roles & Staff",     icon: UserCog,         lock: true },
-  { to: "/vendor/erp/audit",            label: "Audit Log",         icon: ScrollText,      lock: true },
   { to: "/vendor/erp/security",         label: "Owner Settings",    icon: KeyRound,        lock: true },
   { to: "/vendor/erp/learn",            label: "Learn",             icon: GraduationCap },
 ];

@@ -108,6 +108,25 @@ export default function Layout({ children, title }) {
     });
   };
 
+  // Content-protection deterrent: block right-click context menu and the
+  // common view-source / devtools / save shortcuts across the app shell.
+  // (This is a deterrent only — it cannot fully prevent a determined user.)
+  useEffect(() => {
+    const onContext = (e) => { e.preventDefault(); };
+    const onKey = (e) => {
+      const k = (e.key || "").toLowerCase();
+      if (e.key === "F12") { e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && ["u", "s", "p"].includes(k)) { e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && ["i", "j", "c"].includes(k)) { e.preventDefault(); }
+    };
+    document.addEventListener("contextmenu", onContext);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("contextmenu", onContext);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-[color:var(--sc-bg)] flex">
       {/* Sidebar — collapses to icon rail on desktop when toggled */}

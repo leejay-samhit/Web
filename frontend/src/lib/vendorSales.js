@@ -16,7 +16,7 @@
  */
 
 import api from "@/lib/api";
-import { mirrorSaleToCloud, probeCloud, listSales as cloudListSales, cancelSale as cloudCancelSale, refundSale as cloudRefundSale, bulkImportSales } from "@/lib/posCloud";
+import { probeCloud, listSales as cloudListSales, cancelSale as cloudCancelSale, refundSale as cloudRefundSale, bulkImportSales } from "@/lib/posCloud";
 
 const KEY = (uid) => `sc_vendor_pos_v1_${uid || "anon"}`;
 const SETTINGS_KEY = (uid) => `sc_vendor_pos_settings_v1_${uid || "anon"}`;
@@ -100,7 +100,7 @@ const applyDiscount = (base, d) => {
 
 export function computeTotals(items, opts = {}) {
   const { totalDiscount = 0, roundOff = true, gstInclusive = false } = opts;
-  let subtotal = 0, gstTotal = 0, discTotal = 0;
+  let subtotal = 0, gstTotal = 0, discTotal = 0, commissionTotal = 0;
   const lines = items.map((it) => {
     const qty = Number(it.qty || 0);
     const price = Number(it.price || 0);
@@ -108,6 +108,8 @@ export function computeTotals(items, opts = {}) {
     const disc = applyDiscount(gross, it.discount);
     const base = round2(gross - disc);
     const gstPct = Number(it.gst_pct || 0);
+    const commissionPct = Number(it.commission || 0);
+    const commissionAmt = round2(base * (commissionPct / 100));
     let taxable, tax, net;
     if (gstInclusive) {
       // Price already includes GST → split it out. The taxable value is the
@@ -123,17 +125,25 @@ export function computeTotals(items, opts = {}) {
     subtotal += taxable;
     gstTotal += tax;
     discTotal += disc;
-    return { ...it, gross, discount_amount: disc, taxable, tax_amount: tax, line_total: net };
+    commissionTotal += commissionAmt;
+    return { ...it, gross, discount_amount: disc, commission_amount: commissionAmt, taxable, tax_amount: tax, line_total: net };
   });
   subtotal = round2(subtotal);
   gstTotal = round2(gstTotal);
   discTotal = round2(discTotal);
+  commissionTotal = round2(commissionTotal);
   const billDiscount = applyDiscount(subtotal, totalDiscount);
+  // Commission is added on top and an equal auto-discount is applied, so the
+  // customer's grand total is unchanged — commission is recorded for the
+  // vendor's own margin tracking (user rule June-2026).
   const beforeRound = round2(subtotal + gstTotal - billDiscount);
   const grand = roundOff ? Math.round(beforeRound) : beforeRound;
   const roundOffAmount = round2(grand - beforeRound);
   return {
-    lines, subtotal, gst_total: gstTotal, discount_total: discTotal + billDiscount,
+    lines, subtotal, gst_total: gstTotal,
+    commission_total: commissionTotal,
+    display_subtotal: round2(subtotal + commissionTotal),
+    discount_total: round2(discTotal + billDiscount + commissionTotal),
     bill_discount: billDiscount, round_off: roundOffAmount, grand_total: grand,
   };
 }
@@ -165,16 +175,11 @@ export async function createInvoice(uid, draft) {
     ...draft,
   };
 
-  // Best-effort cloud mirror — never blocks the local write.
-  // When the backend POS endpoints exist, this will start succeeding and the
-  // cloud copy becomes the canonical source on bulk-import.
-  let cloud = { ok: false };
-  try { cloud = await mirrorSaleToCloud({ ...invoice }); } catch { /* swallow */ }
-  if (cloud?.ok && cloud.server?.id) {
-    invoice.cloud_id = cloud.server.id;
-    invoice.cloud_synced_at = new Date().toISOString();
-  }
-
+  // NOTE: the automatic cloud mirror was removed — it caused POS bills to be
+  // written both to localStorage (walk-in) AND to the online `/vendor/me/sales`
+  // feed (as an "online buyer"), which surfaced the SAME bill twice in the
+  // Invoices / Sales lists. POS stays localStorage-authoritative; vendors can
+  // still bulk-push from Settings if they want a cloud copy.
   writeAll(uid, [invoice, ...listInvoices(uid)]);
   return invoice;
 }

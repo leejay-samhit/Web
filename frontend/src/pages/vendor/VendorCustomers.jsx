@@ -1,16 +1,49 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import * as XLSX from "xlsx";
 import { useAuth } from "@/context/AuthContext";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
-import { listCustomers, deleteCustomer, toCSV } from "@/lib/vendorSales";
+import { listCustomers, saveCustomer, deleteCustomer, toCSV } from "@/lib/vendorSales";
 import { formatINR, formatDateTime } from "@/lib/utils";
-import { Search, Download, Trash2, BookUser, Phone, Users } from "lucide-react";
+import { Search, Download, Upload, Trash2, BookUser, Phone, Users } from "lucide-react";
 
 export default function VendorCustomers() {
   const { user } = useAuth();
   const uid = user?.id;
   const [bump, setBump] = useState(0);
   const [q, setQ] = useState("");
+  const fileRef = useRef(null);
+
+  // Bulk import from Excel/CSV. Columns matched case-insensitively:
+  // Name, Phone, GSTIN, Address. Dedupe by phone (then name) via saveCustomer.
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      const pick = (r, keys) => {
+        const found = Object.keys(r).find((k) => keys.includes(k.trim().toLowerCase()));
+        return found ? String(r[found]).trim() : "";
+      };
+      let added = 0;
+      rows.forEach((r) => {
+        const name = pick(r, ["name", "customer", "customer name"]);
+        const phone = pick(r, ["phone", "mobile", "mobile number", "phone number", "contact"]);
+        const gstin = pick(r, ["gstin", "gst"]);
+        const address = pick(r, ["address", "addr"]);
+        if (name || phone) { saveCustomer(uid, { name, phone, gstin, address, amount: 0 }); added += 1; }
+      });
+      setBump((b) => b + 1);
+      window.alert(`${added} customer${added !== 1 ? "s" : ""} imported (duplicates merged by mobile number).`);
+    } catch (err) {
+      window.alert("Could not read that file. Use a .csv or .xlsx with Name / Phone / GSTIN / Address columns.");
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const customers = useMemo(() => listCustomers(uid), [uid, bump]);
@@ -93,6 +126,15 @@ export default function VendorCustomers() {
           className="sc-btn-primary inline-flex items-center gap-1.5 text-sm disabled:opacity-60"
         >
           <Download size={14} /> Download CSV ({filtered.length})
+        </button>
+        <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleUpload} data-testid="vc-upload-input" />
+        <button
+          data-testid="vc-upload"
+          onClick={() => fileRef.current?.click()}
+          className="sc-btn-outline inline-flex items-center gap-1.5 text-sm"
+          title="Import customers from Excel/CSV (Name, Phone, GSTIN, Address)"
+        >
+          <Upload size={14} /> Upload Excel/CSV
         </button>
       </div>
 

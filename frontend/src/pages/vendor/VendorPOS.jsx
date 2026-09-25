@@ -8,7 +8,7 @@ import { formatINR, resolveImageUrl } from "@/lib/utils";
 import { log } from "@/lib/log";
 import { printInvoice } from "@/lib/invoicePrint";
 import {
-  GST_SLABS, computeTotals, createInvoice, getSettings, peekNextInvoiceNumber, saveCustomer,
+  GST_SLABS, computeTotals, createInvoice, getSettings, peekNextInvoiceNumber, saveCustomer, listCustomers,
 } from "@/lib/vendorSales";
 import {
   Search, Plus, Minus, Trash2, X, Receipt, CheckCircle2, Loader2, ShoppingCart, IndianRupee, Printer,
@@ -60,6 +60,7 @@ export default function VendorPOS() {
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const settings = useMemo(() => getSettings(uid), [uid]);
+  const customerBook = useMemo(() => listCustomers(uid), [uid]);
   const previewInvoiceNo = useMemo(() => peekNextInvoiceNumber(uid), [uid, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Searchable list (memoized)
@@ -97,6 +98,7 @@ export default function VendorPOS() {
         hsn: p.hsn || "",
         qty: 1,
         discount: "",
+        commission: "",
         stock_before: Number(p.stock ?? 0),
         cost: Number(p.cost_price ?? 0),
       }];
@@ -256,6 +258,7 @@ export default function VendorPOS() {
                       <th className="text-right px-2 py-2">Price</th>
                       <th className="text-right px-2 py-2">Disc</th>
                       <th className="text-right px-2 py-2">GST</th>
+                      <th className="text-right px-2 py-2">Comm%</th>
                       <th className="text-right px-2 py-2">Total</th>
                       <th className="w-8"></th>
                     </tr>
@@ -310,6 +313,17 @@ export default function VendorPOS() {
                           </select>
                           <div className="text-[10px] text-[color:var(--sc-ink-muted)]">{formatINR(it.tax_amount)}</div>
                         </td>
+                        <td className="px-2 py-2 text-right">
+                          <input
+                            type="number"
+                            data-testid={`pos-comm-${idx}`}
+                            value={it.commission || ""}
+                            onChange={(e) => updateItem(idx, { commission: e.target.value })}
+                            placeholder="0"
+                            className="w-14 text-right border border-[color:var(--sc-border)] rounded px-1 py-0.5 text-xs"
+                          />
+                          {it.commission_amount > 0 && <div className="text-[10px] text-[color:var(--sc-ink-muted)]">{formatINR(it.commission_amount)}</div>}
+                        </td>
                         <td className="px-2 py-2 text-right font-bold">{formatINR(it.line_total)}</td>
                         <td className="px-2 py-2">
                           <button onClick={() => removeItem(idx)} data-testid={`pos-del-${idx}`} className="text-[color:var(--sc-error)]"><Trash2 size={12} /></button>
@@ -328,7 +342,8 @@ export default function VendorPOS() {
           <div className="sc-card p-4" data-testid="pos-totals">
             <div className="font-extrabold text-sm mb-2">Totals</div>
             <div className="text-xs space-y-1">
-              <div className="flex justify-between"><span>Subtotal (taxable)</span><span className="font-semibold">{formatINR(totals.subtotal)}</span></div>
+              <div className="flex justify-between"><span>Subtotal</span><span className="font-semibold">{formatINR(totals.display_subtotal)}</span></div>
+              {totals.commission_total > 0 && <div className="flex justify-between"><span>Commission</span><span className="font-semibold">{formatINR(totals.commission_total)}</span></div>}
               {totals.discount_total > 0 && <div className="flex justify-between"><span>Discount</span><span className="font-semibold text-[color:var(--sc-error)]">-{formatINR(totals.discount_total)}</span></div>}
               <div className="flex justify-between"><span>GST total</span><span className="font-semibold">{formatINR(totals.gst_total)}</span></div>
               {totals.round_off !== 0 && <div className="flex justify-between"><span>Round off</span><span className="font-semibold">{formatINR(totals.round_off)}</span></div>}
@@ -352,10 +367,29 @@ export default function VendorPOS() {
 
           <div className="sc-card p-4" data-testid="pos-customer">
             <div className="font-extrabold text-sm mb-2">Customer</div>
-            <div className="flex gap-2 mb-2">
+            <div className="flex flex-wrap gap-2 mb-2">
               <button data-testid="pos-cust-walkin" onClick={() => setCustomer({ ...customer, kind: "walkin" })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${customer.kind === "walkin" ? "bg-[color:var(--sc-primary)] text-white border-[color:var(--sc-primary)]" : "bg-white border-[color:var(--sc-border)]"}`}>Walk-in</button>
               <button data-testid="pos-cust-named" onClick={() => setCustomer({ ...customer, kind: "named" })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${customer.kind === "named" ? "bg-[color:var(--sc-primary)] text-white border-[color:var(--sc-primary)]" : "bg-white border-[color:var(--sc-border)]"}`}>Named customer</button>
+              {customerBook.length > 0 && (
+                <button data-testid="pos-cust-select" onClick={() => setCustomer({ ...customer, kind: "select" })} className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${customer.kind === "select" ? "bg-[color:var(--sc-primary)] text-white border-[color:var(--sc-primary)]" : "bg-white border-[color:var(--sc-border)]"}`}>Select customer</button>
+              )}
             </div>
+            {customer.kind === "select" && (
+              <select
+                data-testid="pos-cust-book-select"
+                className="sc-input text-xs mb-2"
+                defaultValue=""
+                onChange={(e) => {
+                  const c = customerBook.find((x) => x.id === e.target.value);
+                  if (c) setCustomer({ kind: "named", name: c.name || "", phone: c.phone || "", gstin: c.gstin || "", address: c.address || "" });
+                }}
+              >
+                <option value="" disabled>Pick a saved customer…</option>
+                {customerBook.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name || "—"}{c.phone ? ` · ${c.phone}` : ""}</option>
+                ))}
+              </select>
+            )}
             {customer.kind === "named" ? (
               <div className="space-y-2">
                 <input data-testid="pos-cust-name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Name" className="sc-input text-xs" />
