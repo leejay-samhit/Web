@@ -63,7 +63,14 @@ export default function VendorInvoices() {
         price: it.price || 0, gst_pct: it.gst || it.gst_pct || 0,
         line_total: (it.price || 0) * (it.qty || 1),
       })) : [],
-      payments: [{ mode: (String(o.payment_method || o.mode || "").toLowerCase().includes("cod") ? "cash" : "upi"), mode_label: (String(o.payment_method || o.mode || "").toLowerCase().includes("cod") ? "Cash" : "UPI"), amount: Number(o.amount || o.total || o.grand_total || 0) }],
+      payments: (() => {
+        const s = String(o.paid_via || o.payment_method || o.payment_status || o.mode || "").toLowerCase();
+        let mode = "upi", label = "Online";
+        if (s.includes("cod") || s.includes("cash_on_delivery")) { mode = "cash"; label = "COD"; }
+        else if (s.includes("wallet")) { mode = "wallet"; label = "Wallet"; }
+        else if (s.includes("razor") || s.includes("online") || s.includes("upi") || s.includes("prepaid") || s === "paid") { mode = "upi"; label = "Online"; }
+        return [{ mode, mode_label: label, amount: Number(o.amount || o.total || o.grand_total || 0) }];
+      })(),
       totals: {
         subtotal: Number(o.subtotal ?? o.amount ?? o.total ?? 0),
         gst_total: Number(o.gst_total ?? 0),

@@ -1,0 +1,44 @@
+{
+  "summary": "BLOCKED: Vendor login for ali@gmail.com / 1234567890 is rejected by the external backend (network-pay-1.emergent.host) with HTTP 401 'Invalid credentials'. Frontend correctly displays 'Invalid credentials' error. Was unable to execute any runtime UI tests for the 9 requested features because every requested screen (/vendor/erp, /vendor/pos, /vendor/sales, /vendor/invoices, /vendor/customers) requires an authenticated vendor session. Performed a thorough code review of all 6 referenced files and every requested change is present and correctly implemented in the source — see critical_code_review_comments below.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/auth/login (external backend network-pay-1.emergent.host)",
+        "issue": "ali@gmail.com / 1234567890 returns 401 'Invalid credentials'. This is the ONLY vendor account listed in /app/memory/test_credentials.md as 'WORKING' for POS/Sales/Orders testing. Admin (support@slangcart.com) still works but is not a vendor and cannot exercise /vendor/pos, /vendor/erp, vendor invoices, etc. Iteration_22 previously passed 100% with these same creds, so the upstream account state changed after that run.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Get ali@gmail.com vendor password reset on the external backend, OR provision a new vendor test account and update /app/memory/test_credentials.md, then re-run this batch of tests.",
+    "Consider seeding a local-backend vendor fallback so vendor UI can be smoke-tested when the external upstream is unavailable."
+  ],
+  "critical_code_review_comments": [
+    "T1 ErpNav (frontend/src/components/erp/ErpNav.jsx): ITEMS array correctly contains ONLY the 6 required tabs (GST Hub, Purchase Book, Smart GST, Roles & Staff, Owner Settings, Learn). The forbidden tabs (Product Master, Inventory, Accounts, Reminders, Income Tax, Reports, Audit Log) are NOT in the nav array. PASS by code inspection.",
+    "T2 POS commission (VendorPOS.jsx line 316-326 + vendorSales.js computeTotals lines 101-149): data-testid pos-comm-<idx> present between GST and Total columns. computeTotals adds commission to display_subtotal (subtotal+commissionTotal) and adds an equal amount to discount_total (line 146: round2(discTotal + billDiscount + commissionTotal)); grand_total math ignores commission because commissionTotal cancels out. For price 100, gst 0%, comm 3%: subtotal=100, commissionTotal=3, display_subtotal=103, discount_total=3, grand_total=100. Totals card renders Subtotal (display_subtotal), 'Commission' row when >0 (line 346), 'Discount' row when discount_total>0 (line 347), and pos-grand-total (line 351). PASS by code inspection.",
+    "T3 GST dropdown (VendorPOS.jsx line 305-313): pos-gst-<idx> is a <select> with GST_SLABS=[0,5,12,18,28,40] options. pos-gst-inclusive checkbox retained on line 242. PASS by code inspection.",
+    "T4 Select saved customer (VendorPOS.jsx lines 373-392): pos-cust-select button rendered only when customerBook.length > 0. pos-cust-book-select dropdown shows saved customer, picking sets customer state to kind:'named' with fields populated. saveCustomer in vendorSales.js dedupes by phone/name. PASS by code inspection.",
+    "T5 Sales payments no credit (VendorSales.jsx line 21): PAY_KEYS = ['cash','upi','debit','wallet'] — 'credit' intentionally excluded. vs-pay-<k> tiles rendered from PAY_KEYS (line 627-637). displayPayLabel (line 31-38) returns 'COD' / 'Wallet' / 'Online' for online orders. Recent table & drilldown uppercase invoice_no via .toUpperCase() (lines 85, 104, 299, 674). PASS by code inspection.",
+    "T6 Duplicate invoice fix (vendorSales.js createInvoice lines 154-185): cloud-mirror side effect was removed with a clear comment; POS invoices are localStorage-only. VendorSales.jsx line 478-482 and VendorInvoices.jsx line 93-95 also dedupe by cloud_id and invoice_no as a defence-in-depth. PASS by code inspection.",
+    "T7 Refund password gate (VendorInvoices.jsx lines 118-131): window.prompt for owner password, POST apiLocal /erp/owner-security/verify, on 4xx it alert()s and aborts; on success it prompts for reason and calls refundInvoice. Line 239 gates the vi-refund-<id>/vi-cancel-<id> buttons on i.status === 'completed' && !i._readonly, and loadOnline sets _readonly=true for every online row (line 76). PASS by code inspection.",
+    "T8 Customer upload (VendorCustomers.jsx lines 19-46, 130-138): vc-upload button triggers hidden vc-upload-input, handleUpload uses xlsx to parse .csv/.xlsx and calls saveCustomer for each row. vc-total-spent tile (line 101) uses customers.reduce (unfiltered list). PASS by code inspection.",
+    "T9 Right-click deterrent (Layout.jsx lines 114-128): useEffect adds document contextmenu and keydown listeners preventing F12, Ctrl+U/S/P, Ctrl+Shift+I/J/C. PASS by code inspection.",
+    "Code-quality nit: displayPayLabel (VendorSales.jsx line 36) treats generic 'paid' as 'Online'; if raw status is exactly 'paid' this could mis-classify a POS paid-cash cloud-mirror row, but current flow drops cloud mirror at source so low risk.",
+    "Code-quality nit: VendorInvoices.jsx line 66 hard-codes payment mode as 'cash' for COD and 'upi' otherwise when converting online orders to invoice-rows. This is inconsistent with VendorSales.jsx displayPayLabel which shows 'COD'/'Online'/'Wallet'. Invoices list will therefore display 'Cash' for a COD web order instead of 'COD', unlike the Sales dashboard. Consider aligning."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "0% (blocked at login)"},
+  "test_credentials": "ali@gmail.com / 1234567890 — REJECTED by external backend (HTTP 401). support@slangcart.com / 3)Ywxtic — works but is admin, not a vendor.",
+  "seed_data_creation": "None (login blocked).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login is currently blocked because ali@gmail.com is rejected upstream. Once main agent restores the vendor password (or provides a new vendor account) re-run the same 9 tests in the script from iteration_23 attempt: it clears sc_vendor_pos_* and sc_vendor_customers_* localStorage keys, creates 2 POS sales with 'Test Customer A / 9998887777' via Cash, then asserts (a) ErpNav trimmed to 6 items, (b) pos-comm-0 keeps pos-grand-total identical while adding Commission+Discount rows, (c) pos-gst-0 is a select with 0/5/12/18/28/40, (d) pos-cust-select→pos-cust-book-select fills named-customer fields, (e) vs-payments has no vs-pay-credit tile, (f) exactly one Test Customer A row in vi-list and vs-recent, uppercase invoice, (g) window.prompt wrong pwd aborts refund, correct '1234' refunds, no vi-refund/vi-cancel on Web/App rows, (h) vc-upload + vc-upload-input + vc-export + vc-total-spent all present on /vendor/customers, (i) contextmenu default is prevented on /vendor/sales.",
+  "rca of the issue": "The frontend UI, hidden by the login gate, cannot be exercised. Root cause: external backend at https://network-pay-1.emergent.host now returns 401 for the documented vendor test account. Repro: `curl -X POST https://network-pay-1.emergent.host/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"ali@gmail.com\",\"password\":\"1234567890\"}'` → 401 {\"detail\":\"Invalid credentials\"}. Same command with support@slangcart.com/3)Ywxtic returns a 200 JWT. Mitigation: password reset for ali@gmail.com upstream, or provisioning of a fresh vendor account and updating /app/memory/test_credentials.md."
+}
