@@ -506,6 +506,26 @@ Key backend facts discovered (external `/auth/me` + `/products`):
 - "Amount shown exactly as app with GST breakdown" in Sales recent receipt — labels done; full per-line GST breakdown in the popup receipt can be enhanced if desired.
 - Location filter uses pincode membership (not geo radius) since the backend doesn't return distances on `/products`.
 
+## Batch 5 — POS/inventory sync bugs + Purchase Book rework (June 2026)
+
+Tests: iteration_27 — GST Hub trim (#6) and Purchase Book rework (#7) PASS E2E. POS stock/refund/cash (#1,#2,#5) and serial search (#3) verified by code + standalone math check (grand 100, stock_qty 103, after-sale 397, after-refund 500, cash closing 0) — live E2E was blocked because the external backend returned **403 "not an approved vendor"** on `/vendor/me/products` for Lee@gmail.com on web (account/approval/session state on the upstream service, despite `is_vendor_approved:true` in `/auth/me`).
+
+### Shipped
+- **#2 Commission consumes extra stock** (`vendorSales.computeTotals`): "Add 3% Qty" now means the customer gets bonus units — `commission_qty = round(qty*pct/100)`, `stock_qty = qty + commission_qty`. Grand total stays unchanged (commission value added then auto-discounted). e.g. sell 100 @3% ⇒ pay for 100 but 103 units leave stock.
+- **#2 createInvoice** deducts `stock_qty` (was `qty`).
+- **#1 Refund/Cancel restore stock** (`refundInvoice`/`cancelInvoice` now async): reads live `/vendor/me/products`, adds `stock_qty` back. VendorInvoices handlers `await` them.
+- **#5 Cash Summary** (`getCashSummary`): refunded cash is collected-then-returned → nets to zero; no more negative closing balance. Cancelled bills ignored. Refunded bills still listed.
+- **#3 POS search** now matches `serial_number`, `imei_1/2`, and `serial_numbers[]`/`imei_numbers[]`.
+- **#6 GST Hub tiles** trimmed to the available modules only (Purchase Book, Smart GST, Roles & Staff, Owner Security, Learning Center).
+- **#7 Purchase Book**: cleaner aligned cards; removed Avg Profit Margin / Inventory value / Suppliers; added **Items QTY**; added **gap analysis** vs My Shop — Products gap and Qty gap shown **red** when they differ (`purchaseSummary` now returns `purchaseItemsQty`, `shopProductsCount`, `shopQty`, `productsGap`, `qtyGap`). New Purchase form has **payment mode Cash/Bank** (Bank → bank name + reference no), persisted and included in the Excel export.
+- **POS load-error banner** (`pos-load-error`): surfaces the upstream 403 / network error with a Retry, instead of a silent empty search.
+
+### Deferred (next round)
+- **#4 Multiple serial/IMEI per unit** (qty N ⇒ N serial + N IMEI boxes): larger product-form rework + depends on the backend persisting `serial_numbers[]`/`imei_numbers[]` arrays (couldn't confirm — vendor-products endpoint 403'd during testing). To implement once a working approved-vendor web session is available.
+
+### Blocker to flag
+- `/vendor/me/products` returns 403 for Lee on web → POS can't load products in preview. Need an approved-vendor account whose web session passes the catalog service's vendor check (or the upstream approval/integrity flag resolved) to fully E2E the POS math.
+
 ## Credentials
 See `/app/memory/test_credentials.md`.
 

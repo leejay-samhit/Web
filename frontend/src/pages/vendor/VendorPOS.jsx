@@ -32,6 +32,7 @@ export default function VendorPOS() {
 
   const [products, setProducts] = useState([]);
   const [loadingProds, setLoadingProds] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [q, setQ] = useState("");
   const [items, setItems] = useState([]);
   const [billDiscount, setBillDiscount] = useState("");
@@ -51,11 +52,20 @@ export default function VendorPOS() {
   // Load vendor products on mount
   const loadProducts = useCallback(async () => {
     setLoadingProds(true);
+    setLoadError("");
     try {
       const { data } = await api.get("/vendor/me/products");
       setProducts(data?.items || data || []);
-    } catch (e) { log.error("VendorPOS.loadProducts failed", e); }
-    finally { setLoadingProds(false); }
+    } catch (e) {
+      log.error("VendorPOS.loadProducts failed", e);
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail;
+      if (status === 403) {
+        setLoadError(detail || "Your account is not an approved vendor on the catalog service, so no products could be loaded.");
+      } else {
+        setLoadError(detail || "Could not load your products. Please check your connection and try again.");
+      }
+    } finally { setLoadingProds(false); }
   }, []);
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
@@ -188,6 +198,16 @@ export default function VendorPOS() {
   return (
     <Layout title="Vendor · POS billing">
       <VendorNav />
+
+      {loadError && (
+        <div data-testid="pos-load-error" className="sc-card p-3 mb-3 text-sm font-semibold text-[color:var(--sc-error)] bg-red-50 border border-red-100 flex items-start gap-2">
+          <span className="mt-0.5">⚠️</span>
+          <div>
+            <div>{loadError}</div>
+            <button onClick={loadProducts} className="mt-1 text-xs underline text-[color:var(--sc-primary)]" data-testid="pos-load-retry">Retry</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-[1fr_360px] gap-4">
         {/* ============================ LEFT: bill ============================ */}

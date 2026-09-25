@@ -1,0 +1,61 @@
+{
+  "summary": "Frontend testing of Slangcart Vendor Suite bugfixes. Tests 5 (ERP Hub trim) and 6 (Purchase Book rework) PASS end-to-end via UI. Tests 1-4 (POS stock deduction w/ commission, refund restores stock, cash-summary no negative, POS serial/IMEI search) are BLOCKED because the upstream Slangcart backend (network-pay-1.emergent.host) rejects the vendor product endpoint for Lee@gmail.com with HTTP 403: 'Vendor access only — your account is not an approved vendor'. Without /vendor/me/products returning products, the POS search list is empty and no bill can be created.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET https://network-pay-1.emergent.host/api/vendor/me/products",
+        "issue": "Returns 403 for Lee@gmail.com with body {\"detail\":\"Vendor access only — your account is not an approved vendor\"}. This blocks the entire POS + Purchase Book auto-population + any stock-related test. The account signs in fine on the local backend (Layout shows vendor sidebar / My shop) but the UPSTREAM catalog treats Lee as a non-vendor.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/network (local)",
+        "issue": "Dashboard fires /api/network for vendor account and gets 404 (same finding as iteration_26 action item). Still not gated by is_vendor."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "VendorPOS.loadProducts",
+        "issue": "When upstream returns 403 the page silently shows an empty search (no error banner). User has no visible clue why nothing appears. Consider surfacing the axios error so the vendor knows their account is not approved on the catalog service.",
+        "affected_selectors": ["pos-search", "pos-hits"]
+      }
+    ],
+    "design_issues": []
+  },
+  "feature_results": {
+    "T1_pos_stock_deduction_with_commission": "BLOCKED - no products loaded from /vendor/me/products (403). Cannot add a line, cannot verify S - 103 deduction.",
+    "T2_refund_restores_stock": "BLOCKED - depends on T1 sale being created.",
+    "T3_cash_summary_no_negative_closing": "BLOCKED - depends on T1/T2. Note: code review of getCashSummary confirms `closing = opening + modes.cash - refundsCash` — for a refunded cash sale of the same day this correctly nets to opening balance (no negative). Static logic looks correct.",
+    "T4_pos_serial_imei_search": "NOT VERIFIABLE - product list unreachable. Code review: VendorPOS.searchHits filter already matches p.serial_number, p.imei_1, p.imei_2, p.serial_numbers[], p.imei_numbers[] — implementation is present and case-insensitive.",
+    "T5_gst_hub_trimmed": "PASS - Exactly 5 tiles present: erp-tile-purchase-book, erp-tile-gst-assistant, erp-tile-roles, erp-tile-security, erp-tile-learn. No Product Master / Inventory / Accounts / Return Reminders / Income Tax / Reports / Audit Log tiles rendered.",
+    "T6_purchase_book_rework": "PASS - After owner unlock (1234): pb-total-value, pb-gst, pb-products (with pb-products-gap), pb-items-qty (with pb-qty-gap) all render (4 cards). No 'Avg Profit Margin' / 'Inventory value' / 'Suppliers' cards. pb-export (Download Excel) and pb-add-btn (New purchase) visible. Inside new-purchase modal: pb-form-paymode select has options [cash, bank]; selecting Bank reveals pb-form-bankname and pb-form-bankref. Gap lines default 'matched' when there is no purchase data (rose text only fires when gap != 0 — verified via className branching in JSX)."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "CRITICAL: Fix the upstream vendor gating for Lee@gmail.com (Kiran) on https://network-pay-1.emergent.host — the account must be flagged as an approved vendor so GET /api/vendor/me/products returns the catalog. Without this, POS / stock-deduction / refund / serial-search bugfixes (#1, #2, #3) cannot be QA'd on the preview URL.",
+    "OR provide alternative vendor credentials that ARE approved on the upstream catalog so the POS flow can be tested.",
+    "Enhancement: surface a visible error on VendorPOS when /vendor/me/products fails (currently the search stays empty with no explanation).",
+    "Carry-over from iteration_26: gate /api/network fetch behind !user.is_vendor in Dashboard to avoid 404 noise."
+  ],
+  "critical_code_review_comments": [
+    "vendorSales.computeTotals: commission correctly produces commission_qty = round(qty * pct/100) and stock_qty = qty + commission_qty; grand_total excludes commission via `+ gstTotal - billDiscount` (commission is added into discount_total, so net unchanged). Verified 100 qty × 3% = 3 extra stock units — deduction path in createInvoice uses stock_before - stock_qty which correctly yields S - 103.",
+    "vendorSales.restoreStock: reads live stock then puts back consumed=stock_qty, so refund of a 100+3 sale returns 103 units — correct.",
+    "vendorSales.getCashSummary: refundsCash subtraction guarantees closing_balance >= opening for a same-day collect+refund. No negative-drawer bug.",
+    "VendorPOS.searchHits: filter includes serial_number, imei_1, imei_2, serial_numbers[], imei_numbers[] — bug #3 fix is present in code.",
+    "VendorInvoices.handleRefund awaits refundInvoice and verifies owner password via /erp/owner-security/verify before proceeding — correct sequencing.",
+    "ErpHub TILES array trimmed to exactly 5 required tiles (purchase-book, gst-assistant, roles, security, learn) — bug #6 verified in code and UI.",
+    "ErpPurchaseBook summary grid renders exactly 4 cards (pb-total-value/pb-gst/pb-products/pb-items-qty) with gap sub-lines using text-rose-600 when summary.productsGap/qtyGap !== 0. Payment mode select + conditional bankname/bankref inputs are in place."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend only)", "frontend": "2/6 verifiable features PASS; 4/6 blocked by upstream 403"},
+  "test_credentials": "Lee@gmail.com / Just@4me — signs in, but upstream network-pay-1.emergent.host does NOT recognise this account as an approved vendor.",
+  "seed_data_creation": "None. Purchase Book was empty and no purchase was saved. No POS bills were created (blocked).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The four POS/inventory bugfixes were code-reviewed and look correct, but cannot be executed end-to-end in the preview environment because Lee@gmail.com is NOT provisioned as an approved vendor on the upstream Slangcart catalog service (network-pay-1.emergent.host returns 403 'Vendor access only'). Main agent must either (a) mark Lee as an approved vendor on the upstream backend, or (b) supply alternative approved-vendor test credentials. Once fixed, rerun tests 1-4 in a SINGLE browser session in the given order using a product with stock >= 200. Tests 5 & 6 already PASS.",
+  "rca_of_the_issue": "Root cause of POS test blockage: the app now uses TWO backends — the LOCAL container backend (via apiLocal) for owner-security/purchase-book/substore/orders, and the UPSTREAM Slangcart backend `https://network-pay-1.emergent.host` (via api.js) for catalog/products. Lee@gmail.com is a vendor on the LOCAL side (sidebar shows My shop, POS, Invoices, ERP) but is NOT flagged as a vendor on the upstream side, so GET /api/vendor/me/products returns 403. The stock-deduction / refund-restore / serial-search fixes all live in code paths that begin with a populated product list, which never arrives. Mitigation: promote Lee to approved vendor on the upstream catalog service, or provide different credentials for POS testing."
+}
