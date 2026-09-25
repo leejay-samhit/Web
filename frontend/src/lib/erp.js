@@ -379,15 +379,29 @@ export async function gstDashboard(/* params, ownerPassword */) {
 }
 
 // ─── Smart GST Assistant — templated over real data ──────────────────────
-export async function gstAssistant(/* params, ownerPassword */) {
-  const g = await gstDashboard();
-  const fmt = (p) => `₹${Math.round(p / 100).toLocaleString("en-IN")}`;
+export async function gstAssistant(vendorId) {
+  const [g, ps] = await Promise.all([
+    gstDashboard(),
+    purchaseSummary(vendorId).catch(() => null),
+  ]);
+  const collected = g.outputGst_paise || 0;                 // GST collected from invoices (month)
+  const paid = ps?.purchasesGst_paise || 0;                 // GST paid on Purchase Book entries
+  const payable = Math.max(0, collected - paid);
+  const netProfit = g.monthProfit || 0;                     // month profit (sales − cost, GST is pass-through)
+  const fmt = (p) => `₹${(Math.round(p) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
   return {
+    data: {
+      collected_paise: collected,
+      paid_paise: paid,
+      payable_paise: payable,
+      netProfit_paise: netProfit,
+      taxableSales_paise: g.taxableSales_paise || 0,
+    },
     lines: [
-      { type: "collected",  text: `You collected ${fmt(g.outputGst_paise)} GST from customers this month.` },
-      { type: "paid",       text: `You paid ${fmt(g.inputGst_paise)} GST while purchasing products.` },
-      { type: "payable",    text: `Estimated GST payable is ${fmt(g.gstPayableEstimate_paise)}.` },
-      { type: "itc",        text: `You may be eligible to claim Input Tax Credit on eligible purchases with proper invoices.` },
+      { type: "collected",  text: `You collected ${fmt(collected)} GST from customers this month (from invoices).` },
+      { type: "paid",       text: `You paid ${fmt(paid)} GST while purchasing products (from your Purchase Book).` },
+      { type: "payable",    text: `Estimated GST payable this month is ${fmt(payable)} (collected − paid).` },
+      { type: "itc",        text: `Net profit this month after removing GST is ${fmt(netProfit)}.` },
       { type: "disclaimer", text: "Please verify these figures with your CA before filing your GST return." },
     ],
   };

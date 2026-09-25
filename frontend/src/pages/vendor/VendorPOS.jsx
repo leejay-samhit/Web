@@ -60,7 +60,8 @@ export default function VendorPOS() {
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const settings = useMemo(() => getSettings(uid), [uid]);
-  const customerBook = useMemo(() => listCustomers(uid), [uid]);
+  const [customerBook, setCustomerBook] = useState(() => listCustomers(uid));
+  useEffect(() => { setCustomerBook(listCustomers(uid)); }, [uid]);
   const previewInvoiceNo = useMemo(() => peekNextInvoiceNumber(uid), [uid, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Searchable list (memoized)
@@ -165,6 +166,7 @@ export default function VendorPOS() {
           name: customer.name, phone: customer.phone, gstin: customer.gstin,
           address: customer.address, amount: totals.grand_total,
         });
+        setCustomerBook(listCustomers(uid));
       }
       setSuccess(inv);
       // Refresh products to reflect updated stock counts coming back from the API.

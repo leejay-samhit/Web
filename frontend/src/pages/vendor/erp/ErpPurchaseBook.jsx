@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
@@ -7,7 +8,7 @@ import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDate } from "@/lib/utils";
 import { listPurchases, purchaseSummary, createPurchase, updatePurchase, deletePurchase, paiseToRupees, rupeesToPaise } from "@/lib/erp";
-import { BookOpen, Plus, Package, ShoppingCart, IndianRupee, Users, Percent, X, Save, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Plus, Package, ShoppingCart, IndianRupee, Users, Percent, X, Save, Pencil, Trash2, Download } from "lucide-react";
 
 export default function ErpPurchaseBook() {
   return (
@@ -65,28 +66,81 @@ function PurchaseBookInner({ ownerPassword }) {
     await refresh();
   };
 
+  const [detail, setDetail] = useState(null); // { title, kind }
+
+  const downloadExcel = () => {
+    const r = (p) => paiseToRupees(p || 0);
+    const entryRows = rows.map((x, i) => ({
+      "#": i + 1,
+      Date: formatDate(x.purchaseDate),
+      Invoice: x.invoiceNumber || "",
+      Supplier: x.supplierName || "",
+      "Supplier GSTIN": x.supplierGstin || "",
+      Product: x.productName || "",
+      HSN: x.hsnCode || "",
+      Category: x.category || "",
+      Qty: x.quantity || 0,
+      "Free Qty": x.freeQuantity || 0,
+      "Rate ex-GST": r(x.purchasePriceExGst_paise),
+      "GST %": x.gstPct || 0,
+      "GST Amount": r(x.gstAmount_paise) * (x.quantity || 0),
+      "Rate inc-GST": r(x.purchasePriceIncGst_paise),
+      "Total Value": r(x.totalPurchaseValue_paise),
+      "Selling Price": r(x.sellingPrice_paise),
+      "Margin %": Number(x.profitMarginPct || 0).toFixed(1),
+    }));
+    const summaryRows = summary ? [
+      { Metric: "Total purchase value", Value: r(summary.totalPurchaseValue_paise) },
+      { Metric: "  · Product Master", Value: r(summary.masterPurchaseValue_paise) },
+      { Metric: "  · Purchase entries", Value: r(summary.purchasesValue_paise) },
+      { Metric: "Purchase GST paid", Value: r(summary.totalGstPaid_paise) },
+      { Metric: "  · Product Master", Value: r(summary.masterPurchaseGst_paise) },
+      { Metric: "  · Purchase entries", Value: r(summary.purchasesGst_paise) },
+      { Metric: "Inventory value", Value: r(summary.currentInventoryValue_paise) },
+      { Metric: "Products", Value: summary.totalProducts },
+      { Metric: "Suppliers", Value: summary.totalSuppliers },
+      { Metric: "Avg profit margin %", Value: Number(summary.avgProfitMarginPct || 0).toFixed(1) },
+    ] : [];
+    const wb = XLSX.utils.book_new();
+    const wsS = XLSX.utils.json_to_sheet(summaryRows);
+    wsS["!cols"] = [{ wch: 28 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, wsS, "Summary");
+    const wsE = XLSX.utils.json_to_sheet(entryRows.length ? entryRows : [{ "#": "", Date: "", Product: "" }]);
+    XLSX.utils.book_append_sheet(wb, wsE, "Purchase Entries");
+    XLSX.writeFile(wb, `purchase-book-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   return (
     <>
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-          <DashboardCard icon={ShoppingCart} label="Total purchase value" value={formatINR(paiseToRupees(summary.totalPurchaseValue_paise))} tone="purchase" testId="pb-total-value" hint={`Master ${formatINR(paiseToRupees(summary.masterPurchaseValue_paise || 0))} + Entries ${formatINR(paiseToRupees(summary.purchasesValue_paise || 0))}`} />
-          <DashboardCard icon={Package}       label="Inventory value"      value={formatINR(paiseToRupees(summary.currentInventoryValue_paise))} tone="stock" testId="pb-inv-value" />
-          <DashboardCard icon={IndianRupee}   label="Purchase GST"         value={formatINR(paiseToRupees(summary.totalGstPaid_paise))} tone="gst" testId="pb-gst" hint={`Master ${formatINR(paiseToRupees(summary.masterPurchaseGst_paise || 0))} + Entries ${formatINR(paiseToRupees(summary.purchasesGst_paise || 0))}`} />
-          <DashboardCard icon={Package}       label="Products"             value={summary.totalProducts} tone="default" testId="pb-products" hint={`Master ${summary.masterProducts || 0} + Entries ${summary.purchaseProducts || 0}`} />
-          <DashboardCard icon={Users}         label="Suppliers"            value={summary.totalSuppliers} tone="default" testId="pb-suppliers" />
-          <DashboardCard icon={Percent}       label="Avg profit margin"    value={`${(summary.avgProfitMarginPct || 0).toFixed(1)}%`} tone="profit" testId="pb-margin" />
+          <button type="button" className="text-left" onClick={() => setDetail({ title: "Total purchase value — all entries", kind: "entries" })}><DashboardCard icon={ShoppingCart} label="Total purchase value" value={formatINR(paiseToRupees(summary.totalPurchaseValue_paise))} tone="purchase" testId="pb-total-value" hint={`Master ${formatINR(paiseToRupees(summary.masterPurchaseValue_paise || 0))} + Entries ${formatINR(paiseToRupees(summary.purchasesValue_paise || 0))}`} /></button>
+          <button type="button" className="text-left" onClick={() => setDetail({ title: "Inventory value", kind: "entries" })}><DashboardCard icon={Package}       label="Inventory value"      value={formatINR(paiseToRupees(summary.currentInventoryValue_paise))} tone="stock" testId="pb-inv-value" /></button>
+          <button type="button" className="text-left" onClick={() => setDetail({ title: "Purchase GST — all entries", kind: "entries" })}><DashboardCard icon={IndianRupee}   label="Purchase GST"         value={formatINR(paiseToRupees(summary.totalGstPaid_paise))} tone="gst" testId="pb-gst" hint={`Master ${formatINR(paiseToRupees(summary.masterPurchaseGst_paise || 0))} + Entries ${formatINR(paiseToRupees(summary.purchasesGst_paise || 0))}`} /></button>
+          <button type="button" className="text-left" onClick={() => setDetail({ title: "Products purchased", kind: "entries" })}><DashboardCard icon={Package}       label="Products"             value={summary.totalProducts} tone="default" testId="pb-products" hint={`Master ${summary.masterProducts || 0} + Entries ${summary.purchaseProducts || 0}`} /></button>
+          <button type="button" className="text-left" onClick={() => setDetail({ title: "Suppliers", kind: "suppliers" })}><DashboardCard icon={Users}         label="Suppliers"            value={summary.totalSuppliers} tone="default" testId="pb-suppliers" /></button>
+          <button type="button" className="text-left" onClick={() => setDetail({ title: "Avg profit margin — per product", kind: "margin" })}><DashboardCard icon={Percent}       label="Avg profit margin"    value={`${(summary.avgProfitMarginPct || 0).toFixed(1)}%`} tone="profit" testId="pb-margin" /></button>
         </div>
       )}
 
       <div className="sc-card p-4 mb-4 flex items-center justify-between">
         <div className="font-extrabold flex items-center gap-2"><BookOpen size={16} /> Purchase entries</div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 bg-[color:var(--sc-primary)] text-white text-sm font-semibold"
-          data-testid="pb-add-btn"
-        >
-          <Plus size={14} /> New purchase
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadExcel}
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 border border-[color:var(--sc-border)] text-sm font-semibold hover:bg-[color:var(--sc-accent-light)]/40"
+            data-testid="pb-export"
+          >
+            <Download size={14} /> Download Excel
+          </button>
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 bg-[color:var(--sc-primary)] text-white text-sm font-semibold"
+            data-testid="pb-add-btn"
+          >
+            <Plus size={14} /> New purchase
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -172,7 +226,70 @@ function PurchaseBookInner({ ownerPassword }) {
           onSaved={async () => { setEditingRow(null); await refresh(); }}
         />
       )}
+      {detail && (
+        <PurchaseDetailModal detail={detail} rows={rows} summary={summary} onClose={() => setDetail(null)} />
+      )}
     </>
+  );
+}
+
+function PurchaseDetailModal({ detail, rows, summary, onClose }) {
+  const r = (p) => paiseToRupees(p || 0);
+  return (
+    <div className="fixed inset-0 bg-black/40 z-40 grid place-items-center p-4" onClick={onClose}>
+      <div className="sc-card w-full max-w-3xl p-5 my-6 max-h-[85vh] overflow-y-auto" data-testid="pb-detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-lg font-extrabold">{detail.title}</div>
+          <button onClick={onClose} data-testid="pb-detail-close"><X size={18} /></button>
+        </div>
+        {rows.length === 0 ? (
+          <div className="text-sm text-[color:var(--sc-ink-muted)] py-8 text-center">No purchase entries yet.</div>
+        ) : detail.kind === "margin" ? (
+          <table className="min-w-full text-sm">
+            <thead className="bg-emerald-50 text-[11px] uppercase text-emerald-700"><tr><th className="text-left px-3 py-2">Product</th><th className="text-right px-3 py-2">Cost ex-GST</th><th className="text-right px-3 py-2">Selling</th><th className="text-right px-3 py-2">Margin %</th></tr></thead>
+            <tbody>
+              {rows.map((x) => (
+                <tr key={x._id} className="border-t border-[color:var(--sc-border)]">
+                  <td className="px-3 py-2">{x.productName}</td>
+                  <td className="px-3 py-2 text-right">{formatINR(r(x.purchasePriceExGst_paise))}</td>
+                  <td className="px-3 py-2 text-right">{formatINR(r(x.sellingPrice_paise))}</td>
+                  <td className="px-3 py-2 text-right text-emerald-700 font-semibold">{Number(x.profitMarginPct || 0).toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr className="border-t-2 border-[color:var(--sc-border)] font-extrabold"><td className="px-3 py-2" colSpan={3}>Average margin</td><td className="px-3 py-2 text-right text-emerald-700">{(summary?.avgProfitMarginPct || 0).toFixed(1)}%</td></tr></tfoot>
+          </table>
+        ) : detail.kind === "suppliers" ? (
+          <table className="min-w-full text-sm">
+            <thead className="bg-sky-50 text-[11px] uppercase text-sky-700"><tr><th className="text-left px-3 py-2">Supplier</th><th className="text-left px-3 py-2">GSTIN</th><th className="text-right px-3 py-2">Entries</th></tr></thead>
+            <tbody>
+              {Object.values(rows.reduce((acc, x) => {
+                const k = x.supplierName || "—";
+                acc[k] = acc[k] || { name: k, gstin: x.supplierGstin || "", n: 0 };
+                acc[k].n += 1; return acc;
+              }, {})).map((s) => (
+                <tr key={s.name} className="border-t border-[color:var(--sc-border)]"><td className="px-3 py-2">{s.name}</td><td className="px-3 py-2 font-mono text-xs">{s.gstin || "—"}</td><td className="px-3 py-2 text-right">{s.n}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="min-w-full text-sm">
+            <thead className="bg-sky-50 text-[11px] uppercase text-sky-700"><tr><th className="text-left px-3 py-2">Date</th><th className="text-left px-3 py-2">Product</th><th className="text-right px-3 py-2">Qty</th><th className="text-right px-3 py-2">GST</th><th className="text-right px-3 py-2">Total</th></tr></thead>
+            <tbody>
+              {rows.map((x) => (
+                <tr key={x._id} className="border-t border-[color:var(--sc-border)]">
+                  <td className="px-3 py-2">{formatDate(x.purchaseDate)}</td>
+                  <td className="px-3 py-2">{x.productName}</td>
+                  <td className="px-3 py-2 text-right">{x.quantity}</td>
+                  <td className="px-3 py-2 text-right text-amber-700">{formatINR(r(x.gstAmount_paise) * (x.quantity || 0))}</td>
+                  <td className="px-3 py-2 text-right font-semibold">{formatINR(r(x.totalPurchaseValue_paise))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only regression on Slangcart Vendor Suite for 9 feature/bug items using Lee@gmail.com / Just@4me. Login OK. Tests 1,2,3,5,6,7,8,9 PASS. Test 4 (Select-saved-customer) has a stale-state bug: the pos-cust-select button only appears after a hard page reload; it does NOT render immediately after completing a Named-customer sale within the same POS session, so the spec 'Start a new sale, add a product; Select customer button appears' does not hold on the same page mount.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "VendorPOS · customerBook", "issue": "customerBook = useMemo(() => listCustomers(uid), [uid]) never re-evaluates when saveCustomer(...) runs after a completed POS bill. Effect: after Sale 1 (Named 'Test A / 9998887777') is completed and the user hits 'New sale', pos-cust-select button and the pos-cust-book-select dropdown do NOT appear (customerBook.length still 0 in memory) even though the customer IS persisted in localStorage (sc_vendor_customers_v1_<uid>). Only after a full page reload does pos-cust-select show up (verified: option 'Test A · 9998887777' appears, selecting fills pos-cust-name/pos-cust-phone correctly). Fix: replace useMemo with useState + refresh after each successful createInvoice/saveCustomer (or key it off invoices length / a bump counter).", "selector": "[data-testid=\"pos-cust-select\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "VendorPOS.jsx line ~63: refresh customerBook after saveCustomer() so pos-cust-select appears without a page reload. Suggested: const [customerBook, setCustomerBook] = useState(() => listCustomers(uid)); and call setCustomerBook(listCustomers(uid)) inside the createInvoice success handler (right after saveCustomer(...))."
+  ],
+  "critical_code_review_comments": [
+    "VendorPOS.jsx: customerBook is memoized on [uid] only; any state derived from localStorage that can be mutated by the same component in the same session must be refreshed after mutation, otherwise UI is stale.",
+    "Hydration warning: <span> is being rendered inside <option> in the GST select (visual-editor overlay tags) — non-blocking here because the visual-editor annotations are dev-only, but worth guarding to avoid noisy hydration errors in production.",
+    "Sales Dashboard 'Recent sales' shows 8 rows yet Invoices page shows 7 (Cancelled included there). Consider aligning counts/labels between the two views."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "89% (8/9 pass, 1 partial)"},
+  "test_credentials": "Lee@gmail.com / Just@4me (vendor); owner password 1234",
+  "seed_data_creation": "In-session POS bills created via localStorage (SLG-INV-2026-000001 with Named customer 'Test A'/'Test B'). No backend/db seeding.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login works. Each browser automation call is a fresh browser context, so POS sales + Customer Book + Invoices assertions MUST be executed in a single script. Confirmed working: ErpNav (only GST Hub/Purchase Book/Smart GST/Roles & Staff/Owner Settings/Learn), POS commission math (Subtotal +, Commission row, Discount row, Grand unchanged), pos-gst-0 is a SELECT with 0/5/12/18/28/40, pos-gst-inclusive present, pos-success-modal fires after cash confirm, vi-list dedup (only 1 SLG-INV-2026-000001), refund password prompt (right pwd => success; wrong => 'Incorrect owner password — refund cancelled.' alert & status stays Completed), Web/App rows have no vi-refund/vi-cancel, invoices list shows COD/Online/Wallet labels correctly, /vendor/sales contextmenu preventDefault works. The single failing scenario is Test 4: pos-cust-select does not appear immediately after saving a customer in the same session — reproduce by completing a Named-customer POS bill, click 'New sale', add product; pos-cust-select count = 0. Reload the page and it becomes visible.",
+  "rca of the issue": "Root cause for Test 4 stale-list bug: In /app/frontend/src/pages/vendor/VendorPOS.jsx line 63: `const customerBook = useMemo(() => listCustomers(uid), [uid]);`. Since uid is stable during the session, the memoized value never re-reads localStorage after saveCustomer() writes a new entry (called around line 164 after createInvoice succeeds). Consequently, the guard at line 373 `{customerBook.length > 0 && ( <button data-testid=\"pos-cust-select\" .../> )}` stays false through the whole session even though the customer is persisted. Repro: fresh session -> Named 'Test A' -> add product -> Collect & complete -> Cash -> Confirm -> pos-success-modal -> 'New sale' -> add product -> observe: no pos-cust-select. Mitigation: convert customerBook to useState and refresh via setCustomerBook(listCustomers(uid)) immediately after saveCustomer(...) inside the invoice-completion handler."
+}
