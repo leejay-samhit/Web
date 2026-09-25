@@ -169,7 +169,9 @@ export default function Layout({ children, title }) {
           </button>
         )}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-hidden">
-          {navItems.map((it) => (
+          {navItems
+            .filter((it) => !(user?.is_vendor && (it.to === "/network" || it.to === "/services")))
+            .map((it) => (
             <NavLink
               key={it.to}
               to={it.to}

@@ -260,10 +260,11 @@ const QUICK_ACTIONS = [
   { to: "/wallet", label: "Withdraw", icon: WalletIcon, testid: "qa-withdraw" },
 ];
 
-function QuickActions() {
+function QuickActions({ isVendor }) {
+  const actions = QUICK_ACTIONS.filter((a) => !(isVendor && a.to === "/services"));
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {QUICK_ACTIONS.map((a) => (
+    <div className={`grid gap-3 ${actions.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+      {actions.map((a) => (
         <Link
           key={a.to}
           to={a.to}
@@ -430,10 +431,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <QuickActions />
+        <QuickActions isVendor={!!u.is_vendor} />
 
-        {/* Downline referral tree — visual, stylish, expandable */}
-        {netLoading ? (
+        {/* Downline referral tree — hidden for vendor logins (shop-focused) */}
+        {u.is_vendor ? null : netLoading ? (
           <div className="sc-card p-5"><Spinner /></div>
         ) : (
           <ReferralTree root={treeRoot} counts={counts} />

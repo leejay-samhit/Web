@@ -28,7 +28,7 @@ import {
  * ready" banner with the exact endpoint names to hand to the backend dev.
  */
 export default function VendorOrders() {
-  const { user } = useAuth();
+  const { user, refreshMe } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
@@ -195,6 +195,9 @@ export default function VendorOrders() {
       }
       await load({ silent: true });
       toast.success("Order marked delivered", { id: `vo-deliver-${orderId}` });
+      // Delivery credits the vendor's wallet on the backend — pull the fresh
+      // balance so the web wallet reflects it immediately, matching the app.
+      refreshMe?.();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Could not update status.");
     } finally {

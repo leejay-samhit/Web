@@ -6,13 +6,13 @@ import Spinner from "@/components/Spinner";
 import EmptyState from "@/components/EmptyState";
 import LocationBanner from "@/components/LocationBanner";
 import { formatINR, resolveImageUrl } from "@/lib/utils";
-import { Search, ShoppingBag, Plus, Check } from "lucide-react";
+import { Search, ShoppingBag, Plus, Check, Heart, MapPin } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { useUserLocation } from "@/hooks/useUserLocation";
 import { log } from "@/lib/log";
 
-function ProductCard({ p, inCart, busy, onAdd }) {
+function ProductCard({ p, inCart, busy, onAdd, saved, onToggleSave }) {
   const price = Number(p.price) || 0;
   const mrp = Number(p.mrp || p.original_price || 0);
   const hasDiscount = mrp && mrp > price;
@@ -29,25 +29,38 @@ function ProductCard({ p, inCart, busy, onAdd }) {
   return (
     <div className="sc-card overflow-hidden flex flex-col group hover:shadow-[0_10px_30px_-12px_rgba(15,23,42,0.18)] hover:-translate-y-0.5 transition-all duration-300" data-testid={`product-card-${p.id}`}>
       {/* Hero image with badges */}
-      <Link to={`/product/${p.id}`} className="relative aspect-square bg-white overflow-hidden block">
-        {p.image_url ? (
-          <img alt="" src={resolveImageUrl(p.image_url)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-        ) : (
-          <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]/40 bg-[color:var(--sc-accent-light)]"><ShoppingBag size={40} /></div>
-        )}
+      <div className="relative aspect-square bg-white overflow-hidden">
+        <Link to={`/product/${p.id}`} className="block w-full h-full">
+          {p.image_url ? (
+            <img alt="" src={resolveImageUrl(p.image_url)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+          ) : (
+            <div className="w-full h-full grid place-items-center text-[color:var(--sc-primary)]/40 bg-[color:var(--sc-accent-light)]"><ShoppingBag size={40} /></div>
+          )}
+        </Link>
         {/* Discount badge */}
         {hasDiscount && (
           <span className="absolute top-2 left-2 bg-emerald-600 text-white text-[10px] font-extrabold px-2 py-1 rounded-md shadow-sm">
             {discountPct}% OFF
           </span>
         )}
-        {/* Stock status */}
+        {/* Wishlist heart — one-tap save */}
+        <button
+          type="button"
+          data-testid={`wishlist-toggle-${p.id}`}
+          aria-pressed={saved}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleSave?.(p); }}
+          title={saved ? "Remove from wishlist" : "Add to wishlist"}
+          className={`absolute top-2 right-2 w-8 h-8 rounded-full grid place-items-center shadow-sm backdrop-blur transition ${saved ? "bg-rose-600 text-white" : "bg-white/90 text-[color:var(--sc-ink)] hover:text-rose-600"}`}
+        >
+          <Heart size={15} fill={saved ? "currentColor" : "none"} />
+        </button>
+        {/* Stock status (moved to bottom-left so it clears the heart) */}
         {outOfStock ? (
-          <span className="absolute top-2 right-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-1 rounded-md">Sold out</span>
+          <span className="absolute bottom-2 left-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-1 rounded-md">Sold out</span>
         ) : lowStock ? (
-          <span className="absolute top-2 right-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-md">Only {stock} left</span>
+          <span className="absolute bottom-2 left-2 bg-amber-500 text-white text-[10px] font-bold px-2 py-1 rounded-md">Only {stock} left</span>
         ) : null}
-      </Link>
+      </div>
 
       {/* Body */}
       <div className="p-3 flex-1 flex flex-col">
@@ -117,6 +130,37 @@ export default function Shop() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [savedIds, setSavedIds] = useState(() => new Set());
+  // Pincode-wise availability: default ON when we know the shopper's pincode.
+  const myPincode = String(location?.pincode || user?.pincode || user?.store_pincode || "").trim();
+  const [nearbyOnly, setNearbyOnly] = useState(true);
+
+  // Seed wishlist state so the heart reflects saved products on load.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await api.get("/me/wishlist");
+        const arr = Array.isArray(data) ? data : data?.items || [];
+        if (alive) setSavedIds(new Set(arr.map((x) => x.id || x.product_id).filter(Boolean)));
+      } catch (e) { log.error("Shop wishlist seed failed", e); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const toggleSave = async (p) => {
+    const next = !savedIds.has(p.id);
+    setSavedIds((prev) => {
+      const s = new Set(prev);
+      if (next) s.add(p.id); else s.delete(p.id);
+      return s;
+    });
+    try { await api.post(`/products/${p.id}/save`, { save: next }); }
+    catch (e) {
+      log.error("Shop toggleSave failed", e);
+      setSavedIds((prev) => { const s = new Set(prev); if (next) s.delete(p.id); else s.add(p.id); return s; });
+    }
+  };
 
   // Build location-aware query params. Backend may not yet filter by these,
   // but FastAPI ignores unknown params so it's safe to forward — when the
@@ -164,10 +208,18 @@ export default function Shop() {
     const qq = q.trim().toLowerCase();
     return visibleProducts.filter((p) => {
       if (!productMatchesCat(p, activeCat)) return false;
+      // Pincode-wise availability — show only products deliverable to the
+      // shopper's pincode. Products without any pincode data stay visible.
+      if (nearbyOnly && myPincode) {
+        const list = Array.isArray(p.delivery_pincodes) ? p.delivery_pincodes.map(String) : [];
+        const hasData = list.length > 0 || p.store_pincode;
+        const servable = list.includes(myPincode) || String(p.store_pincode || "") === myPincode;
+        if (hasData && !servable) return false;
+      }
       if (!qq) return true;
       return ((p.name || "").toLowerCase().includes(qq) || (p.brand || "").toLowerCase().includes(qq) || (p.description || "").toLowerCase().includes(qq));
     });
-  }, [visibleProducts, q, activeCat]);
+  }, [visibleProducts, q, activeCat, nearbyOnly, myPincode]);
 
   const addToCart = async (p) => {
     setBusyId(p.id);
@@ -194,6 +246,20 @@ export default function Shop() {
         {/* Shop layout blocks intentionally NOT rendered on web — the mobile
             app and web have decoupled shop layouts per business rule
             (04-Jul-2026). Web always shows the category-wise product grid. */}
+
+        {/* Pincode-wise availability toggle */}
+        {myPincode && (
+          <button
+            type="button"
+            data-testid="shop-nearby-toggle"
+            onClick={() => setNearbyOnly((v) => !v)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition ${nearbyOnly ? "bg-[color:var(--sc-primary)] text-white border-[color:var(--sc-primary)]" : "bg-white text-[color:var(--sc-ink)] border-[color:var(--sc-border)]"}`}
+            title="Show only products deliverable to your pincode"
+          >
+            <MapPin size={13} />
+            {nearbyOnly ? `Deliverable to ${myPincode}` : "Showing all areas"}
+          </button>
+        )}
 
         {/* Category chips */}
         {cats.length > 0 && (
@@ -222,11 +288,11 @@ export default function Shop() {
         {loading ? (
           <Spinner />
         ) : filtered.length === 0 ? (
-          <EmptyState icon={ShoppingBag} title="No products found" hint={activeCat ? `No products in "${activeCat.name}". Try All or a different category.` : "Try a different search."} />
+          <EmptyState icon={ShoppingBag} title="No products found" hint={nearbyOnly && myPincode ? `No products deliverable to ${myPincode}. Tap "Showing all areas" to see everything.` : activeCat ? `No products in "${activeCat.name}". Try All or a different category.` : "Try a different search."} />
         ) : (
           <div data-testid="products-grid" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-4">
             {filtered.map((p) => (
-              <ProductCard key={p.id} p={p} inCart={cartIds.has(p.id)} busy={busyId === p.id} onAdd={addToCart} />
+              <ProductCard key={p.id} p={p} inCart={cartIds.has(p.id)} busy={busyId === p.id} onAdd={addToCart} saved={savedIds.has(p.id)} onToggleSave={toggleSave} />
             ))}
           </div>
         )}

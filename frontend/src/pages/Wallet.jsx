@@ -144,11 +144,13 @@ export default function Wallet() {
       else log.error("Wallet.load /transactions/me failed", t.reason);
       if (w.status === "fulfilled") setWithdrawals(Array.isArray(w.value.data) ? w.value.data : w.value.data?.items || []);
       else log.error("Wallet.load /withdrawals/me failed", w.reason);
+      // Keep the wallet balance / vendor earnings in lockstep with the app.
+      refreshMe?.();
       setLastSynced(new Date());
     } finally {
       if (!silent) setLoading(false); else setSyncing(false);
     }
-  }, []);
+  }, [refreshMe]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -191,6 +193,11 @@ export default function Wallet() {
             <div className="text-sm text-white/75 font-semibold">Available balance</div>
             <div data-testid="wallet-balance" className="text-4xl font-extrabold mt-1">{formatINR(user?.wallet_balance)}</div>
             <div className="text-sm text-white/85 mt-2">Total earned: <b>{formatINR(user?.total_earned)}</b></div>
+            {user?.is_vendor && (
+              <div data-testid="wallet-vendor-earnings" className="text-sm text-white/85 mt-1">
+                Vendor earnings (paid on delivery): <b>{formatINR(user?.vendor_earnings)}</b>
+              </div>
+            )}
             <button
               data-testid="wallet-withdraw"
               onClick={() => setOpen(true)}
