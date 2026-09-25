@@ -487,6 +487,25 @@ Verified: iteration_24 (8/9, then fixed) + iteration_25 (13/13, 100%). Vendor te
 - Hide **Network / Services / referral-tree / Find-services** for vendor login (no reliable `is_vendor` flag on `/auth/me` yet — needs a detection strategy).
 - "Amount shown exactly as app with GST billing details" in Sales recent receipt (labels done; full GST line breakdown in the receipt can be enhanced).
 
+## Batch 4 — Location filter, Category wishlist, Wallet-on-delivery, Vendor menu trim (June 2026)
+
+Verified 100% (iteration_26). Vendor test account: **Lee@gmail.com / Just@4me** (`is_vendor=true`, pincode 516001).
+
+Key backend facts discovered (external `/auth/me` + `/products`):
+- `/auth/me` exposes `is_vendor`, `pincode`, `store_pincode`, `delivery_pincodes`, `wallet_balance`, `vendor_earnings`.
+- Products carry `delivery_pincodes[]`, `store_pincode`, `delivery_available` but the `/products` endpoint does **not** filter by pincode → filtering is done client-side.
+- Wishlist: `GET /me/wishlist` (list), `POST /products/{id}/save {save:bool}` (toggle). Products list has no `is_saved`, so Shop seeds saved-ids from `/me/wishlist`.
+
+### Shipped
+- **Location/pincode filter** (`Shop.jsx`): `shop-nearby-toggle` (ON by default when the shopper's pincode is known) shows only products whose `delivery_pincodes`/`store_pincode` match the pincode; products lacking pincode data stay visible. Toggle to "Showing all areas" to bypass.
+- **Category wishlist heart** (`Shop.jsx` ProductCard `wishlist-toggle-<id>`): one-tap save/unsave on every card, optimistic, seeded from `/me/wishlist`, doesn't navigate.
+- **Wallet-on-delivery** (`VendorOrders.jsx` + `Wallet.jsx`): marking an order delivered calls `refreshMe()` so the web wallet reflects the backend credit immediately; Wallet hero shows a `wallet-vendor-earnings` line for vendors; wallet balance/earnings refresh on the 30s poll.
+- **Vendor menu trim** (`Layout.jsx` + `Dashboard.jsx`): for `is_vendor` logins, Network + Services are hidden from the sidebar, and the referral tree + "Find services" quick action are hidden from the Dashboard.
+
+### Still pending / notes
+- "Amount shown exactly as app with GST breakdown" in Sales recent receipt — labels done; full per-line GST breakdown in the popup receipt can be enhanced if desired.
+- Location filter uses pincode membership (not geo radius) since the backend doesn't return distances on `/products`.
+
 ## Credentials
 See `/app/memory/test_credentials.md`.
 
