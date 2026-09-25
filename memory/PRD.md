@@ -464,6 +464,29 @@ Full refactor:
 - Order status button removal / app sync
 - Preview vs Production shop-open speed (production perf tuning)
 
+## Batch 3 — ERP cleanup, POS commission, Sales/Invoices, Purchase Book & Smart GST (June 2026)
+
+Verified: iteration_24 (8/9, then fixed) + iteration_25 (13/13, 100%). Vendor test account: **Lee@gmail.com / Just@4me**. ERP owner-lock = 1234.
+
+### Shipped
+- **GST & Tax Return nav trimmed** (`ErpNav.jsx`): only GST Hub, Purchase Book, Smart GST, Roles & Staff, Owner Settings, Learn. Removed Product Master, Inventory, Accounts, Reminders, Income Tax, Reports, Audit Log (routes still exist; just off the nav). Vendor products unaffected.
+- **POS Commission %** (`vendorSales.computeTotals` + `VendorPOS.jsx`): per-line `pos-comm-<idx>`. Commission is added to Subtotal and an equal auto-discount applied → grand total unchanged (e.g. ₹100 @0% +3% comm → Subtotal 103, Commission 3, Discount 3, Grand 100). Totals card shows Subtotal / Commission / Discount / GST / Grand.
+- **POS "Select saved customer"** (`pos-cust-select` → `pos-cust-book-select`): pick from Customer Book to prefill named-customer fields. (customerBook is `useState`, refreshed after each save — no reload needed.)
+- **Duplicate-invoice bug fixed** (`vendorSales.createInvoice`): removed the automatic cloud mirror that double-wrote POS bills into the online feed. Plus defence-in-depth dedupe by `cloud_id`/invoice_no in `VendorSales` & `VendorInvoices`.
+- **Sales Dashboard**: removed the Credit Card tile (`PAY_KEYS` = cash/upi/debit/wallet). App/online orders now show correct **COD / Online / Wallet** labels (via `paid_via`), not always UPI. Invoice numbers rendered UPPERCASE. Cancelled/refunded excluded from KPIs (Batch 2).
+- **Invoices refund** (`VendorInvoices.jsx`): Refund now requires the owner password (verified via `/erp/owner-security/verify`, default 1234); Refund/Cancel hidden for read-only online/app rows. COD/Online/Wallet payment labels in the list.
+- **Customer Book Excel/CSV upload** (`VendorCustomers.jsx` `vc-upload`): imports Name/Phone/GSTIN/Address via `xlsx`, dedupes by mobile number. Lifetime-value tile uses the full (unfiltered) list.
+- **Purchase Book** (`ErpPurchaseBook.jsx`): **Download Excel** (`pb-export`, Summary + Entries sheets) and every summary card is now clickable (`pb-detail-modal`) — entries list, suppliers list, and a per-product margin table with an average-margin footer. Existing math (value/GST/products aggregation) confirmed correct.
+- **Smart GST** (`ErpGstAssistant.jsx` + `erp.gstAssistant(vendorId)`): KPI tiles + lines for GST **collected** (invoices), GST **paid** (Purchase Book), **payable** (collected − paid), and **net profit this month after GST**. **Download Excel** (`gst-assistant-export`) one-file monthly summary.
+- **Right-click / view-source deterrent** (`Layout.jsx`): blocks context-menu + F12 / Ctrl+U/S/P / Ctrl+Shift+I/J/C on the app shell (deterrent only).
+
+### Still pending (next batch — confirmed "all of the above")
+- Shop **location/pincode-wise** product display for users + service providers, synced with app (needs external-backend pincode filtering — feasibility check pending).
+- **Wishlist heart** on the category-wise Shop view.
+- **Wallet-after-delivery** sync (vendor credited to wallet after successful delivery — this is app/backend-side; web should reflect read-only).
+- Hide **Network / Services / referral-tree / Find-services** for vendor login (no reliable `is_vendor` flag on `/auth/me` yet — needs a detection strategy).
+- "Amount shown exactly as app with GST billing details" in Sales recent receipt (labels done; full GST line breakdown in the receipt can be enhanced).
+
 ## Credentials
 See `/app/memory/test_credentials.md`.
 

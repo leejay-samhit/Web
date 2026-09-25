@@ -1,0 +1,26 @@
+{
+  "summary": "Frontend-only retest of 3 items: (1) POS Select-saved-customer without reload after completing a sale; (2) Purchase Book Excel export + 5 clickable summary cards opening pb-detail-modal; (3) Smart GST net-profit KPI + explanation lines + Excel export. All 13 assertions passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "VendorPOS - pos-gst-<n> select element", "issues": ["React hydration warning: <span> inserted as child of <option> for GST_SLABS options (from lib/vendorSales.js line 51). Not blocking, but produces console error. Recommend rendering plain text inside <option>."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix hydration warning in VendorPOS pos-gst-<n> select: remove nested <span> inside <option> (dynamic wrapper from GST_SLABS render)"
+  ],
+  "critical_code_review_comments": [
+    "VendorPOS renders a <span> inside <option> tags for GST slabs which violates HTML and triggers React hydration warnings. Render string directly."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100% (13/13 assertions)"},
+  "test_credentials": "Lee@gmail.com / Just@4me; Owner lock: 1234",
+  "seed_data_creation": "Created localStorage customer 'Test A / 9998887777' via POS checkout completion; created a POS invoice for Foot Ball With Air Filing Pump.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Test 1 (POS cust-select without reload) now passes after useState+refresh fix in VendorPOS.jsx. Test 2 pb-export and all 5 clickable cards (pb-total-value, pb-gst, pb-products, pb-suppliers, pb-margin) open pb-detail-modal correctly; pb-detail-close works. Test 3 gst-assistant-kpis shows 4 tiles (Collected/Paid/Payable/Net profit), all 4 explanation lines present in gst-assistant-lines, gst-assistant-export enabled. Only remaining nit: <span> inside <option> hydration warning on POS.",
+  "rca of the issue": "n/a - all target features verified working"
+}
