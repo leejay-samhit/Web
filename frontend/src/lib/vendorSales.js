@@ -110,6 +110,10 @@ export function computeTotals(items, opts = {}) {
     const gstPct = Number(it.gst_pct || 0);
     const commissionPct = Number(it.commission || 0);
     const commissionAmt = round2(base * (commissionPct / 100));
+    // "Add 3% Qty" — commission gives the customer extra units as a bonus, so
+    // the stock consumed = sold qty + commission qty (see user rule June-2026).
+    const commissionQty = Math.round(qty * (commissionPct / 100));
+    const stockQty = qty + commissionQty;
     let taxable, tax, net;
     if (gstInclusive) {
       // Price already includes GST → split it out. The taxable value is the
@@ -126,7 +130,7 @@ export function computeTotals(items, opts = {}) {
     gstTotal += tax;
     discTotal += disc;
     commissionTotal += commissionAmt;
-    return { ...it, gross, discount_amount: disc, commission_amount: commissionAmt, taxable, tax_amount: tax, line_total: net };
+    return { ...it, gross, discount_amount: disc, commission_amount: commissionAmt, commission_qty: commissionQty, stock_qty: stockQty, taxable, tax_amount: tax, line_total: net };
   });
   subtotal = round2(subtotal);
   gstTotal = round2(gstTotal);
@@ -153,10 +157,12 @@ export function computeTotals(items, opts = {}) {
 /* -------------------------------------------------------------------------- */
 export async function createInvoice(uid, draft) {
   // Decrement stock on the real backend BEFORE we commit the invoice so a
-  // failed inventory write rolls back cleanly.
+  // failed inventory write rolls back cleanly. Stock consumed = qty +
+  // commission bonus qty (see computeTotals `stock_qty`).
   const stockOps = await Promise.allSettled(
     draft.items.map(async (it) => {
-      const newStock = Math.max(0, Number(it.stock_before ?? 0) - Number(it.qty || 0));
+      const consumed = Number(it.stock_qty ?? it.qty ?? 0);
+      const newStock = Math.max(0, Number(it.stock_before ?? 0) - consumed);
       return api.patch(`/vendor/me/products/${it.product_id}`, { stock: newStock });
     })
   );
@@ -184,21 +190,45 @@ export async function createInvoice(uid, draft) {
   return invoice;
 }
 
-export function cancelInvoice(uid, id) {
-  const list = listInvoices(uid).map((i) => (i.id === id ? { ...i, status: "cancelled", cancelled_at: new Date().toISOString() } : i));
-  writeAll(uid, list);
-  // best-effort cloud mirror
-  const inv = getInvoice(uid, id);
-  if (inv?.cloud_id) cloudCancelSale(inv.cloud_id).catch(() => {});
-  return inv;
+/** Add sold (and commission-bonus) units back to live inventory. Best-effort:
+ *  reads current stock then writes the incremented value. */
+async function restoreStock(items) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  let current = {};
+  try {
+    const { data } = await api.get("/vendor/me/products");
+    const arr = data?.items || data || [];
+    current = Object.fromEntries(arr.map((p) => [p.id, Number(p.stock ?? 0)]));
+  } catch { /* fall back to stored stock_before below */ }
+  await Promise.allSettled(
+    items.map((it) => {
+      const consumed = Number(it.stock_qty ?? it.qty ?? 0);
+      const base = current[it.product_id] != null
+        ? current[it.product_id]
+        : Math.max(0, Number(it.stock_before ?? 0) - consumed);
+      const newStock = base + consumed;
+      return api.patch(`/vendor/me/products/${it.product_id}`, { stock: newStock });
+    })
+  );
 }
 
-export function refundInvoice(uid, id, reason) {
+export async function cancelInvoice(uid, id) {
+  const inv = getInvoice(uid, id);
+  if (inv && inv.status === "completed") await restoreStock(inv.items || []);
+  const list = listInvoices(uid).map((i) => (i.id === id ? { ...i, status: "cancelled", cancelled_at: new Date().toISOString() } : i));
+  writeAll(uid, list);
+  if (inv?.cloud_id) cloudCancelSale(inv.cloud_id).catch(() => {});
+  return getInvoice(uid, id);
+}
+
+export async function refundInvoice(uid, id, reason) {
+  const inv = getInvoice(uid, id);
+  // Refund returns the goods → put the stock back on the shelf.
+  if (inv && inv.status === "completed") await restoreStock(inv.items || []);
   const list = listInvoices(uid).map((i) => (i.id === id ? { ...i, status: "refunded", refunded_at: new Date().toISOString(), refund_reason: reason } : i));
   writeAll(uid, list);
-  const inv = getInvoice(uid, id);
   if (inv?.cloud_id) cloudRefundSale(inv.cloud_id, reason).catch(() => {});
-  return inv;
+  return getInvoice(uid, id);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -301,23 +331,39 @@ export function getCashSummary(uid, date = new Date()) {
   const list = listInvoices(uid);
   const settings = getSettings(uid);
   const dayBills = list.filter((i) => sameDay(new Date(i.created_at), date));
-  const day = aggregate(list, (dt) => sameDay(dt, date));
-  const refunds = dayBills.filter((i) => i.status === "refunded").reduce((s, i) => s + (i.totals?.grand_total || 0), 0);
+  const modes = { cash: 0, upi: 0, debit: 0, credit: 0, netbank: 0, wallet: 0, credit_sale: 0 };
+  let sales = 0, bills = 0, refundsTotal = 0, refundsCash = 0;
+  dayBills.forEach((inv) => {
+    if (inv.status === "cancelled") return; // never collected → ignore entirely
+    const refunded = inv.status === "refunded";
+    // Money was collected at sale time for completed AND refunded bills.
+    (inv.payments || []).forEach((p) => {
+      const k = p.mode || "cash";
+      modes[k] = (modes[k] || 0) + (Number(p.amount) || 0);
+      if (refunded && k === "cash") refundsCash += Number(p.amount) || 0;
+    });
+    if (refunded) {
+      refundsTotal += inv.totals?.grand_total || 0;
+    } else {
+      sales += inv.totals?.grand_total || 0;
+      bills += 1;
+    }
+  });
   const opening = settings.opening_balance || 0;
-  const cash = day.by_mode.cash;
-  const closing = opening + cash - refunds;
+  // Refunded cash is collected then returned → nets to zero (no negative drawer).
+  const closing = opening + modes.cash - refundsCash;
   return {
     date: date.toISOString().slice(0, 10),
     opening_balance: opening,
-    cash_sales: cash,
-    upi_sales: day.by_mode.upi,
-    card_sales: day.by_mode.debit + day.by_mode.credit,
-    netbank_sales: day.by_mode.netbank,
-    wallet_sales: day.by_mode.wallet,
-    credit_sales: day.by_mode.credit_sale,
-    total_collections: day.sales,
-    bills_count: day.bills,
-    refunds,
+    cash_sales: modes.cash - refundsCash,
+    upi_sales: modes.upi,
+    card_sales: modes.debit + modes.credit,
+    netbank_sales: modes.netbank,
+    wallet_sales: modes.wallet,
+    credit_sales: modes.credit_sale,
+    total_collections: sales,
+    bills_count: bills,
+    refunds: refundsTotal,
     closing_balance: closing,
   };
 }

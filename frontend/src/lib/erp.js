@@ -193,6 +193,9 @@ function _buildPurchaseRow(vendorId, payload, it, i, existingId) {
     supplierGstin: payload.supplier?.gstin,
     supplierMobile: payload.supplier?.mobile,
     supplierAddress: payload.supplier?.address,
+    paymentMode: payload.paymentMode || "cash",
+    bankName: payload.paymentMode === "bank" ? (payload.bankName || "") : "",
+    bankRef: payload.paymentMode === "bank" ? (payload.bankRef || "") : "",
     productName: it.productName,
     barcode: it.barcode || "",
     category: it.category || "",
@@ -239,16 +242,14 @@ export async function purchaseSummary(vendorId) {
   const purchasesGst_paise = rows.reduce((s, r) => s + (r.gstAmount_paise || 0) * (r.quantity || 0), 0);
   const suppliers = new Set(rows.map((r) => r.supplierName).filter(Boolean));
   const purchaseProducts = new Set(rows.map((r) => r.productName));
+  const purchaseItemsQty = rows.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
   const margins = rows.map((r) => r.profitMarginPct || 0);
   const avgProfitMarginPct = margins.length ? margins.reduce((s, m) => s + m, 0) / margins.length : 0;
 
-  // Aggregate with Product Master (live catalog) — user decision Feb-2026:
-  //   Total Purchase Value = Product Master (purchase price × current stock) + Purchase Book entries
-  //   Purchase GST = Product Master GST (on purchase cost × stock) + Purchase Book GST
-  //   Products = master product count + unique purchase products
   let masterPurchaseValue_paise = 0;
   let masterPurchaseGst_paise = 0;
   let masterProducts = 0;
+  let shopQty = 0;
   let inventoryValue_paise = purchasesValue_paise;
   try {
     const live = await listProducts(vendorId);
@@ -259,19 +260,24 @@ export async function purchaseSummary(vendorId) {
       const gstPct = Number(p.gstPct || 0);
       masterPurchaseValue_paise += cost * stock;
       masterPurchaseGst_paise += Math.round(cost * gstPct / 100) * stock;
+      shopQty += stock;
     });
     inventoryValue_paise = live.reduce((s, p) => s + (Number(p.sellingPrice_paise) || 0) * (Number(p.currentStock) || 0), 0);
   } catch { /* keep defaults */ }
 
+  // Gap analysis: Purchase Book vs My Shop (products count & total qty).
+  const productsGap = masterProducts - purchaseProducts.size;
+  const qtyGap = shopQty - purchaseItemsQty;
+
   return {
-    // Aggregated totals (Product Master + Purchase entries) — new per user decision
     totalPurchaseValue_paise: masterPurchaseValue_paise + purchasesValue_paise,
     totalGstPaid_paise: masterPurchaseGst_paise + purchasesGst_paise,
     totalProducts: masterProducts + purchaseProducts.size,
-    // Individual splits (so UI can hint "master + entries")
     masterPurchaseValue_paise, purchasesValue_paise,
     masterPurchaseGst_paise, purchasesGst_paise,
     masterProducts, purchaseProducts: purchaseProducts.size,
+    purchaseItemsQty, shopProductsCount: masterProducts, shopQty,
+    productsGap, qtyGap,
     totalSuppliers: suppliers.size,
     avgProfitMarginPct,
     currentInventoryValue_paise: inventoryValue_paise,

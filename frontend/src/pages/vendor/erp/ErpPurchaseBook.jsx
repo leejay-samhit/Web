@@ -3,12 +3,11 @@ import * as XLSX from "xlsx";
 import Layout from "@/components/Layout";
 import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
-import DashboardCard from "@/components/erp/DashboardCard";
 import OwnerLockGate from "@/components/erp/OwnerLockGate";
 import { useAuth } from "@/context/AuthContext";
 import { formatINR, formatDate } from "@/lib/utils";
 import { listPurchases, purchaseSummary, createPurchase, updatePurchase, deletePurchase, paiseToRupees, rupeesToPaise } from "@/lib/erp";
-import { BookOpen, Plus, Package, ShoppingCart, IndianRupee, Users, Percent, X, Save, Pencil, Trash2, Download } from "lucide-react";
+import { BookOpen, Plus, Package, ShoppingCart, IndianRupee, Boxes, X, Save, Pencil, Trash2, Download } from "lucide-react";
 
 export default function ErpPurchaseBook() {
   return (
@@ -35,6 +34,9 @@ const EMPTY_PURCHASE = {
   purchaseDate: new Date().toISOString().slice(0, 10),
   invoiceNumber: "",
   supplier: { name: "", gstin: "", mobile: "", address: "" },
+  paymentMode: "cash",
+  bankName: "",
+  bankRef: "",
   items: [{ ...EMPTY_ITEM }],
 };
 
@@ -76,6 +78,9 @@ function PurchaseBookInner({ ownerPassword }) {
       Invoice: x.invoiceNumber || "",
       Supplier: x.supplierName || "",
       "Supplier GSTIN": x.supplierGstin || "",
+      "Payment Mode": x.paymentMode || "cash",
+      "Bank Name": x.bankName || "",
+      "Bank Ref": x.bankRef || "",
       Product: x.productName || "",
       HSN: x.hsnCode || "",
       Category: x.category || "",
@@ -113,13 +118,36 @@ function PurchaseBookInner({ ownerPassword }) {
   return (
     <>
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-          <button type="button" className="text-left" onClick={() => setDetail({ title: "Total purchase value — all entries", kind: "entries" })}><DashboardCard icon={ShoppingCart} label="Total purchase value" value={formatINR(paiseToRupees(summary.totalPurchaseValue_paise))} tone="purchase" testId="pb-total-value" hint={`Master ${formatINR(paiseToRupees(summary.masterPurchaseValue_paise || 0))} + Entries ${formatINR(paiseToRupees(summary.purchasesValue_paise || 0))}`} /></button>
-          <button type="button" className="text-left" onClick={() => setDetail({ title: "Inventory value", kind: "entries" })}><DashboardCard icon={Package}       label="Inventory value"      value={formatINR(paiseToRupees(summary.currentInventoryValue_paise))} tone="stock" testId="pb-inv-value" /></button>
-          <button type="button" className="text-left" onClick={() => setDetail({ title: "Purchase GST — all entries", kind: "entries" })}><DashboardCard icon={IndianRupee}   label="Purchase GST"         value={formatINR(paiseToRupees(summary.totalGstPaid_paise))} tone="gst" testId="pb-gst" hint={`Master ${formatINR(paiseToRupees(summary.masterPurchaseGst_paise || 0))} + Entries ${formatINR(paiseToRupees(summary.purchasesGst_paise || 0))}`} /></button>
-          <button type="button" className="text-left" onClick={() => setDetail({ title: "Products purchased", kind: "entries" })}><DashboardCard icon={Package}       label="Products"             value={summary.totalProducts} tone="default" testId="pb-products" hint={`Master ${summary.masterProducts || 0} + Entries ${summary.purchaseProducts || 0}`} /></button>
-          <button type="button" className="text-left" onClick={() => setDetail({ title: "Suppliers", kind: "suppliers" })}><DashboardCard icon={Users}         label="Suppliers"            value={summary.totalSuppliers} tone="default" testId="pb-suppliers" /></button>
-          <button type="button" className="text-left" onClick={() => setDetail({ title: "Avg profit margin — per product", kind: "margin" })}><DashboardCard icon={Percent}       label="Avg profit margin"    value={`${(summary.avgProfitMarginPct || 0).toFixed(1)}%`} tone="profit" testId="pb-margin" /></button>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4" data-testid="pb-summary">
+          <button type="button" onClick={() => setDetail({ title: "Total purchase value — all entries", kind: "entries" })} className="sc-card p-4 text-left hover:shadow-md transition" data-testid="pb-total-value">
+            <div className="flex items-center gap-2 text-[color:var(--sc-ink-muted)]"><ShoppingCart size={15} /><span className="text-[11px] uppercase tracking-widest font-bold">Total purchase value</span></div>
+            <div className="mt-2 text-2xl font-extrabold tabular-nums">{formatINR(paiseToRupees(summary.totalPurchaseValue_paise))}</div>
+            <div className="text-[11px] text-[color:var(--sc-ink-muted)] mt-1">Master {formatINR(paiseToRupees(summary.masterPurchaseValue_paise || 0))} + Entries {formatINR(paiseToRupees(summary.purchasesValue_paise || 0))}</div>
+          </button>
+
+          <button type="button" onClick={() => setDetail({ title: "Purchase GST — all entries", kind: "entries" })} className="sc-card p-4 text-left hover:shadow-md transition" data-testid="pb-gst">
+            <div className="flex items-center gap-2 text-[color:var(--sc-ink-muted)]"><IndianRupee size={15} /><span className="text-[11px] uppercase tracking-widest font-bold">Purchase GST</span></div>
+            <div className="mt-2 text-2xl font-extrabold tabular-nums">{formatINR(paiseToRupees(summary.totalGstPaid_paise))}</div>
+            <div className="text-[11px] text-[color:var(--sc-ink-muted)] mt-1">Master {formatINR(paiseToRupees(summary.masterPurchaseGst_paise || 0))} + Entries {formatINR(paiseToRupees(summary.purchasesGst_paise || 0))}</div>
+          </button>
+
+          <button type="button" onClick={() => setDetail({ title: "Products — purchase entries", kind: "entries" })} className="sc-card p-4 text-left hover:shadow-md transition" data-testid="pb-products">
+            <div className="flex items-center gap-2 text-[color:var(--sc-ink-muted)]"><Package size={15} /><span className="text-[11px] uppercase tracking-widest font-bold">Products (entries)</span></div>
+            <div className="mt-2 text-2xl font-extrabold tabular-nums">{summary.purchaseProducts}</div>
+            <div className={`text-[11px] mt-1 font-semibold ${summary.productsGap !== 0 ? "text-rose-600" : "text-[color:var(--sc-ink-muted)]"}`} data-testid="pb-products-gap">
+              My Shop: {summary.shopProductsCount}
+              {summary.productsGap !== 0 ? ` · ${Math.abs(summary.productsGap)} ${summary.productsGap > 0 ? "missing entries" : "extra entries"}` : " · matched"}
+            </div>
+          </button>
+
+          <button type="button" onClick={() => setDetail({ title: "Items QTY — purchase entries", kind: "entries" })} className="sc-card p-4 text-left hover:shadow-md transition" data-testid="pb-items-qty">
+            <div className="flex items-center gap-2 text-[color:var(--sc-ink-muted)]"><Boxes size={15} /><span className="text-[11px] uppercase tracking-widest font-bold">Items QTY (entries)</span></div>
+            <div className="mt-2 text-2xl font-extrabold tabular-nums">{summary.purchaseItemsQty}</div>
+            <div className={`text-[11px] mt-1 font-semibold ${summary.qtyGap !== 0 ? "text-rose-600" : "text-[color:var(--sc-ink-muted)]"}`} data-testid="pb-qty-gap">
+              My Shop qty: {summary.shopQty}
+              {summary.qtyGap !== 0 ? ` · gap ${summary.qtyGap > 0 ? "+" : ""}${summary.qtyGap}` : " · matched"}
+            </div>
+          </button>
         </div>
       )}
 
@@ -307,6 +335,9 @@ function NewPurchaseModal({ ownerPassword, vendorId, initialRow = null, onClose,
         mobile: initialRow.supplierMobile || "",
         address: initialRow.supplierAddress || "",
       },
+      paymentMode: initialRow.paymentMode || "cash",
+      bankName: initialRow.bankName || "",
+      bankRef: initialRow.bankRef || "",
       items: [{
         productName: initialRow.productName || "",
         barcode: initialRow.barcode || "",
@@ -348,6 +379,9 @@ function NewPurchaseModal({ ownerPassword, vendorId, initialRow = null, onClose,
         purchaseDate: draft.purchaseDate,
         invoiceNumber: draft.invoiceNumber,
         supplier: draft.supplier,
+        paymentMode: draft.paymentMode,
+        bankName: draft.bankName,
+        bankRef: draft.bankRef,
         items: draft.items.map((it) => ({
           productName: it.productName,
           barcode: it.barcode,
@@ -382,6 +416,9 @@ function NewPurchaseModal({ ownerPassword, vendorId, initialRow = null, onClose,
         purchaseDate: draft.purchaseDate,
         invoiceNumber: draft.invoiceNumber,
         supplier: draft.supplier,
+        paymentMode: draft.paymentMode,
+        bankName: draft.bankName,
+        bankRef: draft.bankRef,
         items: [{
           productName: it.productName, barcode: it.barcode, category: it.category, hsnCode: it.hsnCode,
           quantity: Number(it.quantity), freeQuantity: Number(it.freeQuantity),
@@ -417,6 +454,22 @@ function NewPurchaseModal({ ownerPassword, vendorId, initialRow = null, onClose,
           <Field label="Supplier GSTIN"><input type="text" value={draft.supplier.gstin} onChange={(e) => setDraft({ ...draft, supplier: { ...draft.supplier, gstin: e.target.value } })} className={inputCls} /></Field>
           <Field label="Supplier mobile"><input type="text" value={draft.supplier.mobile} onChange={(e) => setDraft({ ...draft, supplier: { ...draft.supplier, mobile: e.target.value } })} className={inputCls} /></Field>
           <Field label="Supplier address"><input type="text" value={draft.supplier.address} onChange={(e) => setDraft({ ...draft, supplier: { ...draft.supplier, address: e.target.value } })} className={inputCls} /></Field>
+        </div>
+
+        {/* Payment mode — cash or bank (bank name + reference) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+          <Field label="Payment mode">
+            <select value={draft.paymentMode} onChange={(e) => setDraft({ ...draft, paymentMode: e.target.value })} className={inputCls} data-testid="pb-form-paymode">
+              <option value="cash">Cash</option>
+              <option value="bank">Bank</option>
+            </select>
+          </Field>
+          {draft.paymentMode === "bank" && (
+            <>
+              <Field label="Bank name"><input type="text" value={draft.bankName} onChange={(e) => setDraft({ ...draft, bankName: e.target.value })} className={inputCls} data-testid="pb-form-bankname" placeholder="e.g. HDFC Bank" /></Field>
+              <Field label="Reference no"><input type="text" value={draft.bankRef} onChange={(e) => setDraft({ ...draft, bankRef: e.target.value })} className={inputCls} data-testid="pb-form-bankref" placeholder="UTR / cheque / txn ref" /></Field>
+            </>
+          )}
         </div>
 
         <div className="text-xs font-semibold text-[color:var(--sc-ink-muted)] uppercase tracking-wider mb-2">Line items</div>

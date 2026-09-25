@@ -121,7 +121,7 @@ export default function VendorInvoices() {
     });
   }, [all, q, mode, from, to, minAmt, maxAmt]);
 
-  const handleCancel = (id) => { if (window.confirm("Cancel this invoice?")) { cancelInvoice(uid, id); setBump((b) => b + 1); } };
+  const handleCancel = async (id) => { if (window.confirm("Cancel this invoice? Stock will be returned to inventory.")) { await cancelInvoice(uid, id); setBump((b) => b + 1); } };
   const handleRefund = async (id) => {
     const pwd = window.prompt("Enter your owner password to confirm this refund:");
     if (pwd == null || pwd === "") return;
@@ -133,7 +133,7 @@ export default function VendorInvoices() {
     }
     const reason = window.prompt("Refund reason (optional):");
     if (reason === null) return;
-    refundInvoice(uid, id, reason || "");
+    await refundInvoice(uid, id, reason || "");
     setBump((b) => b + 1);
   };
   const exportCsv = () => {

@@ -4,23 +4,14 @@ import VendorNav from "@/components/vendor/VendorNav";
 import ErpNav from "@/components/erp/ErpNav";
 import { useTour } from "@/context/TourContext";
 import {
-  Package, BookOpen, Boxes, Receipt, Lock, Wallet as WalletIcon,
-  TrendingUp, Percent, Sparkles, Building2, ShieldAlert, BellRing,
-  FileBarChart, LineChart, Search, UserCog, ScrollText, KeyRound,
+  BookOpen, Lock, Sparkles, UserCog, KeyRound,
   GraduationCap, Rocket, PlayCircle,
 } from "lucide-react";
 
 const TILES = [
-  { to: "/vendor/erp/products",         label: "Product Master",   icon: Package,        color: "from-emerald-50 ring-emerald-200 text-emerald-800", desc: "Full product info, HSN, batch, stock alerts" },
   { to: "/vendor/erp/purchase-book",    label: "Purchase Book",    icon: BookOpen,       color: "from-sky-50 ring-sky-200 text-sky-800",             desc: "Supplier invoices, GST, purchase history", lock: true },
-  { to: "/vendor/erp/inventory",        label: "Inventory",        icon: Boxes,          color: "from-emerald-50 ring-emerald-200 text-emerald-800", desc: "Live stock, low-stock alerts, dead stock" },
-  { to: "/vendor/erp/accounts",         label: "Accounts Dashboard", icon: WalletIcon,   color: "from-emerald-50 ring-emerald-200 text-emerald-800", desc: "Today / month / lifetime business", lock: true },
   { to: "/vendor/erp/gst-assistant",    label: "Smart GST Assistant", icon: Sparkles,    color: "from-amber-50 ring-amber-200 text-amber-800",       desc: "Plain-English GST summary", lock: true },
-  { to: "/vendor/erp/reminders",        label: "Return Reminders", icon: BellRing,       color: "from-red-50 ring-red-200 text-red-800",             desc: "GST returns, low stock, missing bills" },
-  { to: "/vendor/erp/income-tax",       label: "Income Tax",       icon: FileBarChart,   color: "from-slate-50 ring-slate-200 text-slate-800",       desc: "Estimated business income & tax", lock: true },
-  { to: "/vendor/erp/reports",          label: "Reports",          icon: FileBarChart,   color: "from-sky-50 ring-sky-200 text-sky-800",             desc: "Purchase, sales, profit, GST — PDF/Excel", lock: true },
   { to: "/vendor/erp/roles",            label: "Roles & Staff",    icon: UserCog,        color: "from-slate-50 ring-slate-200 text-slate-800",       desc: "Owner / Manager / Cashier / Staff", lock: true },
-  { to: "/vendor/erp/audit",            label: "Audit Log",        icon: ScrollText,     color: "from-slate-50 ring-slate-200 text-slate-800",       desc: "Every price / stock / permission change", lock: true },
   { to: "/vendor/erp/security",         label: "Owner Security",   icon: KeyRound,       color: "from-amber-50 ring-amber-200 text-amber-800",       desc: "Password, PIN, biometrics, auto-lock", lock: true },
   { to: "/vendor/erp/learn",            label: "Learning Center",  icon: GraduationCap,  color: "from-emerald-50 ring-emerald-200 text-emerald-800", desc: "GST, profit, ITC — in plain English" },
 ];

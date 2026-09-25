@@ -73,7 +73,12 @@ export default function VendorPOS() {
         (p.name || "").toLowerCase().includes(term) ||
         (p.barcode || "").toLowerCase().includes(term) ||
         (p.sku || "").toLowerCase().includes(term) ||
-        (p.category || "").toLowerCase().includes(term)
+        (p.category || "").toLowerCase().includes(term) ||
+        (p.serial_number || "").toLowerCase().includes(term) ||
+        (p.imei_1 || "").toLowerCase().includes(term) ||
+        (p.imei_2 || "").toLowerCase().includes(term) ||
+        (Array.isArray(p.serial_numbers) && p.serial_numbers.some((s) => (s || "").toLowerCase().includes(term))) ||
+        (Array.isArray(p.imei_numbers) && p.imei_numbers.some((s) => (s || "").toLowerCase().includes(term)))
       )
       .slice(0, 12);
   }, [q, products]);
