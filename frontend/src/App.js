@@ -49,6 +49,7 @@ import ErpOwnerSettings from "@/pages/vendor/erp/ErpOwnerSettings";
 import ErpLearn from "@/pages/vendor/erp/ErpLearn";
 import Chat from "@/pages/Chat";
 import Wallet from "@/pages/Wallet";
+import DeliveryPartner from "@/pages/DeliveryPartner";
 import Network from "@/pages/Network";
 import Profile from "@/pages/Profile";
 import Orders from "@/pages/Orders";
@@ -123,6 +124,7 @@ function App() {
               <Route path="/vendor/erp/learn" element={userGuard(<ErpLearn />)} />
               <Route path="/chat" element={userGuard(<Chat />)} />
               <Route path="/wallet" element={userGuard(<Wallet />)} />
+              <Route path="/delivery" element={userGuard(<DeliveryPartner />)} />
               <Route path="/network" element={userGuard(<Network />)} />
               <Route path="/profile" element={userGuard(<Profile />)} />
               <Route path="/kyc" element={userGuard(<KYC />)} />

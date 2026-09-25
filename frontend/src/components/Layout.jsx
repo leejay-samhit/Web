@@ -17,11 +17,12 @@ import {
   IdCard,
   Menu,
   X as CloseIcon,
+  Truck,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { initials, isAdmin } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { log } from "@/lib/log";
 import { adminGroups } from "@/constants/adminNav";
@@ -92,6 +93,25 @@ function NotifBell() {
 
 export default function Layout({ children, title }) {
   const { user, logout } = useAuth();
+  const isDP = !!user?.is_delivery_partner;
+  // Delivery-partner logins get a shop-free, delivery-focused menu.
+  const navList = useMemo(() => {
+    let items = navItems.filter((it) => {
+      if (isDP && ["/shop", "/wishlist", "/bookings", "/vendor"].includes(it.to)) return false;
+      if (user?.is_vendor && (it.to === "/network" || it.to === "/services")) return false;
+      return true;
+    });
+    if (isDP) {
+      const dItem = { to: "/delivery", icon: Truck, label: "Delivery", testid: "nav-delivery" };
+      const i = items.findIndex((x) => x.to === "/dashboard");
+      items = [...items.slice(0, i + 1), dItem, ...items.slice(i + 1)];
+    }
+    return items;
+  }, [isDP, user?.is_vendor]);
+  const mobileList = useMemo(
+    () => (isDP ? mobileNav.map((t) => (t.to === "/shop" ? { to: "/delivery", icon: Truck, label: "Delivery", testid: "tab-delivery" } : t)) : mobileNav),
+    [isDP]
+  );
   const { cart } = useCart();
   const nav = useNavigate();
   const admin = isAdmin(user);
@@ -169,9 +189,7 @@ export default function Layout({ children, title }) {
           </button>
         )}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto overflow-x-hidden">
-          {navItems
-            .filter((it) => !(user?.is_vendor && (it.to === "/network" || it.to === "/services")))
-            .map((it) => (
+          {navList.map((it) => (
             <NavLink
               key={it.to}
               to={it.to}
@@ -312,7 +330,7 @@ export default function Layout({ children, title }) {
         {/* Mobile bottom tabs (right padding keeps clear of platform 'Made with Emergent' badge) */}
         <nav className="lg:hidden fixed bottom-0 inset-x-0 z-[9999] bg-white border-t border-[color:var(--sc-border)] pr-44">
           <div className="grid grid-cols-4">
-            {mobileNav.map((m) => (
+            {mobileList.map((m) => (
               <NavLink
                 key={m.to}
                 to={m.to}
