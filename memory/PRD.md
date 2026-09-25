@@ -526,6 +526,19 @@ Tests: iteration_27 — GST Hub trim (#6) and Purchase Book rework (#7) PASS E2E
 ### Blocker to flag
 - `/vendor/me/products` returns 403 for Lee on web → POS can't load products in preview. Need an approved-vendor account whose web session passes the catalog service's vendor check (or the upstream approval/integrity flag resolved) to fully E2E the POS math.
 
+## Batch 6 — Delivery Partner web experience (June 2026)
+
+Verified 100% (iteration_28). Lee@gmail.com is both a vendor and an approved delivery partner.
+
+Backend surface discovered: `/auth/me` exposes `is_delivery_partner`, `is_delivery_partner_approved`, `delivery_available`, `delivery_pincodes`, `delivery_radius_km`, `dp_*` fields. `GET /delivery-partner/me` → profile + application; `GET /delivery-partner/me/orders?status=<tab>` → `{items,total,counts,mapped_vendors}`. Order-action endpoints (accept/pickup/deliver) and availability-toggle NOT found (PATCH `/delivery-partner/me` → 405).
+
+### Shipped
+- **Delivery-partner menu trim** (`Layout.jsx`): for `is_delivery_partner` logins, Shop / Wishlist / My bookings / My shop are hidden from the sidebar and a **Delivery** item is injected after Dashboard; the mobile Shop tab becomes Delivery.
+- **Delivery dashboard** (`/delivery`, `DeliveryPartner.jsx`): hero with name/phone/vehicle/city + Approved & Available status pills; KPI row (Wallet balance, Total earned, Mapped vendors, Active deliveries); coverage card (pincodes + radius); "My deliveries" with status tabs (Available/Assigned/Out for delivery/Delivered) reading `/delivery-partner/me/orders`, count badges, 30s live refresh + manual refresh, defensive OrderCard, friendly empty state. Non-DP visitors get a graceful gate.
+
+### Pending to complete "all app features"
+- **Order actions** (accept / mark picked-up / mark delivered) and **availability (online/offline) toggle**: the app's endpoints for these weren't discoverable (Lee has `mapped_vendors=0` so the order feed is empty, and no accept/toggle route responded). Need a screenshot of the app's delivery-partner screens + a partner account with live assigned orders to wire and test these accurately.
+
 ## Credentials
 See `/app/memory/test_credentials.md`.
 
