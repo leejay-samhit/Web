@@ -16,7 +16,7 @@ export function printInvoice(invoice, settings) {
   const itemRows = (invoice.items || []).map((it, idx) => `
     <tr>
       <td>${idx + 1}</td>
-      <td>${esc(it.name)}${it.hsn ? `<div class="muted">HSN ${esc(it.hsn)}</div>` : ""}</td>
+      <td>${esc(it.name)}${it.hsn ? `<div class="muted">HSN ${esc(it.hsn)}</div>` : ""}${(it.serial_number || it.imei_1 || it.imei_2) ? `<div class="muted">${[it.serial_number ? `SN ${esc(it.serial_number)}` : "", it.imei_1 ? `IMEI1 ${esc(it.imei_1)}` : "", it.imei_2 ? `IMEI2 ${esc(it.imei_2)}` : ""].filter(Boolean).join(" · ")}</div>` : ""}</td>
       <td class="r">${esc(it.qty)} ${esc(it.unit || "")}</td>
       <td class="r">${formatINR(it.price)}</td>
       <td class="r">${it.discount_amount ? `-${formatINR(it.discount_amount)}` : "-"}</td>

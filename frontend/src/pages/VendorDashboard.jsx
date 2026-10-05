@@ -223,11 +223,11 @@ export default function VendorDashboard() {
   // Categories dropdown (admin-managed). Falls back to a text input when
   // the /categories endpoint isn't shipped or returns [].
   const [categories, setCategories] = useState([]);
+  const [subcatMap, setSubcatMap] = useState({});
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Try the admin catalogue first, then a public alias, then give up
-      // silently — vendors can still type a category by hand.
+      // 1) Try dedicated catalogue endpoints (not shipped on this backend yet).
       for (const path of ["/admin/categories", "/categories"]) {
         try {
           const { data } = await api.get(path);
@@ -238,6 +238,20 @@ export default function VendorDashboard() {
           if (!cancelled && names.length) { setCategories(names); return; }
         } catch { /* try next */ }
       }
+      // 2) Fallback: derive the existing category / sub-category taxonomy from
+      //    the live product catalogue so vendors can pick existing values.
+      try {
+        const { data } = await api.get("/products", { params: { limit: 1000 } });
+        const items = Array.isArray(data) ? data : (data?.items || []);
+        const cats = [...new Set(items.map((p) => p.category).filter(Boolean))].sort();
+        const subs = {};
+        items.forEach((p) => {
+          const sc = p.sub_category || p.subCategory;
+          if (p.category && sc) { (subs[p.category] = subs[p.category] || new Set()).add(sc); }
+        });
+        const subMap = Object.fromEntries(Object.entries(subs).map(([k, v]) => [k, [...v].sort()]));
+        if (!cancelled) { setCategories(cats); setSubcatMap(subMap); }
+      } catch { /* vendors can still type values by hand */ }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -780,29 +794,29 @@ export default function VendorDashboard() {
                   )}
                   <div className="grid grid-cols-2 gap-2">
                     <input className="sc-input" data-testid="vd-form-brand" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-                    {categories.length > 0 ? (
-                      <select
-                        className="sc-input"
-                        data-testid="vd-form-category"
-                        value={form.category}
-                        onChange={(e) => setForm({ ...form, category: e.target.value })}
-                      >
-                        <option value="">Select category…</option>
-                        {categories.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        className="sc-input"
-                        data-testid="vd-form-category"
-                        placeholder="Category"
-                        value={form.category}
-                        onChange={(e) => setForm({ ...form, category: e.target.value })}
-                      />
-                    )}
+                    <input
+                      className="sc-input"
+                      data-testid="vd-form-category"
+                      placeholder="Category (pick or type)"
+                      list="vd-cat-list"
+                      value={form.category}
+                      onChange={(e) => setForm({ ...form, category: e.target.value })}
+                    />
+                    <datalist id="vd-cat-list">
+                      {categories.map((c) => <option key={c} value={c} />)}
+                    </datalist>
                   </div>
-                  <input className="sc-input" data-testid="vd-form-sub-category" placeholder="Sub-category" value={form.sub_category} onChange={(e) => setForm({ ...form, sub_category: e.target.value })} />
+                  <input
+                    className="sc-input"
+                    data-testid="vd-form-sub-category"
+                    placeholder="Sub-category (pick or type)"
+                    list="vd-subcat-list"
+                    value={form.sub_category}
+                    onChange={(e) => setForm({ ...form, sub_category: e.target.value })}
+                  />
+                  <datalist id="vd-subcat-list">
+                    {(subcatMap[form.category] || [...new Set(Object.values(subcatMap).flat())]).map((s) => <option key={s} value={s} />)}
+                  </datalist>
                   <textarea className="sc-input min-h-[70px]" data-testid="vd-form-desc" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                   <div className="flex items-center gap-3">
                     <input type="file" accept="image/*" onChange={onImg} data-testid="vd-form-img" className="block text-sm flex-1" />

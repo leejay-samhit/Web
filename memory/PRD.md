@@ -539,6 +539,20 @@ Backend surface discovered: `/auth/me` exposes `is_delivery_partner`, `is_delive
 ### Pending to complete "all app features"
 - **Order actions** (accept / mark picked-up / mark delivered) and **availability (online/offline) toggle**: the app's endpoints for these weren't discoverable (Lee has `mapped_vendors=0` so the order feed is empty, and no accept/toggle route responded). Need a screenshot of the app's delivery-partner screens + a partner account with live assigned orders to wire and test these accurately.
 
+## Batch 7 — Smart GST math, category dropdowns, serial-on-invoice (June 2026)
+
+Done (no screenshots needed):
+- **Smart GST math fixed** (`erp.gstAssistant`): now computes from Purchase-Book entries — Collected = Σ sellingPrice×GST%, Paid = Σ purchaseEx×GST%, **Payable = collected − paid**, **Net profit = (selling−outGST) − (purchaseEx−inGST)**. Verified against user example (100→120 @18%: payable ₹3.6, net profit ₹16.4 exactly). Empty state prompts adding purchase/products.
+- **Add-Product category & sub-category** (`VendorDashboard.jsx`): no `/categories` endpoint exists on the backend, so both are now **pick-or-type datalists** populated from the live `/products` catalogue (distinct categories; sub-categories filtered by the chosen category). Fixes #13/#14.
+- **Serial/IMEI on POS invoice** (`invoicePrint.js` + `VendorPOS` line capture): the printed bill now shows SN / IMEI1 / IMEI2 under each line item when the product has them.
+
+Pending — need the app screenshots the user hasn't attached yet (asked twice):
+- **Full Add-Product 22-field parity** incl. device-identity-boxes-per-qty (N qty ⇒ N serial + N IMEI), gallery(10), styled summaries, key attributes, spec tabs, smart-search auto-fill, cashback%, selling-GST%, free-delivery, size/options. (Backend array-persistence for multi-serial also unconfirmed.)
+- **Purchase Book auto-entry on product add** (name, barcode, category, qty, purchase ex-GST, GST%, selling) + sync POS/app sold qty into the gap.
+- **Admin → Users full edit** (name/email/phone, reveal/reset password, block, freeze wallet, wallet credit/debit w/ reason, delete, cashback, Excel reports, returns/refunds reconciliation).
+
+⚠️ Live vendor E2E still blocked in preview: `/vendor/me/products` returns 403 for Lee on web, so Add-Product/POS can't be exercised here.
+
 ## Credentials
 See `/app/memory/test_credentials.md`.
 

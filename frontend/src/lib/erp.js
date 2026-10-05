@@ -384,31 +384,43 @@ export async function gstDashboard(/* params, ownerPassword */) {
   };
 }
 
-// ─── Smart GST Assistant — templated over real data ──────────────────────
+// ─── Smart GST Assistant — real figures from purchase-book entries ────────
+// Output GST (collected) = selling price × GST% per unit.
+// Input GST (paid)       = purchase ex-GST × GST% per unit.
+// Payable = output − input.  Net profit = (selling − outGST) − (purchaseEx − inGST).
 export async function gstAssistant(vendorId) {
-  const [g, ps] = await Promise.all([
-    gstDashboard(),
-    purchaseSummary(vendorId).catch(() => null),
-  ]);
-  const collected = g.outputGst_paise || 0;                 // GST collected from invoices (month)
-  const paid = ps?.purchasesGst_paise || 0;                 // GST paid on Purchase Book entries
-  const payable = Math.max(0, collected - paid);
-  const netProfit = g.monthProfit || 0;                     // month profit (sales − cost, GST is pass-through)
+  const rows = lsGet(vendorId, "purchases", []);
+  let inputGst = 0, outputGst = 0, netSales = 0, netPurchase = 0;
+  rows.forEach((r) => {
+    const qty = Number(r.quantity) || 0;
+    const gst = Number(r.gstPct) || 0;
+    const pEx = Number(r.purchasePriceExGst_paise) || 0;
+    const sell = Number(r.sellingPrice_paise) || 0;
+    const inG = Math.round(pEx * gst / 100);
+    const outG = Math.round(sell * gst / 100);
+    inputGst += inG * qty;
+    outputGst += outG * qty;
+    netSales += (sell - outG) * qty;
+    netPurchase += (pEx - inG) * qty;
+  });
+  const payable = Math.max(0, outputGst - inputGst);
+  const netProfit = netSales - netPurchase;
   const fmt = (p) => `₹${(Math.round(p) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
   return {
     data: {
-      collected_paise: collected,
-      paid_paise: paid,
+      collected_paise: outputGst,
+      paid_paise: inputGst,
       payable_paise: payable,
       netProfit_paise: netProfit,
-      taxableSales_paise: g.taxableSales_paise || 0,
+      taxableSales_paise: netSales,
+      entries: rows.length,
     },
     lines: [
-      { type: "collected",  text: `You collected ${fmt(collected)} GST from customers this month (from invoices).` },
-      { type: "paid",       text: `You paid ${fmt(paid)} GST while purchasing products (from your Purchase Book).` },
-      { type: "payable",    text: `Estimated GST payable this month is ${fmt(payable)} (collected − paid).` },
-      { type: "itc",        text: `Net profit this month after removing GST is ${fmt(netProfit)}.` },
-      { type: "disclaimer", text: "Please verify these figures with your CA before filing your GST return." },
+      { type: "collected",  text: `You collected ${fmt(outputGst)} GST from customers (GST on your selling prices).` },
+      { type: "paid",       text: `You paid ${fmt(inputGst)} GST while purchasing products (GST on your purchase prices).` },
+      { type: "payable",    text: `Estimated GST payable is ${fmt(payable)} (collected ${fmt(outputGst)} − paid ${fmt(inputGst)}).` },
+      { type: "itc",        text: `Net profit after removing GST is ${fmt(netProfit)} (net sales ${fmt(netSales)} − net purchases ${fmt(netPurchase)}).` },
+      { type: "disclaimer", text: rows.length ? "Please verify these figures with your CA before filing your GST return." : "Add entries in your Purchase Book (or add products) to see live GST figures." },
     ],
   };
 }
