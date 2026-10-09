@@ -44,6 +44,8 @@ function PurchaseBookInner({ ownerPassword }) {
   const { user } = useAuth();
   const vendorId = user?.id || user?._id || "anon";
   const [rows, setRows] = useState([]);
+  const [monthFilter, setMonthFilter] = useState("");
+  const visibleRows = useMemo(() => (monthFilter ? rows.filter((r) => (r.purchaseDate || "").slice(0, 7) === monthFilter) : rows), [rows, monthFilter]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -72,7 +74,7 @@ function PurchaseBookInner({ ownerPassword }) {
 
   const downloadExcel = () => {
     const r = (p) => paiseToRupees(p || 0);
-    const entryRows = rows.map((x, i) => ({
+    const entryRows = visibleRows.map((x, i) => ({
       "#": i + 1,
       Date: formatDate(x.purchaseDate),
       Invoice: x.invoiceNumber || "",
@@ -153,6 +155,18 @@ function PurchaseBookInner({ ownerPassword }) {
 
       <div className="sc-card p-4 mb-4 flex items-center justify-between">
         <div className="font-extrabold flex items-center gap-2"><BookOpen size={16} /> Purchase entries</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="month"
+            value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+            className="rounded-lg border border-[color:var(--sc-border)] px-2.5 py-1.5 text-xs"
+            data-testid="pb-month-filter"
+            title="Filter purchase entries by month"
+          />
+          {monthFilter && (
+            <button onClick={() => setMonthFilter("")} className="text-[11px] underline text-[color:var(--sc-primary)]" data-testid="pb-month-clear">All months</button>
+          )}
         <div className="flex items-center gap-2">
           <button
             onClick={downloadExcel}
@@ -168,6 +182,7 @@ function PurchaseBookInner({ ownerPassword }) {
           >
             <Plus size={14} /> New purchase
           </button>
+        </div>
         </div>
       </div>
 
@@ -197,7 +212,9 @@ function PurchaseBookInner({ ownerPassword }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {visibleRows.length === 0 ? (
+                <tr><td colSpan={10} className="px-3 py-6 text-center text-sm text-[color:var(--sc-ink-muted)]" data-testid="pb-month-empty">No purchase entries for {monthFilter}.</td></tr>
+              ) : visibleRows.map((r) => (
                 <tr key={r._id} className="border-t border-[color:var(--sc-border)]" data-testid={`pb-row-${r._id}`}>
                   <td className="px-3 py-2">{formatDate(r.purchaseDate)}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.invoiceNumber}</td>
@@ -255,7 +272,7 @@ function PurchaseBookInner({ ownerPassword }) {
         />
       )}
       {detail && (
-        <PurchaseDetailModal detail={detail} rows={rows} summary={summary} onClose={() => setDetail(null)} />
+        <PurchaseDetailModal detail={detail} rows={visibleRows} summary={summary} onClose={() => setDetail(null)} />
       )}
     </>
   );
