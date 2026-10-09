@@ -553,6 +553,20 @@ Pending — need the app screenshots the user hasn't attached yet (asked twice):
 
 ⚠️ Live vendor E2E still blocked in preview: `/vendor/me/products` returns 403 for Lee on web, so Add-Product/POS can't be exercised here.
 
+## Batch 8 — Smart GST monthly ledger + Purchase month filter (June 2026)
+
+Verified 100% (iteration_29; ERP pages load without the vendor-products 403).
+
+Done:
+- **Smart GST rewritten** (`ErpGstAssistant.jsx`, `computeSmartGst`): now computed **strictly from billed invoices** per month + a running **purchase-GST carry-forward ledger**. COLLECTED = GST actually billed in that month's completed invoices; PAID = purchase-book GST that month; PAYABLE = max(0, collected − (carry-in + paid)); leftover input credit carries to next month; NET PROFIT = Σ(selling−purchase)×(1−GST%) over units sold that month. No sales in a month ⇒ all zero (fixes the "default money" bug). Month picker, **"Sync invoices & purchase book"** button, Excel export with carry-forward rows. Matches the user's Oct(paid100/sale60)→Nov(carry40) ledger example.
+- **Purchase entries month calendar** (`ErpPurchaseBook.jsx` `pb-month-filter`): filter entries by month (table, Excel export and detail modal all respect it); "All months" clear.
+
+Still deferred (need app screenshots / destructive backend):
+- Full Add-Product 22-field parity + device-identity-per-qty (needs screenshot + backend array confirmation).
+- Purchase Book auto-entry on product add + POS/app sold-qty reconciliation into the gap.
+- Admin → Users full edit (needs screenshot).
+- **Reset Center** (wipe all app data behind a danger PIN): DESTRUCTIVE — needs a dedicated backend wipe endpoint + explicit confirmation; not safe to fake client-side. Flagged for the user.
+
 ## Credentials
 See `/app/memory/test_credentials.md`.
 
