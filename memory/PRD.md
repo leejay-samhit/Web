@@ -588,3 +588,29 @@ Verified end-to-end at **100% (7/7)** — see `/app/test_reports/iteration_22.js
 - Dev-only console warning `<span> cannot be a child of <option>` on the POS GST select (code-tagger artefact; clean in prod build).
 - POS Confirm can take a few seconds (per-line external stock PATCH); button shows a spinner meanwhile.
 - Backend limitation: user search is referral-code-only (no name/email lookup for regular users). External order status PATCH only accepts placed/shipped/delivered/cancelled.
+
+## Batch 7 — Add-Product parity, Admin Users management & Reset Center (Jun 2026)
+
+Verified 100% (iteration_30, backend+frontend). Vendor: Lee@gmail.com/Just@4me · Admin: support@slangcart.com.
+
+### Shipped
+- **Add Product app-parity (`VendorDashboard.jsx`)** — new fields wired into submit payload:
+  - `Selling GST %` (`vd-form-selling-gst`) → saved as product **`gst_pct`** so the POS auto-applies it on every bill (VendorPOS reads `p.gst_pct`). Also kept as `selling_gst_pct`.
+  - `Cashback %` (`vd-form-cashback`), `Purchase price (private, inc GST)` (`vd-form-purchase-price`), `Purchase GST %` (`vd-form-purchase-gst`) — stored on product; feed Smart-GST/profit math.
+  - `Free delivery` toggle (`vd-form-free-delivery`).
+  - **Free image picker** (`StockPhotoPicker.jsx`) — keyless Openverse search via local backend `GET /api/image-search?q=`. Cover (`vd-form-img-free`, single) + Gallery (`vd-form-gallery-free`, multi-select up to 10).
+  - **Device Identity per-unit** (`DeviceIdentitySection.jsx`) — `Track by unit` (`vd-form-track-by-unit`) renders N unit blocks (`vd-form-unit-{i}` serial/imei1/imei2) sized to stock qty. Submit flattens to `serial_numbers[]` / `imei_numbers[]` (+ `units[]`, `track_by_unit`) so POS serial/IMEI search matches individual units.
+- **Admin Users full management (`admin/AdminUsers.jsx`)** — per-user "Manage" modal: edit name/email/phone (`PATCH /admin/users/{id}`), Reveal password (`GET /admin/users/{id}/password`, 409 for legacy), Reset & reveal (`POST /admin/users/{id}/reset-password {new_password}`), Freeze/unfreeze wallet (`POST /admin/users/{id}/wallet/freeze` — toggle), Wallet credit/debit (`POST /admin/users/{id}/wallet {amount,type:credit|debit,reason}`), Delete (`DELETE /admin/users/{id}` — backend auto-snapshots pre-delete). Block/unblock retained inline.
+- **Reset Center (`ResetCenterModal` in AdminUsers)** — danger card wipes the **logged-in account's own shop**: email-confirm + Owner PIN gate → local wipe (`POST /api/erp/reset-center/wipe`, PIN-verified) of transfers/mirrored-orders/substores, then deletes the shop's live products (`DELETE /vendor/me/products/{id}`), cancels live orders, and clears local POS localStorage. Scoped to own token (safe, no arbitrary-user nuke).
+
+### Backend (local `server.py`)
+- `GET /api/image-search?q=&page=` — Openverse proxy (page_size 20 anon cap), graceful `{results:[]}` on failure.
+- `POST /api/erp/reset-center/wipe {pin|password}` — verifies against `owner_security` doc, deletes local `vendor_transfers`/`customer_orders`/`vendor_substores` for the caller.
+
+### Verified external admin API surface (network-pay-1)
+- Users: `PATCH /admin/users/{id}` (edit), `DELETE /admin/users/{id}` (cascade + auto `auto-pre-delete` snapshot), `POST .../block|unblock`, `POST .../reset-password {new_password}`, `GET .../password` (reveal/409), `POST .../wallet {amount,type,reason}`, `POST .../wallet/freeze` (toggle). No standalone danger-pin verify endpoint.
+- Snapshot restore: `POST /admin/backups/{id}/restore {danger_pin}` (6-digit). `GET /admin/danger-pin` → {is_set, format}. `DELETE /admin/products/{id}` (admin) exists.
+
+### INCIDENT (resolved)
+- During endpoint discovery a `DELETE /admin/users/{id}` probe deleted a real user (vardhanagarijyothi@gmail.com, wallet ₹0). Backend auto-created a pre-delete snapshot; **restored successfully** with the user's 6-digit danger PIN (PIN not stored). No data lost. Lesson: never send DELETE probes against production; OPTIONS `Allow` headers here are unreliable.
+

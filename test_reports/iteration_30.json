@@ -1,0 +1,71 @@
+{
+  "summary": "Full E2E verification for Slangcart ERP: (A) Vendor Add Product app-parity fields, (B) Free image picker (single + multi), (C) Device Identity per-unit, (D) create+delete round-trip for 'ZZ Test GST Product', (E) POS line reads product.gst_pct, (F) Admin Reset Center PIN gating (wrong pin → 401, no wipe), (G) Admin Manage User modal renders all controls. Backend /api/image-search and /api/erp/reset-center/wipe behave per spec. Strictly non-destructive — only one throwaway product on Lee's catalog created and immediately deleted.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verification": {
+    "backend_api": {
+      "GET /api/image-search?q=rice": "200, results[] with thumb+url (verified multiple items)",
+      "GET /api/image-search (empty q)": "422 (as expected)",
+      "POST /api/erp/reset-center/wipe (no auth)": "401 missing_bearer_token",
+      "POST /api/erp/reset-center/wipe (Lee bearer + wrong pin 000000)": "401 invalid_owner_credentials — nothing wiped"
+    },
+    "vendor_add_product_parity": {
+      "vd-form-selling-gst": "present (default 18)",
+      "vd-form-cashback": "present",
+      "vd-form-purchase-price": "present",
+      "vd-form-purchase-gst": "present",
+      "vd-form-free-delivery": "present (checkbox)",
+      "vd-form-img-free": "present",
+      "vd-form-gallery-free": "present"
+    },
+    "stock_photo_picker": {
+      "cover_single_mode": "vd-stock-modal opened, 'rice' search returned thumbs, click vd-stock-img-0 closed modal and set cover image",
+      "gallery_multi_mode": "modal opened on vd-form-gallery-free, 'phone' search returned thumbs, selected 2 images, vd-stock-add-selected inserted both into vd-form-gallery-preview (confirmed 2 images)"
+    },
+    "device_identity_per_unit": {
+      "stock_set_to": 3,
+      "vd-form-device-identity-toggle": "clicked",
+      "vd-form-track-by-unit": "present, toggled on",
+      "unit_blocks": "vd-form-unit-0/1/2 all rendered with serial + imei1 + imei2 inputs"
+    },
+    "e2e_create_delete": {
+      "product": "ZZ Test GST Product (price 100, stock 3, selling GST 18)",
+      "create": "appeared in vd-products grid, id=c845bbc6-46b6-4bc2-8cdb-aaf2b99992b4",
+      "delete": "clicked vd-del-<id>, product removed from grid (round-trip OK)"
+    },
+    "pos_gst_wiring": {
+      "route": "/vendor/pos",
+      "search": "'Tomato' hit added to bill",
+      "pos-gst-0 default": "18 (matches product.gst_pct). Code at VendorPOS.jsx line ~113 reads Number(p.gst_pct ?? settings.default_gst_pct ?? 18) — confirmed correct precedence."
+    },
+    "admin_reset_center": {
+      "reset-center-card": "renders on /admin/users",
+      "reset-center-open": "opens reset-center-modal",
+      "reset-confirm initially disabled": true,
+      "after email+pin filled": "button enabled",
+      "wrong pin submit": "backend 401 invalid_owner_credentials, admin stayed on /admin/users, NO wipe performed"
+    },
+    "admin_manage_modal": {
+      "trigger": "au-manage-eb41fda4-... (non-admin user vardhanagari jyothi)",
+      "au-manage-modal": "opened",
+      "profile_controls": "au-edit-name/email/phone/save all render",
+      "password_controls": "au-pwd-reveal/new/reset all render",
+      "wallet_controls": "au-wallet-freeze/type/amount/reason/apply all render",
+      "au-delete": "renders (NOT clicked)",
+      "au-pwd-reveal click": "server responded 409 (graceful denial) — no au-pwd-value exposed; acceptable per spec"
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Pre-existing (not in scope): Dashboard still logs 404 on /api/users/me/network against network-pay-1 — carried from iteration_28/29.",
+    "Non-blocking console warning in POS: '<span> cannot be a child of <option>' hydration warning — the GST select renders a <span> inside <option> labels. Should be plain text."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Vendor Lee@gmail.com/Just@4me; Admin support@slangcart.com/3)Ywxtic; Owner PIN 1234 (never submitted — only wrong pin 000000 tested).",
+  "seed_data_creation": "Temp product 'ZZ Test GST Product' created and immediately deleted on Lee's shop — no residual data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All session features (Add Product parity, Stock Photo picker, Device Identity, Admin Users management + Reset Center PIN gate) verified end-to-end. Image-search backend endpoint is on local preview backend (/api/image-search → slang-commerce.preview.emergentagent.com), while auth/products are on external network-pay-1. Reset Center wipe gate confirmed: wrong pin → 401 invalid_owner_credentials. DO NOT ever submit the correct PIN against Lee's catalog or admin's own shop — would wipe production data. The only safe mutation is one throwaway product that is immediately deleted."
+}
