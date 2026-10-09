@@ -13,6 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 import VendorNav from "@/components/vendor/VendorNav";
 import DeviceIdentitySection, { validateDeviceIdentity } from "@/components/DeviceIdentitySection";
 import LocationBlock from "@/components/LocationBlock";
+import StockPhotoPicker from "@/components/StockPhotoPicker";
 // (loadReceivedProducts intentionally NOT imported — accepted transfers are
 // now auto-added to the receiver's live catalog on the backend, so merging
 // them here would show duplicates.)
@@ -188,12 +189,19 @@ export default function VendorDashboard() {
     description: "", image_url: "", mrp: 0,
     // Vendor-only pricing + inventory
     price: 0, offer_price: 0, stock: 0,
+    // GST + cashback + private purchase economics (feed POS + Smart GST)
+    selling_gst_pct: 18,   // → saved as product.gst_pct (POS reads this)
+    purchase_price: 0,     // private — inclusive of GST
+    purchase_gst_pct: 0,
+    cashback_pct: 0,
+    free_delivery: false,
     // Vendor-only fulfilment / condition
     store_location: "", condition: "new",
     cash_on_delivery: true, delivery_available: true,
     warranty_months_override: 0, store_notes: "",
     // Device-identity (Luhn-validated at submit)
     imei_1: "", imei_2: "", serial_number: "", batch_number: "",
+    track_by_unit: false, units: [],
     // — Rich detail fields (parity with admin form; auto-populated by smart search)
     sub_features: "",     // newline-separated
     images: [],           // array of image data-urls or master URLs (up to 10)
@@ -214,6 +222,8 @@ export default function VendorDashboard() {
   };
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  // Free stock-photo picker — target "cover" sets image_url, "gallery" appends.
+  const [picker, setPicker] = useState(null); // null | "cover" | "gallery"
   // Autocomplete state (queried against `/api/products/master/search`).
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -334,6 +344,11 @@ export default function VendorDashboard() {
   };
   const removeImage = (i) =>
     setForm((s) => ({ ...s, images: (s.images || []).filter((_, idx) => idx !== i) }));
+  const onPickStock = (url) => {
+    if (!url) return;
+    if (picker === "cover") setForm((s) => ({ ...s, image_url: url }));
+    else setForm((s) => ({ ...s, images: [...(s.images || []), url].slice(0, 10) }));
+  };
 
   const openNew = () => {
     setEditingId(null);
@@ -358,6 +373,13 @@ export default function VendorDashboard() {
       price: p.price ?? p.selling_price ?? 0,
       offer_price: p.offer_price ?? 0,
       stock: p.stock ?? 0,
+      selling_gst_pct: p.gst_pct ?? p.selling_gst_pct ?? 18,
+      purchase_price: p.purchase_price ?? 0,
+      purchase_gst_pct: p.purchase_gst_pct ?? 0,
+      cashback_pct: p.cashback_pct ?? 0,
+      free_delivery: !!p.free_delivery,
+      track_by_unit: !!p.track_by_unit,
+      units: Array.isArray(p.units) ? p.units : [],
       store_location: p.store_location || "",
       condition: p.condition || "new",
       cash_on_delivery: p.cash_on_delivery !== false,
@@ -507,6 +529,14 @@ export default function VendorDashboard() {
         offer_price: Number(form.offer_price) || 0,
         stock: Number(form.stock) || 0,
         mrp: Number(form.mrp) || 0,
+        // Selling GST is stored as `gst_pct` so the POS auto-applies it at
+        // billing (VendorPOS reads p.gst_pct). Keep selling_gst_pct too.
+        gst_pct: Number(form.selling_gst_pct) || 0,
+        selling_gst_pct: Number(form.selling_gst_pct) || 0,
+        purchase_price: Number(form.purchase_price) || 0,
+        purchase_gst_pct: Number(form.purchase_gst_pct) || 0,
+        cashback_pct: Number(form.cashback_pct) || 0,
+        free_delivery: !!form.free_delivery,
         warranty_months_override: Number(form.warranty_months_override) || 0,
         // Serialise the rich detail fields into the shapes the backend
         // (same as the admin flow) expects.
@@ -519,6 +549,15 @@ export default function VendorDashboard() {
         delivery_summary: toStyled(form.delivery_summary),
         whats_in_box: parseLines(form.whats_in_box).map((name) => ({ name, image_data_url: "" })),
         spec_tabs: parseSpecTabs(form.spec_tabs),
+        // Per-unit device identities → flat arrays the POS searches on.
+        track_by_unit: !!form.track_by_unit,
+        units: form.track_by_unit ? (form.units || []) : [],
+        serial_numbers: form.track_by_unit
+          ? (form.units || []).map((u) => u.serial_number).filter(Boolean)
+          : (form.serial_number ? [form.serial_number] : []),
+        imei_numbers: form.track_by_unit
+          ? (form.units || []).flatMap((u) => [u.imei_1, u.imei_2].filter(Boolean))
+          : [form.imei_1, form.imei_2].filter(Boolean),
         // Flatten location fields so backend can persist them directly on
         // the product doc (see BACKLOG_BACKEND_SPEC §13).
         location_pincode: form.location?.pincode || null,
@@ -820,6 +859,7 @@ export default function VendorDashboard() {
                   <textarea className="sc-input min-h-[70px]" data-testid="vd-form-desc" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                   <div className="flex items-center gap-3">
                     <input type="file" accept="image/*" onChange={onImg} data-testid="vd-form-img" className="block text-sm flex-1" />
+                    <button type="button" onClick={() => setPicker("cover")} data-testid="vd-form-img-free" className="text-xs font-bold text-[color:var(--sc-primary-700)] border border-[color:var(--sc-border)] rounded-lg px-2.5 py-2 hover:bg-[color:var(--sc-accent-light)] whitespace-nowrap">Free image</button>
                     {form.image_url && <img alt="" src={form.image_url} className="h-14 w-14 rounded-lg border border-[color:var(--sc-border)] object-cover" />}
                   </div>
 
@@ -841,6 +881,7 @@ export default function VendorDashboard() {
                       className="block mt-1 text-sm"
                       data-testid="vd-form-gallery"
                     />
+                    <button type="button" onClick={() => setPicker("gallery")} data-testid="vd-form-gallery-free" className="mt-1.5 text-xs font-bold text-[color:var(--sc-primary-700)] border border-[color:var(--sc-border)] rounded-lg px-2.5 py-1.5 hover:bg-[color:var(--sc-accent-light)]">+ Add free images</button>
                     {form.images?.length > 0 && (
                       <div className="flex gap-1.5 mt-2 flex-wrap" data-testid="vd-form-gallery-preview">
                         {form.images.map((u, i) => (
@@ -882,6 +923,26 @@ export default function VendorDashboard() {
                     <input className="sc-input mt-1" data-testid="vd-form-stock" type="number" placeholder="Qty" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
                   </label>
                 </div>
+                {/* GST + cashback + private purchase economics */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                  <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
+                    Selling GST %
+                    <input className="sc-input mt-1" data-testid="vd-form-selling-gst" type="number" placeholder="%" value={form.selling_gst_pct} onChange={(e) => setForm({ ...form, selling_gst_pct: e.target.value })} />
+                  </label>
+                  <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
+                    Cashback %
+                    <input className="sc-input mt-1" data-testid="vd-form-cashback" type="number" placeholder="%" value={form.cashback_pct} onChange={(e) => setForm({ ...form, cashback_pct: e.target.value })} />
+                  </label>
+                  <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
+                    Purchase price <span className="text-[color:var(--sc-ink-muted)] font-normal">(private, inc GST)</span>
+                    <input className="sc-input mt-1" data-testid="vd-form-purchase-price" type="number" placeholder="₹" value={form.purchase_price} onChange={(e) => setForm({ ...form, purchase_price: e.target.value })} />
+                  </label>
+                  <label className="text-xs font-semibold text-[color:var(--sc-ink)]">
+                    Purchase GST %
+                    <input className="sc-input mt-1" data-testid="vd-form-purchase-gst" type="number" placeholder="%" value={form.purchase_gst_pct} onChange={(e) => setForm({ ...form, purchase_gst_pct: e.target.value })} />
+                  </label>
+                </div>
+                <div className="text-[11px] text-[color:var(--sc-ink-muted)] mt-1">Selling GST auto-applies on every POS bill. Purchase price &amp; GST stay private and feed your Smart-GST / profit math.</div>
               </div>
 
               {/* ---- Section 4: Fulfilment ---- */}
@@ -912,6 +973,10 @@ export default function VendorDashboard() {
                       Delivery available
                     </label>
                   </div>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[color:var(--sc-ink)] px-3 py-2 rounded-lg border border-[color:var(--sc-border)] sm:col-span-2">
+                    <input type="checkbox" data-testid="vd-form-free-delivery" checked={form.free_delivery} onChange={(e) => setForm({ ...form, free_delivery: e.target.checked })} />
+                    Free delivery (no shipping charge for this product)
+                  </label>
                 </div>
               </div>
 
@@ -1052,6 +1117,13 @@ export default function VendorDashboard() {
               </button>
             </div>
           </div>
+          <StockPhotoPicker
+            open={!!picker}
+            multiple={picker === "gallery"}
+            onPick={onPickStock}
+            onClose={() => setPicker(null)}
+            testIdPrefix="vd-stock"
+          />
         </div>
       )}
     </Layout>

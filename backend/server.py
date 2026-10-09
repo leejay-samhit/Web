@@ -569,6 +569,11 @@ class OwnerChangePinBody(BaseModel):
     newPin: str
 
 
+class ResetCenterBody(BaseModel):
+    pin: Optional[str] = None
+    password: Optional[str] = None
+
+
 DEFAULT_OWNER_PIN = "1234"
 DEFAULT_OWNER_PASSWORD = "1234"
 
@@ -648,6 +653,59 @@ async def owner_change_pin(body: OwnerChangePinBody, me: dict = Depends(resolve_
         {"$set": {"pin": body.newPin, "pin_updated_at": now_iso()}},
     )
     return {"ok": True}
+
+
+# ─── Reset Center — danger-zone wipe of THIS shop's local billing data ──────
+# The external products/orders are deleted by the frontend using the owner's
+# own token; this endpoint clears the local-backend mirrors (transfers,
+# mirrored orders, substore directory) after verifying the owner PIN/password.
+@api_router.post("/erp/reset-center/wipe")
+async def reset_center_wipe(body: ResetCenterBody, me: dict = Depends(resolve_vendor)):
+    email = me["email"].strip().lower()
+    doc = await _owner_doc(email)
+    ok = False
+    if body.pin is not None and body.pin == doc.get("pin"):
+        ok = True
+    elif body.password is not None and body.password == doc.get("password"):
+        ok = True
+    if not ok:
+        raise HTTPException(status_code=401, detail="invalid_owner_credentials")
+    t = await db.vendor_transfers.delete_many({"$or": [{"from_email": email}, {"to_email": email}]})
+    o = await db.customer_orders.delete_many({"$or": [{"vendor_emails": email}, {"customer_email": email}]})
+    s = await db.vendor_substores.delete_many({"owner_email": email})
+    return {"ok": True, "deleted": {"transfers": t.deleted_count, "orders": o.deleted_count, "substores": s.deleted_count}}
+
+
+# ─── Free stock-photo search (keyless Openverse proxy) ──────────────────────
+@api_router.get("/image-search")
+async def image_search(q: str = Query(..., min_length=1), page: int = Query(default=1, ge=1, le=20)):
+    params = {"q": q, "page_size": 20, "page": page, "mature": "false"}
+    try:
+        async with httpx.AsyncClient(timeout=12) as hc:
+            r = await hc.get(
+                "https://api.openverse.org/v1/images/",
+                params=params,
+                headers={"User-Agent": "Slangcart/1.0 (billing)"},
+            )
+        if r.status_code != 200:
+            return {"results": []}
+        data = r.json()
+    except Exception as exc:  # network/timeout → graceful empty
+        logger.warning("image_search failed: %s", exc)
+        return {"results": []}
+    out = []
+    for it in data.get("results", []):
+        thumb = it.get("thumbnail") or it.get("url")
+        if not thumb:
+            continue
+        out.append({
+            "id": it.get("id"),
+            "thumb": thumb,
+            "url": it.get("url") or thumb,
+            "title": (it.get("title") or "")[:120],
+            "creator": it.get("creator") or "",
+        })
+    return {"results": out}
 
 
 # ─── Customer Orders mirror (local — bridges checkout to vendor view) ────

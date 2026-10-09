@@ -567,6 +567,14 @@ export const ownerChangePassword = (payload) => apiLocal.post("/erp/owner-securi
 export const ownerChangePin = (payload) => apiLocal.post("/erp/owner-security/change-pin", payload).then((r) => r.data);
 export const ownerHistory = (ownerPassword) => apiLocal.get("/erp/owner-security/history", { headers: withOwner({}, ownerPassword) }).then((r) => r.data).catch(() => null);
 
+// ─── Free stock-photo search (keyless Openverse proxy via local backend) ──
+export const searchStockImages = (q, page = 1) =>
+  apiLocal.get("/image-search", { params: { q, page } }).then((r) => r.data?.results || []).catch(() => []);
+
+// ─── Reset Center — wipe this shop's local billing mirrors (PIN gated) ────
+export const resetCenterWipe = (payload) =>
+  apiLocal.post("/erp/reset-center/wipe", payload).then((r) => r.data);
+
 // ─── Roles & Staff — no backend yet ──────────────────────────────────────
 export const listRoles = () => api.get("/erp/roles").then((r) => r.data).catch(() => []);
 export const listStaff = () => api.get("/erp/staff").then((r) => r.data).catch(() => []);

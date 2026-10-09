@@ -3,35 +3,32 @@ import { Hash, ChevronDown, CheckCircle2, AlertCircle } from "lucide-react";
 import { isValidImei } from "@/lib/productMaster";
 
 /**
- * "Device Identity" collapsible section — used by both the vendor Add-Product
- * form and the admin Add-Product form. All 3 fields are optional so vendors
- * selling non-electronics can leave them blank.
+ * "Device Identity" collapsible section — used by the vendor Add-Product form.
  *
- * Props: { form, setForm, testIdPrefix? } — mutates form.imei_1, form.imei_2,
- *   form.serial_number in place via setForm({...form, key: val}).
+ * Two modes:
+ *   • Single (default): one IMEI-1 / IMEI-2 / Serial set for the whole product.
+ *   • Track by unit: when toggled on, shows N sets (one per stock unit) so the
+ *     POS can later search any individual unit's IMEI / serial. Units are stored
+ *     in form.units = [{ imei_1, imei_2, serial_number }].
+ *
+ * Props: { form, setForm, testIdPrefix? }
  */
 
-function ImeiInput({ label, value, onChange, testId, otherImei }) {
+function ImeiInput({ label, value, onChange, testId, otherImei, compact }) {
   const digits = String(value || "").replace(/\D/g, "");
   const len = digits.length;
   const luhnOk = len === 15 && isValidImei(digits);
   const duplicate = digits && otherImei && digits === String(otherImei || "").replace(/\D/g, "");
 
   let feedback = null;
-  if (len === 0) {
-    feedback = null;
-  } else if (duplicate) {
-    feedback = { kind: "err", text: "IMEI-1 and IMEI-2 cannot be identical" };
-  } else if (len < 15) {
-    feedback = { kind: "err", text: `${len}/15 digits` };
-  } else if (!luhnOk) {
-    feedback = { kind: "err", text: "Failed Luhn checksum" };
-  } else {
-    feedback = { kind: "ok", text: "Valid IMEI (15/15)" };
-  }
+  if (len === 0) feedback = null;
+  else if (duplicate) feedback = { kind: "err", text: "IMEI-1 and IMEI-2 cannot be identical" };
+  else if (len < 15) feedback = { kind: "err", text: `${len}/15 digits` };
+  else if (!luhnOk) feedback = { kind: "err", text: "Failed Luhn checksum" };
+  else feedback = { kind: "ok", text: "Valid IMEI (15/15)" };
 
   return (
-    <label className="text-xs font-semibold text-[color:var(--sc-ink)] block">
+    <label className={"text-xs font-semibold text-[color:var(--sc-ink)] block" + (compact ? "" : "")}>
       {label}
       <input
         className="sc-input mt-1 font-mono tracking-wider"
@@ -44,10 +41,7 @@ function ImeiInput({ label, value, onChange, testId, otherImei }) {
       />
       {feedback && (
         <div
-          className={
-            "mt-1 text-[11px] font-semibold flex items-center gap-1 " +
-            (feedback.kind === "ok" ? "text-emerald-700" : "text-rose-600")
-          }
+          className={"mt-1 text-[11px] font-semibold flex items-center gap-1 " + (feedback.kind === "ok" ? "text-emerald-700" : "text-rose-600")}
           data-testid={`${testId}-feedback`}
         >
           {feedback.kind === "ok" ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
@@ -58,17 +52,47 @@ function ImeiInput({ label, value, onChange, testId, otherImei }) {
   );
 }
 
+function SerialInput({ value, onChange, testId }) {
+  return (
+    <label className="text-xs font-semibold text-[color:var(--sc-ink)] block">
+      Serial number
+      <input
+        className="sc-input mt-1 font-mono"
+        autoCapitalize="characters"
+        placeholder="Optional"
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value.toUpperCase())}
+        data-testid={testId}
+      />
+    </label>
+  );
+}
+
 export default function DeviceIdentitySection({ form, setForm, testIdPrefix = "vd" }) {
-  const hasAny = !!(form.serial_number || form.imei_1 || form.imei_2);
-  // Auto-expand when any field is populated (edit mode with existing values)
-  // or explicit user click; collapsed by default in create mode.
+  const units = Array.isArray(form.units) ? form.units : [];
+  const trackByUnit = !!form.track_by_unit;
+  const hasAny = !!(form.serial_number || form.imei_1 || form.imei_2 || units.some((u) => u.imei_1 || u.imei_2 || u.serial_number));
   const [open, setOpen] = useState(hasAny);
 
+  const qty = Math.max(0, Number(form.stock) || 0);
+
+  // Resize the per-unit list to match the stock quantity (cap at 200 for sanity).
+  const syncUnits = (on) => {
+    if (!on) { setForm({ ...form, track_by_unit: false }); return; }
+    const n = Math.min(qty, 200);
+    const next = [...units];
+    while (next.length < n) next.push({ imei_1: "", imei_2: "", serial_number: "" });
+    next.length = n;
+    setForm({ ...form, track_by_unit: true, units: next });
+  };
+
+  const updateUnit = (i, patch) => {
+    const next = units.map((u, idx) => (idx === i ? { ...u, ...patch } : u));
+    setForm({ ...form, units: next });
+  };
+
   return (
-    <div
-      className="rounded-xl border border-[color:var(--sc-border)] bg-white overflow-hidden"
-      data-testid={`${testIdPrefix}-device-identity`}
-    >
+    <div className="rounded-xl border border-[color:var(--sc-border)] bg-white overflow-hidden" data-testid={`${testIdPrefix}-device-identity`}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -81,48 +105,50 @@ export default function DeviceIdentitySection({ form, setForm, testIdPrefix = "v
         <div className="flex-1">
           <div className="text-sm font-extrabold text-[color:var(--sc-ink)]">
             Device Identity
-            {hasAny && (
-              <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-primary)]">
-                filled
-              </span>
-            )}
+            {hasAny && <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-[color:var(--sc-primary)]">filled</span>}
           </div>
           <div className="text-[11px] text-[color:var(--sc-ink-muted)] leading-snug">
-            Optional. For phones / branded electronics tracked per unit. IMEIs must be exactly 15 digits and pass the Luhn checksum.
+            Optional. For phones / branded electronics. IMEIs must be exactly 15 digits and pass the Luhn checksum.
           </div>
         </div>
-        <ChevronDown
-          size={16}
-          className={"text-[color:var(--sc-ink-muted)] transition-transform " + (open ? "rotate-180" : "")}
-        />
+        <ChevronDown size={16} className={"text-[color:var(--sc-ink-muted)] transition-transform " + (open ? "rotate-180" : "")} />
       </button>
+
       {open && (
-        <div className="px-3 pb-3 pt-1 space-y-2 border-t border-[color:var(--sc-border)]">
-          <label className="text-xs font-semibold text-[color:var(--sc-ink)] block">
-            Serial number
+        <div className="px-3 pb-3 pt-1 space-y-3 border-t border-[color:var(--sc-border)]">
+          <label className="flex items-center gap-2 text-xs font-semibold text-[color:var(--sc-ink)] bg-[color:var(--sc-accent-light)]/50 px-3 py-2 rounded-lg">
             <input
-              className="sc-input mt-1 font-mono"
-              autoCapitalize="characters"
-              placeholder="Optional"
-              value={form.serial_number || ""}
-              onChange={(e) => setForm({ ...form, serial_number: e.target.value.toUpperCase() })}
-              data-testid={`${testIdPrefix}-serial`}
+              type="checkbox"
+              checked={trackByUnit}
+              onChange={(e) => syncUnits(e.target.checked)}
+              data-testid={`${testIdPrefix}-track-by-unit`}
             />
+            Track by unit — capture a separate IMEI / serial for each of the {qty || 0} unit(s)
           </label>
-          <ImeiInput
-            label="IMEI-1"
-            value={form.imei_1}
-            otherImei={form.imei_2}
-            onChange={(v) => setForm({ ...form, imei_1: v })}
-            testId={`${testIdPrefix}-imei1`}
-          />
-          <ImeiInput
-            label="IMEI-2 (dual-SIM devices)"
-            value={form.imei_2}
-            otherImei={form.imei_1}
-            onChange={(v) => setForm({ ...form, imei_2: v })}
-            testId={`${testIdPrefix}-imei2`}
-          />
+
+          {!trackByUnit && (
+            <div className="space-y-2">
+              <SerialInput value={form.serial_number} onChange={(v) => setForm({ ...form, serial_number: v })} testId={`${testIdPrefix}-serial`} />
+              <ImeiInput label="IMEI-1" value={form.imei_1} otherImei={form.imei_2} onChange={(v) => setForm({ ...form, imei_1: v })} testId={`${testIdPrefix}-imei1`} />
+              <ImeiInput label="IMEI-2 (dual-SIM devices)" value={form.imei_2} otherImei={form.imei_1} onChange={(v) => setForm({ ...form, imei_2: v })} testId={`${testIdPrefix}-imei2`} />
+            </div>
+          )}
+
+          {trackByUnit && (
+            <div className="space-y-2" data-testid={`${testIdPrefix}-units`}>
+              {qty === 0 && <div className="text-[11px] text-rose-600">Set a stock quantity first to capture per-unit identities.</div>}
+              {units.map((u, i) => (
+                <div key={i} className="rounded-lg border border-[color:var(--sc-border)] p-2.5 space-y-2" data-testid={`${testIdPrefix}-unit-${i}`}>
+                  <div className="text-[11px] font-bold uppercase tracking-widest text-[color:var(--sc-ink-muted)]">Unit {i + 1}</div>
+                  <SerialInput value={u.serial_number} onChange={(v) => updateUnit(i, { serial_number: v })} testId={`${testIdPrefix}-unit-${i}-serial`} />
+                  <div className="grid grid-cols-1 gap-2">
+                    <ImeiInput label="IMEI-1" value={u.imei_1} otherImei={u.imei_2} onChange={(v) => updateUnit(i, { imei_1: v })} testId={`${testIdPrefix}-unit-${i}-imei1`} />
+                    <ImeiInput label="IMEI-2" value={u.imei_2} otherImei={u.imei_1} onChange={(v) => updateUnit(i, { imei_2: v })} testId={`${testIdPrefix}-unit-${i}-imei2`} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -130,11 +156,20 @@ export default function DeviceIdentitySection({ form, setForm, testIdPrefix = "v
 }
 
 /** Shared submit-gate: returns null if OK, or a human-readable reason. */
-export function validateDeviceIdentity({ imei_1, imei_2 }) {
-  if (imei_1 && !isValidImei(imei_1)) return "IMEI-1 is not a valid 15-digit IMEI (Luhn failed).";
-  if (imei_2 && !isValidImei(imei_2)) return "IMEI-2 is not a valid 15-digit IMEI (Luhn failed).";
-  if (imei_1 && imei_2 && String(imei_1).replace(/\D/g, "") === String(imei_2).replace(/\D/g, "")) {
-    return "IMEI-1 and IMEI-2 cannot be identical.";
+export function validateDeviceIdentity(form) {
+  const { imei_1, imei_2, track_by_unit, units } = form || {};
+  const checkPair = (a, b, where) => {
+    if (a && !isValidImei(a)) return `IMEI-1 ${where} is not a valid 15-digit IMEI (Luhn failed).`;
+    if (b && !isValidImei(b)) return `IMEI-2 ${where} is not a valid 15-digit IMEI (Luhn failed).`;
+    if (a && b && String(a).replace(/\D/g, "") === String(b).replace(/\D/g, "")) return `IMEI-1 and IMEI-2 ${where} cannot be identical.`;
+    return null;
+  };
+  if (track_by_unit && Array.isArray(units)) {
+    for (let i = 0; i < units.length; i++) {
+      const err = checkPair(units[i].imei_1, units[i].imei_2, `(unit ${i + 1})`);
+      if (err) return err;
+    }
+    return null;
   }
-  return null;
+  return checkPair(imei_1, imei_2, "");
 }
