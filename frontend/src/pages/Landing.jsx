@@ -883,12 +883,13 @@ function Footer({ cms }) {
           </ul>
         </div>
         <div>
-          <div className="text-xs uppercase tracking-widest text-white/60">Company</div>
-          <ul className="mt-3 space-y-2 text-sm">
-            <li><a href="#careers" className="hover:text-[color:var(--sc-accent-light)]">Careers</a></li>
-            <li><a href="#contact" className="hover:text-[color:var(--sc-accent-light)]">Contact</a></li>
-            <li><a href="#terms" className="hover:text-[color:var(--sc-accent-light)]">Terms</a></li>
-            <li><Link to="/legal/privacy" className="hover:text-[color:var(--sc-accent-light)]">Privacy</Link></li>
+          <div className="text-xs uppercase tracking-widest text-white/60">Legal &amp; info</div>
+          <ul className="mt-3 space-y-2 text-sm" data-testid="footer-legal-links">
+            <li><Link to="/legal/terms" className="hover:text-[color:var(--sc-accent-light)]" data-testid="footer-legal-terms">Terms of Service</Link></li>
+            <li><Link to="/legal/privacy" className="hover:text-[color:var(--sc-accent-light)]" data-testid="footer-legal-privacy">Privacy Policy</Link></li>
+            <li><Link to="/legal/refund" className="hover:text-[color:var(--sc-accent-light)]" data-testid="footer-legal-refund">Refund Policy</Link></li>
+            <li><Link to="/legal/contact_us" className="hover:text-[color:var(--sc-accent-light)]" data-testid="footer-legal-contact">Contact Us</Link></li>
+            <li><Link to="/legal/about" className="hover:text-[color:var(--sc-accent-light)]" data-testid="footer-legal-about">About Slangcart</Link></li>
           </ul>
         </div>
         <div>
@@ -903,10 +904,12 @@ function Footer({ cms }) {
       <div className="border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-white/60">
           <div>© {new Date().getFullYear()} Slangcart. All rights reserved.</div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link to="/legal/terms" className="hover:text-white">Terms</Link>
             <Link to="/legal/privacy" className="hover:text-white">Privacy</Link>
-            <a href="#contact" className="hover:text-white">Contact</a>
+            <Link to="/legal/refund" className="hover:text-white">Refund</Link>
+            <Link to="/legal/contact_us" className="hover:text-white">Contact</Link>
+            <Link to="/legal/about" className="hover:text-white">About</Link>
           </div>
         </div>
       </div>

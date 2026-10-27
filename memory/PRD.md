@@ -614,3 +614,11 @@ Verified 100% (iteration_30, backend+frontend). Vendor: Lee@gmail.com/Just@4me �
 ### INCIDENT (resolved)
 - During endpoint discovery a `DELETE /admin/users/{id}` probe deleted a real user (vardhanagarijyothi@gmail.com, wallet ₹0). Backend auto-created a pre-delete snapshot; **restored successfully** with the user's 6-digit danger PIN (PIN not stored). No data lost. Lesson: never send DELETE probes against production; OPTIONS `Allow` headers here are unreliable.
 
+
+
+## Batch 8 — Legal/info links on Sign-in & Home, content sync fix (Jun 2026)
+
+- **Root-cause fix (`Legal.jsx`)**: the page read `data.body`/`data.content`, but the backend `/api/legal/{kind}` serves Markdown in **`content_text`** → every legal page showed "No content available". Now reads `content_text`, renders via a small safe Markdown→HTML converter (DOMPurify-sanitized, `.sc-legal-prose` styles in index.css), and added titles for `contact_us` ("Contact Us") and `shipping`.
+- **Login/Sign-in page (`Login.jsx`)**: added a clear links row — Terms · Privacy · Refund · Contact · About → `/legal/{kind}` (`login-legal-*` testids). Visually confirmed.
+- **Home footer (`Landing.jsx`)**: "Legal & info" column + bottom-bar row now point to the real `/legal/{kind}` pages (terms, privacy, refund, contact_us, about) so web stays in sync with the app (same backend source).
+- Legal kinds (admin-managed via `AdminLegalPages`): terms, privacy, refund, shipping, about, **contact_us**. CORS confirmed open for the preview origin. `/legal/:kind` route is public.

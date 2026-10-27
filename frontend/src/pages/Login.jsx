@@ -206,6 +206,18 @@ export default function Login() {
               ← Back to slangcart.com
             </Link>
           </div>
+          {/* Legal & info links — synced with the app via /legal/{kind} */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] text-[color:var(--sc-ink-muted)]" data-testid="login-legal-links">
+            <Link to="/legal/terms" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="login-legal-terms">Terms</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/privacy" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="login-legal-privacy">Privacy</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/refund" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="login-legal-refund">Refund</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/contact_us" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="login-legal-contact">Contact</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/about" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="login-legal-about">About</Link>
+          </div>
         </div>
       </div>
     </div>

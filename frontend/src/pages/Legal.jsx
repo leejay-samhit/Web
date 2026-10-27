@@ -13,7 +13,37 @@ const TITLES = {
   refund: "Refund Policy",
   shipping: "Shipping Policy",
   about: "About Slangcart",
+  contact_us: "Contact Us",
+  contact: "Contact Us",
 };
+
+// Lightweight, safe Markdown → HTML (the backend stores legal pages as
+// Markdown in `content_text`). Everything is HTML-escaped first, then a small
+// set of block/inline rules is applied, then DOMPurify sanitizes the result.
+function mdToHtml(md) {
+  if (!md) return "";
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = (t) =>
+    esc(t)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
+      .replace(/(^|[\s(])((?:https?:\/\/|mailto:)[^\s)]+)/g, '$1<a href="$2" target="_blank" rel="noreferrer">$2</a>');
+  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  let html = "";
+  let inList = false;
+  const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (/^###\s+/.test(line)) { closeList(); html += `<h3>${inline(line.replace(/^###\s+/, ""))}</h3>`; }
+    else if (/^##\s+/.test(line)) { closeList(); html += `<h2>${inline(line.replace(/^##\s+/, ""))}</h2>`; }
+    else if (/^#\s+/.test(line)) { closeList(); html += `<h2>${inline(line.replace(/^#\s+/, ""))}</h2>`; }
+    else if (/^[-*]\s+/.test(line)) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inline(line.replace(/^[-*]\s+/, ""))}</li>`; }
+    else if (line === "") { closeList(); }
+    else { closeList(); html += `<p>${inline(line)}</p>`; }
+  }
+  closeList();
+  return html;
+}
 
 export default function Legal() {
   const { kind = "terms" } = useParams();
@@ -26,7 +56,8 @@ export default function Legal() {
       setLoading(true);
       try {
         const { data } = await api.get(`/legal/${kind}`);
-        if (alive) setContent(data?.body || data?.content || "");
+        // Backend serves Markdown in `content_text`; keep legacy fallbacks.
+        if (alive) setContent(data?.content_text || data?.body || data?.content || "");
       } catch (error) {
         log.error("Legal.load failed", error);
       } finally {
@@ -36,14 +67,13 @@ export default function Legal() {
     return () => { alive = false; };
   }, [kind]);
 
-  // Sanitize legal HTML to prevent XSS attacks. Only allow a safe subset of
-  // formatting tags / attributes. SVG and inline-event handlers are stripped.
   const sanitized = useMemo(
     () =>
-      DOMPurify.sanitize(content || "", {
+      DOMPurify.sanitize(mdToHtml(content), {
         USE_PROFILES: { html: true },
         FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form"],
         FORBID_ATTR: ["style", "onerror", "onload", "onclick"],
+        ADD_ATTR: ["target", "rel"],
       }),
     [content],
   );
@@ -58,7 +88,7 @@ export default function Legal() {
           </div>
           {content ? (
             <div
-              className="prose prose-sm max-w-none whitespace-pre-line text-[color:var(--sc-ink)]"
+              className="sc-legal-prose max-w-none text-[color:var(--sc-ink)]"
               dangerouslySetInnerHTML={{ __html: sanitized }}
             />
           ) : (
