@@ -639,3 +639,20 @@ Verified 100% (iteration_30, backend+frontend). Vendor: Lee@gmail.com/Just@4me �
 1. Legal links "close without login" on production → the `/legal/:kind` route IS public in code; likely a stale production build → **needs redeploy** to confirm.
 2. Admin Landing CMS "publish to slangcart.com not working — default page shows" → NOT yet investigated (AdminLanding.jsx + how landing config publishes to prod).
 3. Landing page UI/UX polish + clear "Legal & Policies" section synced app/web, and show legal links inside the logged-in app too.
+
+## Batch 10 — Publish fix, public legal access, landing polish, app-wide toasts (Jun 2026)
+
+Verified iter_31/32/33 (frontend 100%).
+
+- **PUBLISH FIX (root cause + fix)**: admin Landing "Publish" wrote `landing_cms` to the external `PUT /admin/settings`, which silently DROPS the field; and the public landing read it from `GET /admin/settings` which is **admin-only (401 for visitors)** → slangcart.com always showed DEFAULT_CMS. Moved the CMS to THIS app's own deployed backend:
+  - `server.py`: `GET /api/landing-cms` (PUBLIC) + `PUT /api/landing-cms` (admin-gated via resolve_vendor, role==admin). Stored in `site_config` collection.
+  - `lib/landingCms.js`: `loadCms()` → apiLocal `GET /landing-cms` (public); `publishCms()` → apiLocal `PUT /landing-cms`.
+  - Verified: admin publishes a marker → a logged-out/incognito visitor sees it on `/`.
+- **LEGAL ACCESS (real bounce cause)**: logged-out `Layout` rendered `NotifBell` which polled external `/notifications/me` → 401 → global api.js redirect to `/login` (every `/legal/*` bounced). Fixed: NotifBell skips when no token. Added a clean **public shell** in `Layout` (`data-testid=public-layout`: logo + Sign in + Home + legal footer; no sidebar/avatar/logout) for logged-out users. Legal content renders (content_text fix, Batch 8). Footer invisibility fixed (`isolate`).
+- **LANDING POLISH**: new clear **"Legal & Policies"** section on `/` (`section-legal`, cards `legal-card-{terms,privacy,refund,contact_us,about}`) + `Legal` nav item. Legal links added to the **logged-in app footer** (`app-legal-footer` in Layout). Much of the "missing details on production" was the publish bug → fixed.
+- **APP-WIDE TOASTS**: sonner `<Toaster/>` was never mounted → every `toast()` in the app was silent (AdminUsers, AdminLanding, VendorOrders, ErpRoles, etc). Mounted `<Toaster position="top-center" richColors closeButton theme="light" />` from `sonner` at App root. Now works everywhere.
+- AdminLanding publish now shows a visible toast + updated obsolete warn text.
+
+### STILL PENDING
+- **Google sign-in**: website side built & flag-off; blocked on the backend's web Google start endpoint/URL (user to share) — then set `REACT_APP_ENABLE_GOOGLE_LOGIN=true` + test. Spec: `/app/memory/google_web_login_spec.md`.
+- All Batch 8/9/10 changes need a **redeploy** to reflect on slangcart.com (production).
