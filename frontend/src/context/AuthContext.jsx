@@ -65,6 +65,16 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Google web-login return handler: the external backend already issued its
+  // own JWT, so the session is fully synced with the app (wallet/shop/referrals).
+  const loginWithTokens = useCallback(
+    async (tk, refresh) => {
+      persist(tk, null, refresh);
+      return refreshMe();
+    },
+    [persist, refreshMe]
+  );
+
   useEffect(() => {
     if (token) {
       refreshMe().finally(() => setLoading(false));
@@ -91,8 +101,8 @@ export function AuthProvider({ children }) {
   }, [token, refreshMe]);
 
   const value = useMemo(
-    () => ({ user, token, loading, login, register, logout, refreshMe, setUser }),
-    [user, token, loading, login, register, logout, refreshMe]
+    () => ({ user, token, loading, login, register, logout, refreshMe, setUser, loginWithTokens }),
+    [user, token, loading, login, register, logout, refreshMe, loginWithTokens]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

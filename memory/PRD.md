@@ -622,3 +622,20 @@ Verified 100% (iteration_30, backend+frontend). Vendor: Lee@gmail.com/Just@4me �
 - **Login/Sign-in page (`Login.jsx`)**: added a clear links row — Terms · Privacy · Refund · Contact · About → `/legal/{kind}` (`login-legal-*` testids). Visually confirmed.
 - **Home footer (`Landing.jsx`)**: "Legal & info" column + bottom-bar row now point to the real `/legal/{kind}` pages (terms, privacy, refund, contact_us, about) so web stays in sync with the app (same backend source).
 - Legal kinds (admin-managed via `AdminLegalPages`): terms, privacy, refund, shipping, about, **contact_us**. CORS confirmed open for the preview origin. `/legal/:kind` route is public.
+
+## Batch 9 — Web Google sign-in (synced via external JWT), built & flag-gated (Jun 2026)
+
+- User chose Google sign-in **linked to real accounts** (not Emergent-managed/siloed). Main backend owns identity and already runs its own Google OAuth (`GET /api/auth/google/callback` exists), but exposes **no discoverable web start/verify endpoint** (all candidates 404). So the website side is built and waiting on a backend web endpoint.
+- Website side (synced via existing external JWT, non-breaking, flag OFF by default):
+  - `lib/googleAuth.js` — `startGoogleLogin()` redirects to `{START_URL}?redirect_uri={origin}/auth/google/return`; `GOOGLE_LOGIN_ENABLED` flag.
+  - `pages/GoogleReturn.jsx` + public route `/auth/google/return` — parses `token`/`access_token` + `refresh_token` from URL fragment (or query), clears the fragment, calls `AuthContext.loginWithTokens` → persist + `/auth/me`, redirects to `/dashboard`; graceful error card otherwise.
+  - `AuthContext.loginWithTokens(token, refresh)` added.
+  - "Continue with Google" button on `Login.jsx` (shown only when `REACT_APP_ENABLE_GOOGLE_LOGIN=true`).
+  - env keys added: `REACT_APP_ENABLE_GOOGLE_LOGIN=false`, `REACT_APP_GOOGLE_WEB_START_URL=` (empty).
+- Backend spec handed off: `/app/memory/google_web_login_spec.md`. To activate: backend adds `/api/auth/google/web-start` (redirect-based, returns JWT in fragment), then set the two env keys to enable + restart; main agent tests E2E.
+- Verified: `/auth/google/return` is public & renders (no login redirect); no-token → graceful error; compiles clean; token path reuses proven external-JWT auth.
+
+### STILL PENDING from the user's prior message (not yet done):
+1. Legal links "close without login" on production → the `/legal/:kind` route IS public in code; likely a stale production build → **needs redeploy** to confirm.
+2. Admin Landing CMS "publish to slangcart.com not working — default page shows" → NOT yet investigated (AdminLanding.jsx + how landing config publishes to prod).
+3. Landing page UI/UX polish + clear "Legal & Policies" section synced app/web, and show legal links inside the logged-in app too.

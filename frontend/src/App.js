@@ -59,6 +59,7 @@ import KYC from "@/pages/KYC";
 import Tickets from "@/pages/Tickets";
 import TicketDetail from "@/pages/TicketDetail";
 import Legal from "@/pages/Legal";
+import GoogleReturn from "@/pages/GoogleReturn";
 import { adminRoutes } from "@/AdminRoutes";
 
 const userGuard = (el) => <ProtectedRoute>{el}</ProtectedRoute>;
@@ -76,6 +77,8 @@ function App() {
 
               {/* Public legal pages */}
               <Route path="/legal/:kind" element={<Legal />} />
+              {/* Public Google web-login return handler (synced external JWT) */}
+              <Route path="/auth/google/return" element={<GoogleReturn />} />
 
               {/* Public marketing landing page — authenticated users are
                   auto-forwarded to /dashboard inside <Landing/>. */}
