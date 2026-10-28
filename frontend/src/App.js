@@ -1,5 +1,6 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
 import { TourProvider } from "@/context/TourContext";
@@ -142,6 +143,7 @@ function App() {
 
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
+            <Toaster position="top-center" richColors closeButton theme="light" />
             </TourProvider>
           </CartProvider>
         </AuthProvider>

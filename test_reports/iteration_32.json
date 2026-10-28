@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only verification of public legal shell, authed layout regression, AdminLanding publish feedback/sync, and home Legal section. 3 of 4 features PASS. Publish toast FAILS: sonner <Toaster /> is never mounted in the app, so toast.success/error calls render nothing.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminLanding publish feedback", "issue": "No toast appears after Publish (0 [data-sonner-toaster]/[data-sonner-toast] elements in DOM). RCA: grep finds no '<Toaster' usage in src (App.js/index.js); components/ui/sonner.jsx exports Toaster but it's never rendered. All toast() calls across app (AdminUsers, VendorOrders, ErpRoles, etc.) are silent. Inline fallback data-testid='admin-landing-msg' does show 'Published! Every visitor of slangcart.com now sees this content.' but it sits at the top of the page, off-screen when user clicks the bottom sticky Publish button.", "selector": "[data-testid='cms-publish']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed": [
+    "Logged-out /legal/terms and /legal/privacy: public-layout, public-brand, public-signin, public-home, app-legal-footer present; sidebar absent; no logout; legal-content has real policy text (~480-520 chars); no redirect to /login",
+    "Authed admin /admin/landing: sidebar present, public-layout absent, admin-landing loads; authed /legal/terms also uses sidebar shell",
+    "Publish sync: marker QA2-<ts> published; fresh browser context on '/' shows marker in hero",
+    "Home section-legal with legal-card-terms/privacy/refund/contact_us/about; clicking refund opens /legal/refund with content"
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Mount sonner Toaster once at app root, e.g. in App.js: import { Toaster } from '@/components/ui/sonner'; render <Toaster position=\"top-center\" richColors /> inside the router/provider tree. (Check ui/sonner.jsx uses next-themes useTheme — ensure it works without a ThemeProvider or pass theme='light'.)",
+    "Optionally scroll admin-landing-msg into view or place it next to the sticky publish bar"
+  ],
+  "critical_code_review_comments": ["sonner toast used in ~10 files but Toaster never mounted — app-wide silent feedback"],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "75%"},
+  "seed_data_creation": "Published hero_subtitle = 'QA2-1793168135' to landing CMS (reversible; main agent may want to restore original subtitle).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After Toaster is mounted, re-run: admin login -> /admin/landing -> fill cms-hero_subtitle -> click cms-publish -> expect [data-sonner-toast] visible in viewport. Hero subtitle currently holds a QA2 marker.",
+  "test_credentials": "Admin support@slangcart.com / 3)Ywxtic (worked)"
+}
