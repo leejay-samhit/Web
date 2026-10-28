@@ -24,6 +24,7 @@ import { useCart } from "@/context/CartContext";
 import { initials, isAdmin } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
+import { getToken } from "@/lib/tokenStore";
 import { log } from "@/lib/log";
 import { adminGroups } from "@/constants/adminNav";
 
@@ -56,6 +57,9 @@ function NotifBell() {
   useEffect(() => {
     let alive = true;
     const load = async () => {
+      // Public pages (e.g. /legal/*) render inside Layout while logged out —
+      // never hit an auth-only endpoint without a token (401 → /login bounce).
+      if (!getToken()) return;
       try {
         const { data } = await api.get("/notifications/me");
         const arr = Array.isArray(data) ? data : data?.items || [];
@@ -146,6 +150,45 @@ export default function Layout({ children, title }) {
       document.removeEventListener("keydown", onKey);
     };
   }, []);
+
+  // Public shell — logged-out visitors (e.g. /legal/*) get a minimal header
+  // and footer only: no sidebar, no bell/avatar/logout, and crucially no
+  // authenticated API calls that would bounce them to /login.
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[color:var(--sc-bg)] text-[color:var(--sc-ink)]" data-testid="public-layout">
+        <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[color:var(--sc-border)]">
+          <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-2.5" data-testid="public-brand">
+              <div className="w-9 h-9 rounded-xl bg-[color:var(--sc-primary)] text-white grid place-items-center font-black">S</div>
+              <div className="font-extrabold text-[color:var(--sc-ink)]">Slangcart</div>
+            </Link>
+            <div className="flex items-center gap-1">
+              <Link to="/" className="text-sm font-semibold text-[color:var(--sc-ink-muted)] hover:text-[color:var(--sc-primary)] px-3 py-2" data-testid="public-home">Home</Link>
+              <Link to="/login" className="sc-btn-primary text-sm py-2 px-4" data-testid="public-signin">Sign in</Link>
+            </div>
+          </div>
+        </header>
+        <main className="flex-1 w-full max-w-5xl mx-auto p-4 lg:p-8">
+          <h1 className="text-2xl font-extrabold text-[color:var(--sc-ink)] mb-4">{title}</h1>
+          {children}
+        </main>
+        <footer className="border-t border-[color:var(--sc-border)] px-4 py-6" data-testid="app-legal-footer">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] text-[color:var(--sc-ink-muted)]">
+            <Link to="/legal/terms" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-terms">Terms</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/privacy" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-privacy">Privacy</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/refund" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-refund">Refund</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/contact_us" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-contact">Contact</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/about" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-about">About</Link>
+          </div>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[color:var(--sc-bg)] flex">

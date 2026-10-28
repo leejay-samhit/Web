@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only test of public legal pages, Landing Legal & Policies section, logged-in legal footer, and Landing CMS publish sync. Found a CRITICAL bug: logged-out /legal/* pages bounced to /login, so the feature was broken as delivered. Fixed it (Layout NotifBell 401 -> interceptor redirect). Also fixed a landing footer contrast bug. After the fixes, all 4 requested features pass. Publish sync was checked end-to-end: an admin-published marker showed up in a clean context, then it was reverted to the original subtitle.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Layout.jsx NotifBell (used by Legal.jsx)", "issue": "FIXED BY TESTER. While logged out, Layout polled GET external /api/notifications/me -> 401. The api.js interceptor then hard-redirected to /login, so every /legal/* page bounced to login. Fix: skip load() when getToken() is empty.", "selector": "[data-testid='legal-content']", "priority": "CRITICAL"},
+      {"component": "Landing footer", "issue": "FIXED BY TESTER. The footer's dark background divs use -z-10 inside a footer with no stacking context, so they painted behind the page bg. Result: white text on a near-white background (almost invisible). Fix: added the 'isolate' class to the footer.", "selector": "[data-testid='landing-footer']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/legal/* while logged out", "issues": ["Shows the full logged-in app shell: sidebar (Dashboard, Wallet, KYC...), avatar 'U', cart/bell and a 'Log out' button. Clicking any of these bounces to /login. Use a public/minimal header (logo, Sign in, Back to home) when there is no user."]},
+      {"screen": "/admin/landing", "issues": ["The Publish success/warn message (admin-landing-msg) renders at the top of a long page (measured y=-3402px when Publish is clicked from the sticky bottom bar), so the admin never sees it. Use a toast or show it next to the Publish button.", "The warn text for a failed publish still mentions the obsolete network-pay-1 SettingsUpdate/landing_cms instructions. Update it."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Review and keep tester fix in components/Layout.jsx (NotifBell skips /notifications/me without a token). Also check other public pages that wrap Layout for authenticated GETs.",
+    "Render a public header in Layout when !user (no sidebar, Log out or avatar) for /legal/*",
+    "Make the AdminLanding publish result visible (toast or near the button) and update the obsolete warn text",
+    "Note: loadCms merges localStorage over the remote value, so an admin's stale local preview can mask published content in the admin's own browser"
+  ],
+  "critical_code_review_comments": [
+    "lib/api.js interceptor hard-redirects to /login on any 401 GET, even on public pages. This is fragile; consider skipping the redirect on public routes (/, /legal/*).",
+    "landingCms.loadCms: the precedence {...remote, ...local} lets the local preview override published content. publishCms sets _cache without the local copy, which is fine, but the precedence is confusing after a reload.",
+    "Landing.jsx is 1007 lines. Split it into section components."
+  ],
+  "updated_files": ["/app/frontend/src/components/Layout.jsx", "/app/frontend/src/pages/Landing.jsx"],
+  "success_rate": {"backend": "N/A", "frontend": "100% after tester fixes (legal public access was 0/5 before the fix)"},
+  "seed_data_creation": "No seed data. The hero_subtitle was temporarily published with the marker QA-SYNC-1793167615 and then restored to the original text via Publish.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Admin support@slangcart.com / 3)Ywxtic. Legal: /legal/{terms,privacy,refund,contact_us,about} -> data-testid legal-content. Landing: section-legal, legal-card-*, nav a[href='#legal']. Layout footer: app-legal-{terms,privacy,refund,contact,about}. Admin CMS: /admin/landing, cms-hero_subtitle, cms-publish, admin-landing-msg. Publish -> PUT /api/landing-cms on the local backend; public GET /api/landing-cms.",
+  "rca of the issue": "Legal bounce: Legal.jsx renders inside Layout, and Layout mounts NotifBell, which calls the authenticated external GET /notifications/me. When logged out this returns 401. The api.js response interceptor (GET, not /admin/) calls clearTokens and sets window.location.href='/login'. Reproduced on all 5 kinds. After the token guard there are 0 401s and all pages render content (305-882 chars)."
+}

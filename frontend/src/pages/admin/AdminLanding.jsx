@@ -3,6 +3,7 @@ import Layout from "@/components/Layout";
 import { DEFAULT_CMS, loadCms, saveCmsLocal, publishCms, resetCmsLocal } from "@/lib/landingCms";
 import { Save, Loader2, RotateCcw, CheckCircle2, AlertCircle, ExternalLink, Eye, Plus, Trash2, GripVertical } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 /**
  * Field-metadata drives the entire form — every value in DEFAULT_CMS gets a
@@ -237,7 +238,9 @@ export default function AdminLanding() {
     saveCmsLocal(cms);
     setSavingLocal(false);
     setDirty(false);
-    setMsg({ kind: "ok", text: "Saved as a local preview in your browser. Reload the landing page to see the changes." });
+    const text = "Saved as a local preview in your browser. Reload the landing page to see the changes.";
+    setMsg({ kind: "ok", text });
+    toast.success("Saved local preview");
     setTimeout(() => setMsg(null), 5000);
   };
 
@@ -249,14 +252,18 @@ export default function AdminLanding() {
     setPublishing(false);
     setDirty(false);
     if (r.ok) {
-      setMsg({ kind: "ok", text: "Published to backend. Every visitor of slangcart.com will now see this content." });
+      const text = "Published! Every visitor of slangcart.com now sees this content.";
+      setMsg({ kind: "ok", text });
+      toast.success(text);
     } else {
-      setMsg({
-        kind: "warn",
-        text: `Backend rejected the publish (${r.error}). Your changes are saved locally so you can still preview them. Ask the network-pay-1 backend dev to add \`landing_cms: dict | None = None\` to the \`SettingsUpdate\` Pydantic model + return it from \`GET /api/admin/settings\`, then click Publish again.`,
-      });
+      const text =
+        r.error === "admin_only"
+          ? "Only an admin account can publish. Please sign in as an admin and try again."
+          : `Publish failed (${r.error}). Your changes are still saved locally as a preview — please try Publish again.`;
+      setMsg({ kind: "warn", text });
+      toast.error(text);
     }
-    setTimeout(() => setMsg(null), 12000);
+    setTimeout(() => setMsg(null), 10000);
   };
 
   const reset = () => {
@@ -265,6 +272,7 @@ export default function AdminLanding() {
     setCms({ ...DEFAULT_CMS });
     setDirty(false);
     setMsg({ kind: "ok", text: "Reset to defaults." });
+    toast.success("Reset to defaults");
     setTimeout(() => setMsg(null), 3000);
   };
 

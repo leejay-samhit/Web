@@ -890,7 +890,7 @@ function LegalSection() {
 
 function Footer({ cms }) {
   return (
-    <footer className="relative overflow-hidden" data-testid="landing-footer">
+    <footer className="relative isolate overflow-hidden" data-testid="landing-footer">
       <div className="absolute inset-0 -z-10 bg-[color:var(--sc-ink)]" />
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_10%,rgba(15,110,79,0.35),transparent_60%)]" />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 grid grid-cols-2 lg:grid-cols-5 gap-8 text-white">
