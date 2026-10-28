@@ -327,6 +327,21 @@ export default function Layout({ children, title }) {
           {children}
         </main>
 
+        {/* App-wide legal footer — same policies as the public site & app */}
+        <footer className="border-t border-[color:var(--sc-border)] px-4 lg:px-8 py-4 pb-24 lg:pb-4" data-testid="app-legal-footer">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[11px] text-[color:var(--sc-ink-muted)]">
+            <Link to="/legal/terms" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-terms">Terms</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/privacy" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-privacy">Privacy</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/refund" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-refund">Refund</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/contact_us" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-contact">Contact</Link>
+            <span className="opacity-40">·</span>
+            <Link to="/legal/about" className="hover:text-[color:var(--sc-primary)] font-semibold" data-testid="app-legal-about">About</Link>
+          </div>
+        </footer>
+
         {/* Mobile bottom tabs (right padding keeps clear of platform 'Made with Emergent' badge) */}
         <nav className="lg:hidden fixed bottom-0 inset-x-0 z-[9999] bg-white border-t border-[color:var(--sc-border)] pr-44">
           <div className="grid grid-cols-4">

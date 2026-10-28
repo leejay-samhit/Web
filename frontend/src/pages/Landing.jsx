@@ -68,6 +68,7 @@ const NAV_LINKS = [
   { href: "#how", label: "How it works" },
   { href: "#careers", label: "Careers" },
   { href: "#contact", label: "Contact" },
+  { href: "#legal", label: "Legal" },
 ];
 
 /** Shared "Download App" anchor — real APK download via HTML5 download attr. */
@@ -835,6 +836,56 @@ function CareersSection({ cms }) {
   );
 }
 
+/* ---------- Legal & Policies (clear hub, synced with the app) ------- */
+
+const LEGAL_LINKS = [
+  { kind: "terms", label: "Terms of Service", desc: "The rules for using Slangcart — accounts, orders and billing.", Icon: FileText },
+  { kind: "privacy", label: "Privacy Policy", desc: "What data we collect and how we keep it safe.", Icon: Shield },
+  { kind: "refund", label: "Refund Policy", desc: "Returns, cancellations and how refunds are processed.", Icon: CreditCard },
+  { kind: "contact_us", label: "Contact Us", desc: "Reach our team — support, grievances and business.", Icon: Phone },
+  { kind: "about", label: "About Slangcart", desc: "Who we are and the platform we're building for India.", Icon: Store },
+];
+
+function LegalSection() {
+  return (
+    <section id="legal" className="py-12 sm:py-16 bg-gradient-to-b from-white to-[color:var(--sc-accent-light)]/40" data-testid="section-legal">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-2xl">
+          <SectionTag>Legal &amp; Policies</SectionTag>
+          <h2 className="mt-3 text-3xl sm:text-4xl font-extrabold tracking-tight text-[color:var(--sc-ink)]">
+            Everything in the open.
+          </h2>
+          <p className="mt-3 text-[color:var(--sc-ink-muted)]">
+            The same policies you see in the app — always one tap away, no sign-in needed.
+          </p>
+        </div>
+        <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="legal-grid">
+          {LEGAL_LINKS.map(({ kind, label, desc, Icon }) => (
+            <Link
+              key={kind}
+              to={`/legal/${kind}`}
+              data-testid={`legal-card-${kind}`}
+              className="group rounded-2xl bg-white border border-[color:var(--sc-border)] p-5 flex items-start gap-4 hover:border-[color:var(--sc-primary)] hover:shadow-[0_12px_40px_-18px_rgba(15,110,79,0.5)] transition-[border-color,box-shadow,transform] hover:-translate-y-0.5"
+            >
+              <div className="w-11 h-11 rounded-xl bg-[color:var(--sc-accent-light)] grid place-items-center text-[color:var(--sc-primary)] shrink-0">
+                <Icon size={20} />
+              </div>
+              <div className="min-w-0">
+                <div className="font-extrabold text-[color:var(--sc-ink)] flex items-center gap-1.5">
+                  {label}
+                  <ArrowRight size={15} className="opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-[color:var(--sc-primary)]" />
+                </div>
+                <p className="text-sm text-[color:var(--sc-ink-muted)] mt-0.5 leading-snug">{desc}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
 /* ---------- Footer ------------------------------------------------- */
 
 function Footer({ cms }) {
@@ -948,6 +999,7 @@ export default function Landing() {
         <TermsSection cms={memoCms} />
         <ContactSection cms={memoCms} />
         <CareersSection cms={memoCms} />
+        <LegalSection />
       </main>
       <Footer cms={memoCms} />
     </div>

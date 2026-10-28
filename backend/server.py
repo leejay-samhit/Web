@@ -29,7 +29,7 @@ import asyncio
 import json
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone
 import time
@@ -706,6 +706,34 @@ async def image_search(q: str = Query(..., min_length=1), page: int = Query(defa
             "creator": it.get("creator") or "",
         })
     return {"results": out}
+
+
+# ─── Landing-page CMS (public read, admin write) ────────────────────────────
+# Stored in THIS deployed backend so every visitor on the live domain sees the
+# published content (the external /admin/settings is admin-only + drops the
+# field, which is why edits never reached slangcart.com).
+def _is_admin(identity: dict) -> bool:
+    return (identity.get("role") == "admin") or bool(identity.get("admin_role")) or bool(identity.get("is_admin"))
+
+
+@api_router.get("/landing-cms")
+async def get_landing_cms():
+    doc = await db.site_config.find_one({"key": "landing_cms"}, {"_id": 0})
+    return {"cms": (doc or {}).get("value") or {}}
+
+
+@api_router.put("/landing-cms")
+async def put_landing_cms(payload: Dict[str, Any], me: dict = Depends(resolve_vendor)):
+    if not _is_admin(me):
+        raise HTTPException(status_code=403, detail="admin_only")
+    cms = payload.get("cms") if isinstance(payload.get("cms"), dict) else payload
+    await db.site_config.update_one(
+        {"key": "landing_cms"},
+        {"$set": {"key": "landing_cms", "value": cms, "updated_at": now_iso(),
+                  "updated_by": me.get("email", "")}},
+        upsert=True,
+    )
+    return {"ok": True}
 
 
 # ─── Customer Orders mirror (local — bridges checkout to vendor view) ────

@@ -13,7 +13,7 @@
 // to accept `landing_cms: dict | None = None` in the `SettingsUpdate`
 // Pydantic model and return it from `GET /api/admin/settings`.
 
-import api from "@/lib/api";
+import apiLocal from "@/lib/apiLocal";
 
 const LS_KEY = "slangcart_landing_cms";
 
@@ -98,23 +98,21 @@ export const DEFAULT_CMS = {
 
 let _cache = null;
 
-/** Read CMS content — backend → localStorage → defaults. */
+/** Read CMS content — published (same-origin backend) → localStorage → defaults. */
 export async function loadCms() {
   if (_cache) return _cache;
-  // Local override — always applied as a top-layer merge.
+  // Local override — the editing admin's unsaved preview, applied on top.
   let local = {};
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) local = JSON.parse(raw) || {};
   } catch { /* ignore */ }
-  // Backend value (may be silently unsupported → treat as empty).
+  // Published value from THIS app's backend — public, so every visitor sees it.
   let remote = {};
   try {
-    const { data } = await api.get("/admin/settings");
-    if (data && typeof data.landing_cms === "object" && data.landing_cms) {
-      remote = data.landing_cms;
-    }
-  } catch { /* not admin / not signed in / backend rejects — fine */ }
+    const { data } = await apiLocal.get("/landing-cms");
+    if (data && typeof data.cms === "object" && data.cms) remote = data.cms;
+  } catch { /* backend unreachable — fall back to defaults */ }
   _cache = { ...DEFAULT_CMS, ...remote, ...local };
   return _cache;
 }
@@ -138,13 +136,14 @@ export function saveCmsLocal(patch) {
 }
 
 /**
- * Publish to backend so every visitor sees it. Requires the network-pay-1
- * `SettingsUpdate` schema to accept a `landing_cms: dict | None` field.
+ * Publish to THIS app's backend so every visitor on the live domain sees it.
+ * Public read via GET /api/landing-cms; admin-gated write here.
  * Returns { ok, error? }.
  */
 export async function publishCms(cms) {
   try {
-    await api.put("/admin/settings", { landing_cms: cms });
+    await apiLocal.put("/landing-cms", { cms });
+    _cache = { ...DEFAULT_CMS, ...cms };
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e?.response?.data?.detail || e?.message || "Unknown error" };
