@@ -656,3 +656,12 @@ Verified iter_31/32/33 (frontend 100%).
 ### STILL PENDING
 - **Google sign-in**: website side built & flag-off; blocked on the backend's web Google start endpoint/URL (user to share) — then set `REACT_APP_ENABLE_GOOGLE_LOGIN=true` + test. Spec: `/app/memory/google_web_login_spec.md`.
 - All Batch 8/9/10 changes need a **redeploy** to reflect on slangcart.com (production).
+
+## Batch 11 — Web create-account enabled + Google flow rebuilt (session/exchange) (Jun 2026)
+
+- **Web Create Account: ENABLED & verified.** `Login.jsx` now shows a primary "Create an account" (`login-create-account` → `/register`) + secondary "Download the App". `/register` (pre-existing, posts `POST /auth/register` on external backend → optional ₹118 registration-fee step → dashboard) renders correctly. `/auth/register` confirmed live (422 on empty body).
+- **Google sign-in: fully built, gated OFF (needs public client id).** Discovered the real backend pattern: no web start endpoint, but `POST /auth/google/exchange {session_id}` exists (session-based bridge) alongside `GET /auth/google/callback`. Rebuilt `lib/googleAuth.js` to mirror the app:
+  1. generate `session_id` (uuid), 2. open popup to Google consent URL (`client_id` + `redirect_uri={API_BASE}/auth/google/callback` + `state=session_id`), 3. poll `POST /auth/google/exchange {session_id}` until it returns `{token, refresh_token, user}`, 4. `AuthContext.loginWithTokens` → `/auth/me` → dashboard (fully synced external JWT).
+  - `GOOGLE_LOGIN_ENABLED = !!REACT_APP_GOOGLE_CLIENT_ID` (empty → button hidden). env keys: `REACT_APP_GOOGLE_CLIENT_ID=`, `REACT_APP_GOOGLE_REDIRECT_URI=` (optional override). Old `/auth/google/return` redirect approach + route now unused (harmless).
+  - **To enable:** user pastes the PUBLIC Google *Web* OAuth client id (same one the app uses; backend callback `…/api/auth/google/callback` must be an authorized redirect URI) → set `REACT_APP_GOOGLE_CLIENT_ID` + restart → test. User skipped providing it twice; stays gated until then.
+- All needs a redeploy to reach slangcart.com.

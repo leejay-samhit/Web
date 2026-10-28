@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff, Loader2, Info, Download } from "lucide-react";
+import { Eye, EyeOff, Loader2, Info, Download, UserPlus } from "lucide-react";
 import { GOOGLE_LOGIN_ENABLED, startGoogleLogin } from "@/lib/googleAuth";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginWithTokens } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
   const [email, setEmail] = useState("");
@@ -14,6 +15,22 @@ export default function Login() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  const onGoogle = async () => {
+    setError("");
+    setGoogleBusy(true);
+    try {
+      const data = await startGoogleLogin();
+      await loginWithTokens(data.token || data.access_token, data.refresh_token);
+      const to = loc.state?.from?.pathname || "/dashboard";
+      nav(to, { replace: true });
+    } catch (e) {
+      toast.error(e?.message || "Google sign-in failed. Please try again.");
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   // If a previous request was rejected because the backend revoked our
   // session, surface that here. (After the 29-Jun-2026 backend patch, the
@@ -192,35 +209,51 @@ export default function Login() {
               </div>
               <button
                 type="button"
-                onClick={startGoogleLogin}
+                onClick={onGoogle}
+                disabled={googleBusy}
                 data-testid="login-google"
-                className="sc-btn-outline w-full justify-center flex items-center gap-2 py-3 bg-white"
+                className="sc-btn-outline w-full justify-center flex items-center gap-2 py-3 bg-white disabled:opacity-60"
               >
-                <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-                  <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z" />
-                  <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
-                  <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z" />
-                  <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.6l6.2 5.2C39.8 36.6 44 31 44 24c0-1.3-.1-2.3-.4-3.5z" />
-                </svg>
-                Continue with Google
+                {googleBusy ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Opening Google…
+                  </>
+                ) : (
+                  <>
+                    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z" />
+                      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 18.9 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+                      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z" />
+                      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.6l6.2 5.2C39.8 36.6 44 31 44 24c0-1.3-.1-2.3-.4-3.5z" />
+                    </svg>
+                    Continue with Google
+                  </>
+                )}
               </button>
             </div>
           )}
 
-          {/* Register / Create Account link intentionally removed —
-              new users must download the app to register. */}
+          {/* Web create-account + app download */}
           <div className="mt-6 pt-6 border-t border-[color:var(--sc-border)]">
             <div className="text-xs text-[color:var(--sc-ink-muted)] mb-2 text-center">
-              New to Slangcart? Register through the app.
+              New to Slangcart?
             </div>
+            <Link
+              to="/register"
+              data-testid="login-create-account"
+              className="sc-btn-primary w-full justify-center flex items-center gap-2 py-3"
+            >
+              <UserPlus size={16} /> Create an account
+            </Link>
             <a
               href="https://play.google.com/store/apps/details?id=com.slangcart.app"
               target="_blank"
               rel="noreferrer"
               data-testid="login-download-app"
-              className="sc-btn-outline w-full justify-center flex items-center gap-2 py-3 bg-white"
+              className="sc-btn-outline w-full justify-center flex items-center gap-2 py-3 bg-white mt-3"
             >
-              <Download size={16} /> Download App
+              <Download size={16} /> Download the App
             </a>
           </div>
           </div>

@@ -1,27 +1,77 @@
-import { API_BASE } from "@/lib/api";
+import api, { API_BASE } from "@/lib/api";
 
-// Google web sign-in is wired to the EXTERNAL backend so accounts stay fully
-// synced with the mobile app (wallet, shop, referrals). It is kept behind a
-// flag so no button shows until the backend web endpoint is live.
+// Web Google sign-in, fully synced with the app. Mirrors the mobile flow that
+// the external backend already supports:
+//   1. Build the Google consent URL with the app's PUBLIC client id and
+//      redirect_uri = the backend's already-registered /auth/google/callback,
+//      carrying a fresh session_id in `state`.
+//   2. Open it in a popup. Google → backend callback stores the tokens under
+//      that session_id, then the popup auto-closes.
+//   3. The main window polls POST /auth/google/exchange { session_id } until it
+//      returns the external JWT, then logs in via the normal external auth.
 //
-// Enable by setting in frontend/.env:
-//   REACT_APP_ENABLE_GOOGLE_LOGIN=true
-//   REACT_APP_GOOGLE_WEB_START_URL=<backend web-start URL>   (optional override)
-//
-// Contract (see /app/memory/google_web_login_spec.md):
-//   1. Browser opens  START_URL?redirect_uri=<origin>/auth/google/return
-//   2. Backend runs Google OAuth, then 302-redirects the browser to
-//      <origin>/auth/google/return#token=<jwt>&refresh_token=<jwt>
-//      (query string also accepted; error returned as ?error=...)
+// Enable by setting the PUBLIC client id in frontend/.env:
+//   REACT_APP_GOOGLE_CLIENT_ID=<xxxxx.apps.googleusercontent.com>
+//   REACT_APP_GOOGLE_REDIRECT_URI=<override>   (optional)
 
-export const GOOGLE_LOGIN_ENABLED =
-  String(process.env.REACT_APP_ENABLE_GOOGLE_LOGIN || "").toLowerCase() === "true";
+const CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || "";
+export const GOOGLE_LOGIN_ENABLED = !!CLIENT_ID;
 
-const START_URL =
-  process.env.REACT_APP_GOOGLE_WEB_START_URL || `${API_BASE}/auth/google/web-start`;
+const REDIRECT_URI =
+  process.env.REACT_APP_GOOGLE_REDIRECT_URI || `${API_BASE}/auth/google/callback`;
 
-export function startGoogleLogin() {
-  const returnUrl = `${window.location.origin}/auth/google/return`;
-  const sep = START_URL.includes("?") ? "&" : "?";
-  window.location.href = `${START_URL}${sep}redirect_uri=${encodeURIComponent(returnUrl)}`;
+function uuid() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function pollExchange(sessionId, popup) {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 120000; // 2 minutes
+    let closedGrace = 0;
+    const tick = async () => {
+      if (Date.now() > deadline) {
+        try { popup && popup.close(); } catch { /* ignore */ }
+        return reject(new Error("Sign-in timed out. Please try again."));
+      }
+      try {
+        const { data } = await api.post("/auth/google/exchange", { session_id: sessionId });
+        const token = data?.token || data?.access_token;
+        if (token) {
+          try { popup && popup.close(); } catch { /* ignore */ }
+          return resolve(data);
+        }
+      } catch {
+        // 400 "Invalid Google session" → login not finished yet; keep polling.
+      }
+      if (popup && popup.closed) {
+        closedGrace += 1;
+        if (closedGrace > 3) return reject(new Error("Sign-in was cancelled."));
+      }
+      setTimeout(tick, 1500);
+    };
+    setTimeout(tick, 1200);
+  });
+}
+
+// Opens Google, resolves with { token, refresh_token, user } from the backend.
+export async function startGoogleLogin() {
+  if (!CLIENT_ID) throw new Error("Google sign-in is not configured yet.");
+  const sessionId = uuid();
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: "code",
+    scope: "openid email profile",
+    state: sessionId,
+    prompt: "select_account",
+    include_granted_scopes: "true",
+  });
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  const popup = window.open(authUrl, "slangcart_google", "width=480,height=640,menubar=no,toolbar=no");
+  return pollExchange(sessionId, popup);
 }
